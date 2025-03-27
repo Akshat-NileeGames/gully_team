@@ -140,9 +140,9 @@ const matchSchema = new mongoose.Schema(
     },
     isTie: { type: Boolean, default: false },
     matchAuthority: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     }
   },
   {

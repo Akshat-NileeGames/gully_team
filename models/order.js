@@ -41,16 +41,17 @@ const orderHistorySchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "CouponHistory",
   },
-
-  amount: { type: Number, required: true }, // Total amount of the order
-  amountPaid: { type: Number, required: true }, // Amount already paid
-  amountDue: { type: Number, required: true }, // Amount yet to be paid
-  currency: { type: String, required: true }, // Currency of the order
   receipt: { type: String, required: true }, // Receipt ID of the order
-  // status: { type: String, required: true ,default:"Pending"}, // Status of the order (nikhil)
   status: { type: String, enum: ["Pending", "Successful", "Failed"], default: "Pending" },
+  currency: { type: String, required: true }, // Currency of the order
+  amountbeforegst: { type: Number, required: true }, // Total amount of the order
+  gstAmount: { type: Number, required: false, default: 0 },
+  totalAmountWithGST: { type: Number, required: false, default: 0 },
+  // status: { type: String, required: true ,default:"Pending"}, // Status of the order (nikhil)
   createdAt: { type: Date, default: Date.now }, // Timestamp of order creation
-});
+}, {
+  timestamps: true,
+},);
 
 // Create model for order history
 

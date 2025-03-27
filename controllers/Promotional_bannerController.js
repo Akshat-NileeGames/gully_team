@@ -63,9 +63,7 @@ const PromotionalbannerController = {
         try {
             const result = await PromotionalbannerService.getBannersWithinRadius(
                 latitude,
-                longitude,
-                25,
-                desiredBannerCount || 5
+                longitude
             );
 
             return res.status(200).json({

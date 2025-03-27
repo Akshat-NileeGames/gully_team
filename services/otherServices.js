@@ -728,7 +728,8 @@ async createPackage(packageData) {
       path: 'bannerId',
       select: '-locationHistory',
     });
-  
+
+    console.log("History : ", history);
  
     return {history,totalCount};
   },
@@ -903,8 +904,11 @@ async deleteTransactionById(transactionId) {
   
     const result = await RazorpayHandler.createOrder(paymentData);
     const bannerId = mongoose.Types.ObjectId.isValid(data.bannerId) ? data.bannerId : null;
-
+    const gstRate = 18 / 100; 
+    const gstAmount = (result.amount / 100) * gstRate;
+    const amountBeforeGST = (result.amount / 100) - gstAmount; 
     console.log("Result ", result);
+
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
@@ -912,12 +916,13 @@ async deleteTransactionById(transactionId) {
       amount: result.amount / 100,
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
-      amountPaid: 0,
-      amountDue: result.amount / 100,
+      totalAmountWithGST: result.amount / 100,
+      gstAmount: gstAmount,
+      amountbeforegst: amountBeforeGST,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
-      ordertype: "banner", 
+      ordertype: "banner",
     });
   
     await orderHistory.save();
@@ -953,21 +958,27 @@ async deleteTransactionById(transactionId) {
     };
   
     const result = await RazorpayHandler.createOrder(paymentData);
+    const gstRate = 18 / 100; 
+    const gstAmount = (result.amount / 100) * gstRate; 
+    const amountBeforeGST = (result.amount / 100) - gstAmount; 
   
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
       sponsorPackageId: data.sponsorPackageId,
-      amount: result.amount / 100,
+      amount: result.amount / 100, // Amount in INR
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
       tournamentId: data.tournamentId,
-      amountPaid: 0, // Initially 0
+      amountPaid: 0, 
       amountDue: result.amount / 100,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
       ordertype: "Sponsor",
+      gstAmount: gstAmount, 
+      amountbeforegst: amountBeforeGST,
+      totalAmountWithGST: result.amount / 100,
     });
   
     await orderHistory.save();

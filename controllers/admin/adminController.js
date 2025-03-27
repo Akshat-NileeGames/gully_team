@@ -8,6 +8,7 @@ import randomstring from "randomstring";
 
 const adminController = {
     async adminLogin(req, res, next) {
+      console.log("These route is called");
         //validation
         const AdminSchema = Joi.object({
             email: Joi.string().min(3).max(30).required(),

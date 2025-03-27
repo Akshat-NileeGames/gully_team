@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 import autopopulate from "mongoose-autopopulate";
 const teamSchema = new mongoose.Schema({
   _id: {
-     type: mongoose.Schema.Types.ObjectId, auto: true
-   },
- teamLogo: {
+    type: mongoose.Schema.Types.ObjectId, auto: true
+  },
+  teamLogo: {
     type: String,
   },
   teamName: {
@@ -21,16 +21,16 @@ const teamSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
   },
- 
-  teamMatchsData:{
-        tennis: {
-         
-        },
-        leather: {
-         
-        },
-  }, 
-  numberOfWins:{
+
+  teamMatchsData: {
+    tennis: {
+
+    },
+    leather: {
+
+    },
+  },
+  numberOfWins: {
     type: Number,
   },
 

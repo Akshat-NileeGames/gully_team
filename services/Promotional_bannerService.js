@@ -301,10 +301,15 @@ const PromotionalbannerService = {
 
 
   async getBannersWithinRadius(latitude, longitude) {
-    const radiusKm = 15; 
+    const radiusKm = 15;
     const desiredBannerCount = 7;
 
     try {
+      const today = new Date();
+      
+      today.setHours(0, 0, 0, 0);
+      let formattedDate = today.toISOString();
+      console.log("Today (local):", formattedDate);
       const promotionalBanners = await Promotional_Banner_model.aggregate([
         {
           $geoNear: {
@@ -326,7 +331,9 @@ const PromotionalbannerService = {
         },
         {
           $match: {
-            distanceInKm: { $lt: radiusKm }, 
+            distanceInKm: { $lt: radiusKm },
+            startDate: { $lte: today },
+            endDate: { $gte: today },
           },
         },
         {
@@ -335,43 +342,37 @@ const PromotionalbannerService = {
           },
         },
       ]);
-  
-      // If we have enough promotional banners, return them
-      // if (promotionalBanners.length >= desiredBannerCount) {
-      //   return {
-      //     banners: promotionalBanners,
-      //     bannerType: 'promotional'
-      //   };
-      // }
-  
+
+      console.log("Promotional Banners:", promotionalBanners);
+
       const regularBannersNeeded = desiredBannerCount - promotionalBanners.length;
-      
+
       const regularBanners = await Banner.find({
-        isActive: true
+        isActive: true,
       })
-      .limit(regularBannersNeeded)
-      .select('-__v');
-  
+        .limit(regularBannersNeeded)
+        .select('-__v');
+
       const combinedBanners = promotionalBanners.map(banner => ({
         ...banner,
-        bannerType: 'promotional'
+        bannerType: 'promotional',
       }))
-      .concat(
-        regularBanners.slice(0, regularBannersNeeded).map(banner => ({
-          ...banner.toObject(),
-          bannerType: 'regular'
-        }))
-      );      
-  
+        .concat(
+          regularBanners.slice(0, regularBannersNeeded).map(banner => ({
+            ...banner.toObject(),
+            bannerType: 'regular',
+          }))
+        );
+
       return {
         banners: combinedBanners,
       };
-  
+
     } catch (err) {
       console.log("Error fetching banners within radius:", err);
       throw err;
     }
-  },  
+  },
 
   async updateBanner(bannerId, data) {
 

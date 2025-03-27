@@ -297,7 +297,6 @@ const otherController = {
 
         return res.status(200).json({
             success: true,
-            status: true,
             message: "Transaction History Retrieved Successfully",
             data: { transactions: result.history, totalCount: result.totalCount},
         });
