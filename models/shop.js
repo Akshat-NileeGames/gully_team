@@ -74,7 +74,11 @@ const shopSchema = new mongoose.Schema({
     },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     packageId: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
-    AdditionalPackage: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
+    // AdditionalPackage: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
+    AdditionalPackages: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Package"
+      }]
 });
 shopSchema.index({ "locationHistory.point": "2dsphere" });
 export default mongoose.model('Shop', shopSchema);
