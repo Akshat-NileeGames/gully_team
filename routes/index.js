@@ -7,6 +7,7 @@ export { default as matchRoute} from "./match_routes.js";
 export { default as bannerRoute} from "./banner_routes.js"
 export { default as paymentRoute} from "./payment_routes.js";
 export { default as vendorRoutes} from "./vendorRoutes.js";
+export { default as shopRoutes} from "./shop_routes.js";
 
 // admin routes
 export { default as adminRoute } from "./admin_routes.js";

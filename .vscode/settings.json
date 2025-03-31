@@ -1,3 +1,7 @@
 {
-    "git.enabled": true
+    "git.enabled": true,
+    "cSpell.words": [
+        "mongoschema",
+        "shoplink"
+    ]
 }

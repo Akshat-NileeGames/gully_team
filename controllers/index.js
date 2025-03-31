@@ -6,6 +6,7 @@ export { default as userController } from "./userController.js";
 export { default as matchController } from "./matchController.js";
 export { default as PromotionalbannerController } from "./Promotional_bannerController.js";
 export { default as SponsorController } from "./sponsorController.js";
+export { default as ShopController } from "./shopController.js";
 
 
 //admin Controller

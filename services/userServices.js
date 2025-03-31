@@ -14,6 +14,7 @@ import firebaseNotification from "../helpers/firebaseNotification.js";
 import RazorpayHandler from "../helpers/RazorPayHandler.js";
 
 const userServices = {
+  
   async createProfile(data) {
     const { base64Image, nickName, phoneNumber } = data;
     const userInfo = global.user;

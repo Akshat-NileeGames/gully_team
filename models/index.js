@@ -23,6 +23,7 @@ export {default as Payment} from "./payments.js";
 export {default as EliminatedTeam} from "./eliminateTeams.js";
 export {default as Package} from "./package.js";
 export {default as Sponsor} from "./sponsor.js";
+export {default as Shop} from "./shop.js";
 
 // export {default as Transaction} from "./transaction.js";
 

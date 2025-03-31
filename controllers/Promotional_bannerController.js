@@ -1,6 +1,5 @@
 import Banner from '../models/Promotional_Banner_model.js';
 import Tournament from '../models/tournament.js';
-import Shop from '../models/shopModel.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { PromotionalbannerService } from "../services/index.js";
 import Joi from "joi";
