@@ -376,26 +376,24 @@ const PromotionalbannerService = {
 
   async updateBanner(bannerId, data) {
 
+    const banner=await Promotional_Banner_model.findById(bannerId);
     let imageUrl = "";
-    if (data.banner_image) {
+    if (data.banner_image!=banner.banner_image) {
       imageUrl = await ImageUploader.Upload(
         data.banner_image,
         "Banner_Promotion",
       );
+    }else{
+      imageUrl = banner.banner_image;
     }
+    console.log("Image URL:", imageUrl);
 
-    const updatedBanner = await Promotional_Banner_model.findByIdAndUpdate(bannerId, {
-      $set: {
-        banner_title: data.banner_title,
-        banner_image: imageUrl,
-      }
-    }, { new: true });
-
-    if (!updatedBanner) {
-      throw new Error('Banner not found for update');
-    }
-
-    return updatedBanner;
+    console.log("The New Banner Title:", data.banner_title);
+    banner.banner_title = data.banner_title;
+    banner.banner_image = imageUrl;
+    
+    banner.save();
+    return banner;
   },
 
 };

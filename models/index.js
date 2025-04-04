@@ -24,6 +24,8 @@ export {default as EliminatedTeam} from "./eliminateTeams.js";
 export {default as Package} from "./package.js";
 export {default as Sponsor} from "./sponsor.js";
 export {default as Shop} from "./shop.js";
+export {default as Product} from "./product.js";
+export {default as Category} from "./category.js";
 
 // export {default as Transaction} from "./transaction.js";
 

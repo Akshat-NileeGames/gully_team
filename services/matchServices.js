@@ -262,8 +262,7 @@ import {
   async getOpponentTournamentId() {
     const userInfo = global.user;
     const userId = userInfo.userId;
-  
-    // Get user's phone number
+
     const userPhoneNumber = await User.findOne({ _id: userId }).select("phoneNumber");
   
     if (!userPhoneNumber) {
@@ -271,8 +270,7 @@ import {
     }
   
     const phoneNumberToFind = userPhoneNumber.phoneNumber;
-  
-    // Fetch matches with non-null scoreBoard
+
     const matchData = await Match.find({ scoreBoard: { $ne: null } })
       .select("tournament team1 team2 _id")
       .populate("tournament", "tournamentName")
@@ -298,16 +296,12 @@ import {
   
       const team1Players = match.team1.players.map((player) => player.phoneNumber);
       const team2Players = match.team2.players.map((player) => player.phoneNumber);
-  
-      // Check for player overlap between the teams
+
       const hasOverlap = team1Players.some((phone) => team2Players.includes(phone));
   
       if (hasOverlap) {
-        console.log(`Player overlap detected in match ID: ${match._id}`);
         return false;
       }
-  
-      // Check if the user's phone number exists in either team
       return (
         team1Players.includes(phoneNumberToFind) ||
         team2Players.includes(phoneNumberToFind)
@@ -316,7 +310,10 @@ import {
   
     const tournamentDetails = tournamentsWithPhoneNumber.map((match) => {
       let teamId = "";
-      console.log(match);
+      let tournamentId = null;
+      
+      // console.log(match);
+  
       if (match.team1 && match.team1.players) {
         const isInTeam1 = match.team1.players.some(
           (player) => player.phoneNumber === phoneNumberToFind
@@ -334,16 +331,25 @@ import {
           teamId = match.team2._id;
         }
       }
-      return {
-        matchId: match._id,
-        tournamentId: match.tournament._id,
-        tournamentName: match.tournament.tournamentName,
-        teamId,
-      };
-    });
+  
+      if (match.tournament && match.tournament._id) {
+        tournamentId = match.tournament._id;
+      }
+  
+      if (tournamentId) {
+        return {
+          matchId: match._id,
+          tournamentId,
+          tournamentName: match.tournament.tournamentName,
+          teamId,
+        };
+      }
+  
+      return null;
+    }).filter(Boolean);
   
     return { data: tournamentDetails };
-  },
+  },  
   
   
   async getMatch(tournamentId) {
@@ -475,21 +481,21 @@ import {
 
   async getOpponent(tournamentID, teamID) {
     const userInfo = global.user;
-
+    console.log(teamID);
     let opponents = await Match.find({
       tournament: tournamentID,
       $or: [{ team1: teamID }, { team2: teamID }],
     })
-      .select("scoreBoard _id ")
-      .lean();
-
+      // .select("scoreBoard _id ")
+      // .lean();
+      
     if (!opponents) {
       throw CustomErrorHandler.notFound("The Player of this Match not Found.");
     }
-
+    console.log(opponents);
     const filteredOpponents = opponents
       .map((opponent) => {
-        const { team1, team2 } = opponent.scoreBoard;
+        const { team1, team2 } = opponent;
         if (teamID === team1._id.toString()) {
           return { opponent: team2 };
         } else if (teamID === team2._id.toString()) {
@@ -507,8 +513,10 @@ import {
       }
       return acc;
     }, []);
+    // console.log(uniqueOpponents);
 
-    return uniqueOpponents;
+
+    return {team:filteredOpponents,matchDetails:opponents};
   },
 
     async editMatch(data, MatchId) {

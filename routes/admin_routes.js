@@ -6,6 +6,7 @@ import { adminController } from "../controllers/index.js"
 import { adminOtherController} from "../controllers/index.js"
 import { adminUserController} from "../controllers/index.js"
 import { adminTournamentController} from "../controllers/index.js"
+import { ShopController} from "../controllers/index.js"
 
 import validateAdmin from "../middlewares/validateAdmin.js"
 import accessUser from "../middlewares/accessUser.js"
@@ -134,4 +135,7 @@ router.get("/getEntryFeesById/:EntryFeesId", adminOtherController.getEntryFeesBy
 router.get("/transaction/:page/:pageSize", adminOtherController.getAllTransaction);
 router.get("/transactionById/:Id", adminOtherController.getAllTransactionById);
 
+
+// ***********************    Shop      ****************************
+// router.post("/addCategory",validateAdmin,)
 export default router;

@@ -3,7 +3,7 @@ import Tournament from '../models/tournament.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { PromotionalbannerService } from "../services/index.js";
 import Joi from "joi";
-
+import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
 const PromotionalbannerController = {
     
     async createBanner(req,res,next){
@@ -86,17 +86,13 @@ const PromotionalbannerController = {
         const bannerId = req.params.id;
         const bannerSchema = Joi.object({
             banner_title:Joi.string().required(),
-            banner_image: Joi.string().uri().pattern(/^data:image\/[a-zA-Z]+;base64,/),
+            banner_image:Joi.string().optional()
         });
 
         const { error } = bannerSchema.validate(req.body);
         if (error) {
-            return res.status(400).json({
-                error: "Validation failed",
-                details: error.details.map(detail => detail.message),
-            });
+            return CustomErrorHandler.badRequest(error.message);
         }
-
         try {
             const result = await PromotionalbannerService.updateBanner(bannerId, req.body);
             return res.status(200).json({
@@ -105,11 +101,7 @@ const PromotionalbannerController = {
                 data: result,
             });
         } catch (err) {
-            return res.status(500).json({
-                success: false,
-                message: 'Error updating banner',
-                error: err.message,
-            });
+            console.log("Error in updating banner:", err);
         }
     },
 

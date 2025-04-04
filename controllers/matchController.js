@@ -253,7 +253,7 @@ const matchController = {
       return res.status(200).json({
         success: true,
         message: "Opponent Retrieved SuccessFully",
-        data: { matches: result },
+        data: result
       });
     } catch (err) {
       console.log(" Error in getOpponent ");
