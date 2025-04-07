@@ -222,5 +222,19 @@ const ShopController = {
     },
     //#endregion
 
+    //#region GetCategory
+    async getCategory(req, res, next) {
+        try {
+            const result = await ShopService.getCategory();
+            return res.json({
+                success: true,
+                message: "Category Retrieved Successfully",
+                data: result
+            })
+        } catch (error) {
+            console.log("Unable to fetch Category:", error);
+        }
+    },
+    //#endregion
 }
 export default ShopController;

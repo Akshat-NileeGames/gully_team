@@ -216,6 +216,14 @@ const ShopService = {
             return result;
         }
     },
+    async getCategory(data) {
+
+        try {
+
+        } catch (error) {
+            console.error("Error in getting category:", error);
+        }
+    },
 
 }
 export default ShopService;

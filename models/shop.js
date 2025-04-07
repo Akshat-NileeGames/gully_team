@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ImageUploader from '../helpers/ImageUploader.js';
+import businessHoursSchema from "./businessHoursSchema .js";
 
 const shopSchema = new mongoose.Schema({
     shopImage: {
@@ -44,6 +45,16 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: false,
     },
+    ShopTimming:{
+        type:String,
+        required:true,
+        ref:"BusinessHours"
+    },
+    // ShopTimming: {
+    //     type: Map,
+    //     of: businessHoursSchema,
+    //     required: true,
+    // },
     businessLicenseNumber: {
         type: String,
         required: false,
@@ -78,7 +89,8 @@ const shopSchema = new mongoose.Schema({
     AdditionalPackages: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Package"
-      }]
+      }],
+
 });
 shopSchema.index({ "locationHistory.point": "2dsphere" });
 export default mongoose.model('Shop', shopSchema);
