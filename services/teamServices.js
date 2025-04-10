@@ -72,10 +72,10 @@ const teamServices = {
       // Step 1: Find all players associated with the given phone number
       const players = await Player.find({ phoneNumber });
   
-      if (!players || players.length === 0) {
-        return next(CustomErrorHandler.notFound("No players found with this phone number."));
-        // console.log("No players found with this phone number.");
-      }
+      // if (!players || players.length === 0) {
+      //   return next(CustomErrorHandler.notFound("No players found with this phone number."));
+      //   // console.log("No players found with this phone number.");
+      // }
   
       // Step 2: Extract team IDs from the players
       const teamIds = players.map(player => player.team);

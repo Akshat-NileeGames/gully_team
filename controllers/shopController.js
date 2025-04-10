@@ -22,6 +22,43 @@ const ShopController = {
             ownerEmail: Joi.string().email().pattern(new RegExp('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')).required(),
             ownerAddress: Joi.string().required(),
             ownerIdentificationNumber: Joi.string().required(),
+            ShopTimming: Joi.object({
+                Monday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Tuesday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Wednesday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Thursday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Friday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Saturday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Sunday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+            }).required(),
         });
         const { error } = shopSchema.validate(req.body)
         if (error) {

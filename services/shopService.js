@@ -16,7 +16,43 @@ const ShopService = {
                 shopImg.push(images);
             }
         }
-        console.log("User Info:", userInfo);
+        const shopTimming = {
+            Monday: {
+                isOpen: data.ShopTimming.Monday.isOpen,
+                openTime: data.ShopTimming.Monday.openTime || null,
+                closeTime: data.ShopTimming.Monday.closeTime || null,
+            },
+            Tuesday: {
+                isOpen: data.ShopTimming.Tuesday.isOpen,
+                openTime: data.ShopTimming.Tuesday.openTime || null,
+                closeTime: data.ShopTimming.Tuesday.closeTime || null,
+            },
+            Wednesday: {
+                isOpen: data.ShopTimming.Wednesday.isOpen,
+                openTime: data.ShopTimming.Wednesday.openTime || null,
+                closeTime: data.ShopTimming.Wednesday.closeTime || null,
+            },
+            Thursday: {
+                isOpen: data.ShopTimming.Thursday.isOpen,
+                openTime: data.ShopTimming.Thursday.openTime || null,
+                closeTime: data.ShopTimming.Thursday.closeTime || null,
+            },
+            Friday: {
+                isOpen: data.ShopTimming.Friday.isOpen,
+                openTime: data.ShopTimming.Friday.openTime || null,
+                closeTime: data.ShopTimming.Friday.closeTime || null,
+            },
+            Saturday: {
+                isOpen: data.ShopTimming.Saturday.isOpen,
+                openTime: data.ShopTimming.Saturday.openTime || null,
+                closeTime: data.ShopTimming.Saturday.closeTime || null,
+            },
+            Sunday: {
+                isOpen: data.ShopTimming.Sunday.isOpen,
+                openTime: data.ShopTimming.Sunday.openTime || null,
+                closeTime: data.ShopTimming.Sunday.closeTime || null,
+            },
+        };
         const newShop = new Shop({
             shopName: data.shopName,
             shopDescription: data.shopDescription,
@@ -31,6 +67,7 @@ const ShopService = {
             shopContact: data.shopContact,
             shopEmail: data.shopEmail,
             shopLink: data.shoplink || null,
+            ShopTimming: shopTimming,
             businessLicenseNumber: data.businessLicenseNumber,
             gstNumber: data.gstNumber,
             ownerName: data.ownerName,
@@ -49,6 +86,7 @@ const ShopService = {
             console.log("Error in adding shop:", err);
         }
     },
+
     async getMyShop() {
         try {
             const userinfo = global.user;

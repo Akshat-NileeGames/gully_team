@@ -45,16 +45,43 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: false,
     },
-    ShopTimming:{
-        type:String,
-        required:true,
-        ref:"BusinessHours"
+    ShopTimming: {
+        Monday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
+        Tuesday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
+        Wednesday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
+        Thursday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
+        Friday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
+        Saturday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
+        Sunday: {
+            isOpen: Boolean,
+            openTime: String,
+            closeTime: String,
+        },
     },
-    // ShopTimming: {
-    //     type: Map,
-    //     of: businessHoursSchema,
-    //     required: true,
-    // },
     businessLicenseNumber: {
         type: String,
         required: false,
