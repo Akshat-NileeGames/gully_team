@@ -1,6 +1,4 @@
 import mongoose from "mongoose";
-import ImageUploader from '../helpers/ImageUploader.js';
-import businessHoursSchema from "./businessHoursSchema .js";
 
 const shopSchema = new mongoose.Schema({
     shopImage: {
@@ -15,7 +13,7 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    shopLocation: {
+    shopAddress: {
         type: String,
         required: true,
     },
@@ -82,7 +80,7 @@ const shopSchema = new mongoose.Schema({
             closeTime: String,
         },
     },
-    businessLicenseNumber: {
+    LicenseNumber: {
         type: String,
         required: false,
     },
@@ -94,7 +92,7 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    ownerContact: {
+    ownerPhoneNumber: {
         type: String,
         required: true,
     },
@@ -106,17 +104,34 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    ownerIdentificationNumber: {
+    ownerAddharImages: [
+        {
+            aadharFrontSide: {
+                type: String,
+                required: true
+            },
+            aadharBackSide: {
+                type: String,
+                required: true
+            }
+        }
+    ],
+    ownerPanNumber: {
         type: String,
         required: true,
     },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    isSubscriptionPurchased:{
+        type:Boolean,
+        default:false
+    },
+    
     packageId: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
-    // AdditionalPackage: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
+    
     AdditionalPackages: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Package"
-      }],
+    }],
 
 });
 shopSchema.index({ "locationHistory.point": "2dsphere" });

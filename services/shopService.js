@@ -1,8 +1,6 @@
 import { Shop, Product, Category } from '../models/index.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
-import nodemailer from "nodemailer";
-import product from '../models/product.js';
 import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
 const ShopService = {
 
@@ -54,9 +52,10 @@ const ShopService = {
             },
         };
         const newShop = new Shop({
+            shopImage: shopImg,
             shopName: data.shopName,
             shopDescription: data.shopDescription,
-            shopLocation: data.shopLocation,
+            shopAddress: data.shopAddress,
             locationHistory: {
                 point: {
                     type: "Point",
@@ -68,16 +67,17 @@ const ShopService = {
             shopEmail: data.shopEmail,
             shopLink: data.shoplink || null,
             ShopTimming: shopTimming,
-            businessLicenseNumber: data.businessLicenseNumber,
+            LicenseNumber: data.LicenseNumber,
             gstNumber: data.gstNumber,
             ownerName: data.ownerName,
-            ownerContact: data.ownerContact,
+            ownerPhoneNumber: data.ownerPhoneNumber,
             ownerEmail: data.ownerEmail,
             ownerAddress: data.ownerAddress,
-            ownerIdentificationNumber: data.ownerIdentificationNumber,
-            shopImage: shopImg,
+            ownerAddharImages: data.ownerAddharImages,
+            ownerPanNumber: data.ownerPanNumber,
             userId: userInfo.userId,
             createdAt: DateTime.now().toISO(),
+            isSubscriptionPurchased: false
         });
         try {
             const result = await newShop.save();

@@ -6,23 +6,27 @@ const ShopController = {
     async addShop(req, res, next) {
 
         const shopSchema = Joi.object({
-            shopImage: Joi.array().items(Joi.string()).max(3).required(),
+            shopImage: Joi.array().items(Joi.string()).min(1).max(3).required(),
             shopName: Joi.string().required(),
             shopDescription: Joi.string().required(),
-            shopLocation: Joi.string().required(),
+            shopAddress: Joi.string().required(),
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),
             shopContact: Joi.string().required(),
-            shopEmail: Joi.string().email().pattern(new RegExp('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')).required(),
+            shopEmail: Joi.string().email().required(),
             shoplink: Joi.string().optional(),
-            businessLicenseNumber: Joi.string().pattern(new RegExp('^[A-Za-z0-9-]+$')).required(),
-            gstNumber: Joi.string().pattern(new RegExp('^[0-9]{15}$')).required(),
+            LicenseNumber: Joi.string().pattern(/^[A-Za-z0-9-]+$/).required(),
+            gstNumber: Joi.string().pattern(/^[0-9]{15}$/).required(),
             ownerName: Joi.string().required(),
-            ownerContact: Joi.string().required(),
-            ownerEmail: Joi.string().email().pattern(new RegExp('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')).required(),
+            ownerPhoneNumber: Joi.string().required(),
+            ownerEmail: Joi.string().email().required(),
             ownerAddress: Joi.string().required(),
-            ownerIdentificationNumber: Joi.string().required(),
-            ShopTimming: Joi.object({
+            ownerPanNumber: Joi.string().required(),
+            ownerAddharImages: Joi.array().items(Joi.object({
+                aadharFrontSide: Joi.string().required(),
+                aadharBackSide: Joi.string().required()
+            })).min(1).required(),
+            ShopTimming: Joi.object().keys({
                 Monday: Joi.object({
                     isOpen: Joi.boolean().required(),
                     openTime: Joi.string().optional(),
@@ -58,8 +62,9 @@ const ShopController = {
                     openTime: Joi.string().optional(),
                     closeTime: Joi.string().optional(),
                 }),
-            }).required(),
+            }).required()
         });
+        
         const { error } = shopSchema.validate(req.body)
         if (error) {
             return next(error);
