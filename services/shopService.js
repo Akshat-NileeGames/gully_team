@@ -14,43 +14,56 @@ const ShopService = {
                 shopImg.push(images);
             }
         }
-        const shopTimming = {
+        const shopTiming = {
             Monday: {
-                isOpen: data.ShopTimming.Monday.isOpen,
-                openTime: data.ShopTimming.Monday.openTime || null,
-                closeTime: data.ShopTimming.Monday.closeTime || null,
+                isOpen: data.shopTiming.Monday.isOpen,
+                openTime: data.shopTiming.Monday.openTime || null,
+                closeTime: data.shopTiming.Monday.closeTime || null,
             },
             Tuesday: {
-                isOpen: data.ShopTimming.Tuesday.isOpen,
-                openTime: data.ShopTimming.Tuesday.openTime || null,
-                closeTime: data.ShopTimming.Tuesday.closeTime || null,
+                isOpen: data.shopTiming.Tuesday.isOpen,
+                openTime: data.shopTiming.Tuesday.openTime || null,
+                closeTime: data.shopTiming.Tuesday.closeTime || null,
             },
             Wednesday: {
-                isOpen: data.ShopTimming.Wednesday.isOpen,
-                openTime: data.ShopTimming.Wednesday.openTime || null,
-                closeTime: data.ShopTimming.Wednesday.closeTime || null,
+                isOpen: data.shopTiming.Wednesday.isOpen,
+                openTime: data.shopTiming.Wednesday.openTime || null,
+                closeTime: data.shopTiming.Wednesday.closeTime || null,
             },
             Thursday: {
-                isOpen: data.ShopTimming.Thursday.isOpen,
-                openTime: data.ShopTimming.Thursday.openTime || null,
-                closeTime: data.ShopTimming.Thursday.closeTime || null,
+                isOpen: data.shopTiming.Thursday.isOpen,
+                openTime: data.shopTiming.Thursday.openTime || null,
+                closeTime: data.shopTiming.Thursday.closeTime || null,
             },
             Friday: {
-                isOpen: data.ShopTimming.Friday.isOpen,
-                openTime: data.ShopTimming.Friday.openTime || null,
-                closeTime: data.ShopTimming.Friday.closeTime || null,
+                isOpen: data.shopTiming.Friday.isOpen,
+                openTime: data.shopTiming.Friday.openTime || null,
+                closeTime: data.shopTiming.Friday.closeTime || null,
             },
             Saturday: {
-                isOpen: data.ShopTimming.Saturday.isOpen,
-                openTime: data.ShopTimming.Saturday.openTime || null,
-                closeTime: data.ShopTimming.Saturday.closeTime || null,
+                isOpen: data.shopTiming.Saturday.isOpen,
+                openTime: data.shopTiming.Saturday.openTime || null,
+                closeTime: data.shopTiming.Saturday.closeTime || null,
             },
             Sunday: {
-                isOpen: data.ShopTimming.Sunday.isOpen,
-                openTime: data.ShopTimming.Sunday.openTime || null,
-                closeTime: data.ShopTimming.Sunday.closeTime || null,
+                isOpen: data.shopTiming.Sunday.isOpen,
+                openTime: data.shopTiming.Sunday.openTime || null,
+                closeTime: data.shopTiming.Sunday.closeTime || null,
             },
         };
+
+        console.log("The got datetime:", data.joinedAt);
+        const formatDateTime = (dateTimeString) => {
+            const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
+            if (!parsedDate.isValid) {
+                throw CustomErrorHandler.badRequest("Invalid date format. Please provide a valid ISO string.");
+            }
+
+            return parsedDate.toISO();
+        };
+
+
+        const standardizedDateTime = formatDateTime(data.joinedAt);
         const newShop = new Shop({
             shopImage: shopImg,
             shopName: data.shopName,
@@ -60,23 +73,27 @@ const ShopService = {
                 point: {
                     type: "Point",
                     coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
+                    selectLocation: data.selectLocation,
                 },
-                selectLocation: data.selectLocation,
+
             },
             shopContact: data.shopContact,
             shopEmail: data.shopEmail,
             shopLink: data.shoplink || null,
-            ShopTimming: shopTimming,
+            shopTiming: shopTiming,
             LicenseNumber: data.LicenseNumber,
             gstNumber: data.gstNumber,
             ownerName: data.ownerName,
             ownerPhoneNumber: data.ownerPhoneNumber,
             ownerEmail: data.ownerEmail,
             ownerAddress: data.ownerAddress,
-            ownerAddharImages: data.ownerAddharImages,
+            ownerAddharImages: {
+                aadharFrontSide: data.aadharFrontSide,
+                aadharBackSide: data.aadharBackSide
+            },
             ownerPanNumber: data.ownerPanNumber,
             userId: userInfo.userId,
-            createdAt: DateTime.now().toISO(),
+            joinedAt: standardizedDateTime,
             isSubscriptionPurchased: false
         });
         try {
@@ -91,7 +108,9 @@ const ShopService = {
         try {
             const userinfo = global.user;
             const shop = await Shop.find({ userId: userinfo.userId }, {
-                locationHistory: 0
+                updatedAt: 0,
+                createdAt: 0,
+                __v: 0,
             });
             return shop;
         } catch (err) {
@@ -135,9 +154,8 @@ const ShopService = {
     },
 
     async AddProduct(data) {
-        const { productsImage, productName, productsDescription, productsPrice, productCategory, productBrand, shopId } = data;
-
-        console.log(data);
+        const { productsImage, productName, productsDescription, productsPrice,
+            productCategory, productSubCategory, productBrand, shopId } = data;
         let imagesUrl = [];
         // if (productsImage && productsImage.length > 0) {
         //     for (image in productsImage) {
@@ -147,12 +165,17 @@ const ShopService = {
         //     }
         // }
         const product = new Product({
-            productsImage: productsImage,
+            productsImage: [],
             productName: productName,
             productsDescription: productsDescription,
             productsPrice: productsPrice,
             productCategory: productCategory,
+            productSubCategory: productSubCategory,
             productBrand: productBrand,
+            // productDiscount:{
+            //     value: 0,
+            //     type: "",
+            // },
             shopId: shopId,
             isActive: true
         })
@@ -169,7 +192,8 @@ const ShopService = {
         try {
             const product = await Product.find({
                 shopId: data.shopId
-            }).populate('shopId');
+            });
+            console.log(product);
             return product;
         } catch (error) {
             console.log("Failed to get Shop Products", error);
@@ -254,14 +278,83 @@ const ShopService = {
             return result;
         }
     },
-    async getCategory(data) {
-
+    async getCategory() {
         try {
-
+            const categories = await Category.find(
+                { categoryFor: "Sports" },
+                {
+                    createdAt: 0,
+                    updatedAt: 0,
+                    __v: 0
+                }
+            );
+            if (categories) {
+                return categories[0].categoryItem;
+            } else {
+                return [];
+            }
         } catch (error) {
             console.error("Error in getting category:", error);
+            return [];
         }
     },
 
+    async getSubCategory(data) {
+        const category = data.category;
+        const subCategory = await Category.find({
+            categoryFor: `${category} sub`
+        }, {
+            createdAt: 0,
+            updatedAt: 0,
+            __v: 0
+        })
+        if (subCategory) {
+            return subCategory[0].categoryItem;
+        } else {
+            return [];
+        }
+    },
+    async getBrand() {
+        try {
+            const categories = await Category.find(
+                { categoryFor: "Sports_Brand" },
+                {
+                    createdAt: 0,
+                    updatedAt: 0,
+                    __v: 0
+                }
+            );
+            if (categories) {
+                return categories[0].categoryItem;
+            } else {
+                return [];
+            }
+        } catch (error) {
+            console.error("Error in getting category:", error);
+            return [];
+        }
+    },
+    async setProductDiscount(data) {
+        const { productId, discount } = data;
+    
+        try {
+            const product = await Product.findById(productId);
+            if (!product) {
+                return CustomErrorHandler.notFound("Product not found.");
+            }
+    
+            product.productDiscount = {
+                value: discount.value,
+                type: discount.type,
+            };
+    
+            await product.save();
+            return product;
+        } catch (err) {
+            console.error("Error in setting product discount:", err);
+            throw err;
+        }
+    }
+    
 }
 export default ShopService;

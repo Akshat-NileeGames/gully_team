@@ -1,3 +1,4 @@
+import category from "../models/category.js";
 import { ShopService } from "../services/index.js";
 import Joi from "joi";
 const ShopController = {
@@ -10,23 +11,23 @@ const ShopController = {
             shopName: Joi.string().required(),
             shopDescription: Joi.string().required(),
             shopAddress: Joi.string().required(),
+            selectLocation: Joi.string().required(),
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),
             shopContact: Joi.string().required(),
             shopEmail: Joi.string().email().required(),
             shoplink: Joi.string().optional(),
-            LicenseNumber: Joi.string().pattern(/^[A-Za-z0-9-]+$/).required(),
-            gstNumber: Joi.string().pattern(/^[0-9]{15}$/).required(),
+            // LicenseNumber: Joi.string().pattern(/^[A-Za-z0-9-]+$/).required(),
+            // gstNumber: Joi.string().pattern(/^[0-9]{15}$/).required(),
             ownerName: Joi.string().required(),
             ownerPhoneNumber: Joi.string().required(),
             ownerEmail: Joi.string().email().required(),
             ownerAddress: Joi.string().required(),
             ownerPanNumber: Joi.string().required(),
-            ownerAddharImages: Joi.array().items(Joi.object({
-                aadharFrontSide: Joi.string().required(),
-                aadharBackSide: Joi.string().required()
-            })).min(1).required(),
-            ShopTimming: Joi.object().keys({
+            aadharFrontSide: Joi.string().required(),
+            aadharBackSide: Joi.string().required(),
+
+            shopTiming: Joi.object().keys({
                 Monday: Joi.object({
                     isOpen: Joi.boolean().required(),
                     openTime: Joi.string().optional(),
@@ -62,9 +63,11 @@ const ShopController = {
                     openTime: Joi.string().optional(),
                     closeTime: Joi.string().optional(),
                 }),
-            }).required()
+            }).required(),
+            shopLink: Joi.string().allow(null, '').optional(),
+            joinedAt: Joi.date().iso().required(),
         });
-        
+
         const { error } = shopSchema.validate(req.body)
         if (error) {
             return next(error);
@@ -89,7 +92,7 @@ const ShopController = {
             return res.status(200).json({
                 success: true,
                 message: "My Shop Retrieved Successfully",
-                data: result,
+                data: { shops: result },
             });
         } catch (err) {
             console.log("Failed to get My shop:", err);
@@ -128,6 +131,7 @@ const ShopController = {
             productsDescription: Joi.string().required(),
             productsPrice: Joi.number().required(),
             productCategory: Joi.string().required(),
+            productSubCategory: Joi.string().required(),
             productBrand: Joi.string().required(),
             shopId: Joi.string().required()
         });
@@ -162,7 +166,7 @@ const ShopController = {
             return res.json({
                 success: true,
                 message: "Shop Product Fetch Successfully",
-                data: result
+                data: { products: result }
             });
         } catch (error) {
             console.log("Unable to fetch Shop Product:", error);
@@ -246,7 +250,7 @@ const ShopController = {
             categoryfor: Joi.string().required(),
             items: Joi.array().items(Joi.string().min(3).required()).required()
         });
-        
+
         const { error } = categorySchema.validate(req.body);
         if (error) {
             return next(error);
@@ -271,12 +275,77 @@ const ShopController = {
             return res.json({
                 success: true,
                 message: "Category Retrieved Successfully",
-                data: result
+                data: { category: result }
             })
         } catch (error) {
             console.log("Unable to fetch Category:", error);
         }
     },
     //#endregion
+
+    //#region GetSub Category
+    async getSubCategory(req, res, next) {
+        const catgeory = Joi.object({
+            category: Joi.string().required()
+        });
+        const { error } = catgeory.validate(req.params);
+        if (error) {
+            return next(error);
+        }
+        try {
+            const result = await ShopService.getSubCategory(req.params);
+            return res.json({
+                success: true,
+                message: "Sub Category Retrieved Successfully",
+                data: { subCategory: result }
+            })
+        } catch (error) {
+            console.error("Failed to get Sub Category:", error);
+        }
+    },
+    //#endregion
+
+    //#region GetBrand
+    async getBrand(req, res, next) {
+        try {
+            const result = await ShopService.getBrand();
+            return res.json({
+                success: true,
+                message: "Category Retrieved Successfully",
+                data: { Brands: result }
+            })
+        } catch (error) {
+            console.log("Unable to fetch Category:", error);
+        }
+    },
+    //#endregion
+
+    //#region Set Product Discount
+    async setProductDiscount(req, res, next) {
+        const schema = Joi.object({
+            productId: Joi.string().required(),
+            discount: Joi.object({
+                value: Joi.number().required(),
+                type: Joi.string().valid("percent", "fixed").required()
+            }).required()
+        });
+
+        const { error } = schema.validate(req.body);
+        if (error) return next(error);
+
+        try {
+            const result = await ShopService.setProductDiscount(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Product discount updated successfully",
+                data: result
+            });
+        } catch (err) {
+            console.error("Failed to update discount:", err);
+            return next(err);
+        }
+    },
+    //#endregion
+
 }
 export default ShopController;

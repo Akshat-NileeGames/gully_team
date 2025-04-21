@@ -29,6 +29,7 @@ const shopSchema = new mongoose.Schema({
                 type: [Number],
                 required: true,
             },
+            selectLocation: String,
         },
     },
     shopContact: {
@@ -43,7 +44,7 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: false,
     },
-    ShopTimming: {
+    shopTiming: {
         Monday: {
             isOpen: Boolean,
             openTime: String,
@@ -121,18 +122,25 @@ const shopSchema = new mongoose.Schema({
         required: true,
     },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    isSubscriptionPurchased:{
-        type:Boolean,
-        default:false
+    isSubscriptionPurchased: {
+        type: Boolean,
+        default: false
     },
-    
+
     packageId: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
-    
+
     AdditionalPackages: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Package"
     }],
+    joinedAt: {
+        type: Date,
+        required: true,
+    }
 
+}, {
+    timestamps: true
 });
+
 shopSchema.index({ "locationHistory.point": "2dsphere" });
 export default mongoose.model('Shop', shopSchema);

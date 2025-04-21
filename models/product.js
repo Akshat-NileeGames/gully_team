@@ -20,10 +20,26 @@ const Product = new mongoose.Schema({
         type: String,
         required: true
     },
+    productSubCategory: {
+        type: String,
+        required: true
+    },
     productBrand: {
         type: String,
         required: true
     },
+    productDiscount: {
+        value: {
+            type: Number,
+            required: false,
+            default: 0,
+        },
+        type: {
+            type: String,
+            enum: ['percent', 'fixed'],
+            default: 'percent',
+        },
+    },    
     shopId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Shop"
