@@ -143,19 +143,19 @@ const ShopService = {
                 $match: {
                     distanceInKm: { $lte: 15 },
                 }
-            }, {
-                $project: {
-                    locationHistory: 0
-                }
-            }
+            },
+            //  {
+            //     $project: {
+            //         locationHistory: 0
+            //     }
+            // }
         ]);
-        console.log("Shops near you:", shop);
         return shop;
     },
 
     async AddProduct(data) {
         const { productsImage, productName, productsDescription, productsPrice,
-            productCategory, productSubCategory, productBrand, shopId } = data;
+            productCategory, productSubCategory, productBrand, shopId, discountedvalue, discounttype } = data;
         let imagesUrl = [];
         // if (productsImage && productsImage.length > 0) {
         //     for (image in productsImage) {
@@ -164,18 +164,20 @@ const ShopService = {
         //         imagesUrl.push(image);
         //     }
         // }
+
+        const finalDiscount = {
+            discountedvalue: discounttype === 'fixed' ? 0 : discountedvalue,
+            discounttype: discounttype.toLowerCase() === 'fixed' ? 'fixed' : 'percent'
+        };
         const product = new Product({
-            productsImage: [],
+            productsImage:productsImage,
             productName: productName,
             productsDescription: productsDescription,
             productsPrice: productsPrice,
             productCategory: productCategory,
             productSubCategory: productSubCategory,
             productBrand: productBrand,
-            // productDiscount:{
-            //     value: 0,
-            //     type: "",
-            // },
+            productDiscount: finalDiscount,
             shopId: shopId,
             isActive: true
         })
@@ -190,10 +192,13 @@ const ShopService = {
 
     async getShopProduct(data) {
         try {
+            const shop = await Shop.findById(data.shopId);
+            if (!shop) {
+                return CustomErrorHandler.notFound("The specified shop is not available.");
+            }
             const product = await Product.find({
-                shopId: data.shopId
+                shopId: shop._id
             });
-            console.log(product);
             return product;
         } catch (error) {
             console.log("Failed to get Shop Products", error);
@@ -336,18 +341,18 @@ const ShopService = {
     },
     async setProductDiscount(data) {
         const { productId, discount } = data;
-    
+
         try {
             const product = await Product.findById(productId);
             if (!product) {
                 return CustomErrorHandler.notFound("Product not found.");
             }
-    
+
             product.productDiscount = {
                 value: discount.value,
                 type: discount.type,
             };
-    
+
             await product.save();
             return product;
         } catch (err) {
@@ -355,6 +360,6 @@ const ShopService = {
             throw err;
         }
     }
-    
+
 }
 export default ShopService;

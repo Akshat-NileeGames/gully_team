@@ -115,7 +115,7 @@ const ShopController = {
             return res.status(200).json({
                 success: true,
                 message: "Nearby Shop Retrieved Successfully",
-                data: result,
+                data: {nearbyshop:result},
             });
         } catch (err) {
             console.log("Failed to get Nearby Shop:", err);
@@ -133,7 +133,9 @@ const ShopController = {
             productCategory: Joi.string().required(),
             productSubCategory: Joi.string().required(),
             productBrand: Joi.string().required(),
-            shopId: Joi.string().required()
+            shopId: Joi.string().required(),
+            discountedvalue: Joi.number().optional(),
+            discounttype: Joi.string().valid("percent", "fixed").required(),
         });
         const { error } = product.validate(req.body);
         if (error) {
@@ -163,7 +165,7 @@ const ShopController = {
         }
         try {
             const result = await ShopService.getShopProduct(req.params);
-            return res.json({
+            return res.status(200).json({
                 success: true,
                 message: "Shop Product Fetch Successfully",
                 data: { products: result }
@@ -347,5 +349,12 @@ const ShopController = {
     },
     //#endregion
 
+    async getSimilarProduct(req,res,next){
+        const category=Joi.object({});
+        const {error}= category.validate();
+         if (error) {
+        return next(error);
+        }
+    },
 }
 export default ShopController;

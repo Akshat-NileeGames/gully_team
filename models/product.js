@@ -29,17 +29,16 @@ const Product = new mongoose.Schema({
         required: true
     },
     productDiscount: {
-        value: {
+        discountedvalue: {
             type: Number,
             required: false,
             default: 0,
         },
-        type: {
+        discounttype: {
             type: String,
-            enum: ['percent', 'fixed'],
-            default: 'percent',
+            enum: ['percent', 'fixed']
         },
-    },    
+    },
     shopId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Shop"
