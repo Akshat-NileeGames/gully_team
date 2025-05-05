@@ -85,7 +85,7 @@ const ShopController = {
     },
     //#endregion
 
-    //#region GetMySHop
+    //#region GetMyShop
     async getMyShop(req, res, next) {
         try {
             const result = await ShopService.getMyShop();
@@ -115,7 +115,7 @@ const ShopController = {
             return res.status(200).json({
                 success: true,
                 message: "Nearby Shop Retrieved Successfully",
-                data: {nearbyshop:result},
+                data: { nearbyshop: result },
             });
         } catch (err) {
             console.log("Failed to get Nearby Shop:", err);
@@ -153,6 +153,9 @@ const ShopController = {
         }
     },
     //#endregion
+
+
+
 
     //#region GetShopProduct
     async getShopProduct(req, res, next) {
@@ -203,7 +206,7 @@ const ShopController = {
 
     //#region Search
     async search(req, res, next) {
-        const searchQuery = req.query.q;
+        const searchQuery = req.params.querytext;
         if (!searchQuery) {
             return res.status(400).json({
                 success: false,
@@ -349,12 +352,37 @@ const ShopController = {
     },
     //#endregion
 
-    async getSimilarProduct(req,res,next){
-        const category=Joi.object({});
-        const {error}= category.validate();
-         if (error) {
-        return next(error);
+    async getSimilarProduct(req, res, next) {
+        const category = Joi.object({});
+        const { error } = category.validate();
+        if (error) {
+            return next(error);
         }
     },
+
+    //#region updateshopSubscriptionStatus
+    async updateSubscriptionStatus(req, res, next) {
+        const shopSchema = Joi.object({
+            shopId: Joi.string().required(),
+            packageId: Joi.string().required(),
+            packageStartDate: Joi.date().iso().required(),
+            packageEndDate: Joi.date().iso().required(),
+        });
+        const { error } = shopSchema.validate(req.body);
+        if (error) {
+            return next(error);
+        }
+        try {
+            const result = await ShopService.updateSubscriptionStatus(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Product discount updated successfully",
+                data: result
+            });
+        } catch (error) {
+            console.log("Failed to update Subscription Status:", error);
+        }
+    },
+    //#endregion
 }
 export default ShopController;

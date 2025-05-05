@@ -122,13 +122,14 @@ const shopSchema = new mongoose.Schema({
         required: true,
     },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    packageStartDate: { type: Date },
+    packageEndDate: { type: Date },
     isSubscriptionPurchased: {
         type: Boolean,
         default: false
     },
 
     packageId: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
-
     AdditionalPackages: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Package"

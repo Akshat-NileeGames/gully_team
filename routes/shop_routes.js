@@ -13,7 +13,8 @@ router.post("/addCategory", validateUser,ShopController.addCategory);
 router.get("/getcategory",validateUser,ShopController.getCategory);
 router.get("/getsubcategory/:category",validateUser,ShopController.getSubCategory);
 router.get("/getSportsBrand",validateUser,ShopController.getBrand);
-
+router.post("/UpdateshopSubscriptionStatus",validateUser,ShopController.updateSubscriptionStatus);
+router.get("/search/:querytext",validateUser,ShopController.search);
 router.post("/setProductDiscount", validateUser, ShopController.setProductDiscount);
 
 export default router;

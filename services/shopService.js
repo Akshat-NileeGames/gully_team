@@ -1,4 +1,4 @@
-import { Shop, Product, Category } from '../models/index.js';
+import { Shop, Product, Category, Package } from '../models/index.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
 import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
@@ -111,46 +111,80 @@ const ShopService = {
                 updatedAt: 0,
                 createdAt: 0,
                 __v: 0,
-            });
+            }).populate('packageId');
             return shop;
         } catch (err) {
             console.log("Error in getting my shop:", err);
         }
     },
-
     async getNearbyShop(data) {
         const { latitude, longitude } = data;
-        const shop = await Shop.aggregate([
+        const MAX_DISTANCE_METERS = 15 * 1000;
+
+        const userLocation = {
+            type: "Point",
+            coordinates: [longitude, latitude]
+        };
+
+        // Find shops with expired subscriptions within the defined radius
+        const expiredShops = await Shop.find({
+            "locationHistory.point": {
+                $near: {
+                    $geometry: userLocation,
+                    $maxDistance: MAX_DISTANCE_METERS
+                }
+            },
+            packageEndDate: { $lt: new Date() },
+            isSubscriptionPurchased: true
+        }).select('_id');
+
+        // Update the subscription status of expired shops
+        if (expiredShops.length > 0) {
+            const expiredShopIds = expiredShops.map(shop => shop._id);
+            await Shop.updateMany(
+                { _id: { $in: expiredShopIds } },
+                { $set: { isSubscriptionPurchased: false } }
+            );
+        }
+
+        // Aggregate nearby shops with active subscriptions
+        const nearbyShops = await Shop.aggregate([
             {
                 $geoNear: {
-                    near: {
-                        type: "Point",
-                        coordinates: [longitude, latitude]
-                    },
+                    near: userLocation,
                     distanceField: "distance",
                     spherical: true,
-                    maxDistance: 15 * 1000
-                },
+                    maxDistance: MAX_DISTANCE_METERS
+                }
             },
             {
                 $addFields: {
-                    distanceInKm: {
-                        $divide: ["$distance", 1000]
-                    }
+                    distanceInKm: { $divide: ["$distance", 1000] }
                 }
             },
             {
                 $match: {
                     distanceInKm: { $lte: 15 },
+                    isSubscriptionPurchased: true
                 }
             },
-            //  {
-            //     $project: {
-            //         locationHistory: 0
-            //     }
-            // }
+            {
+                $lookup: {
+                    from: "packages",
+                    localField: "packageId",
+                    foreignField: "_id",
+                    as: "packageId"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$packageId",
+                    preserveNullAndEmptyArrays: true
+                }
+            }
         ]);
-        return shop;
+
+        return nearbyShops;
     },
 
     async AddProduct(data) {
@@ -170,7 +204,7 @@ const ShopService = {
             discounttype: discounttype.toLowerCase() === 'fixed' ? 'fixed' : 'percent'
         };
         const product = new Product({
-            productsImage:productsImage,
+            productsImage: productsImage,
             productName: productName,
             productsDescription: productsDescription,
             productsPrice: productsPrice,
@@ -227,13 +261,17 @@ const ShopService = {
             const shops = await Shop.find({
                 $or: [
                     { shopName: { $regex: query, $options: 'i' } },
-                    // { shopDescription: { $regex: query, $options: 'i' } },
+                    { shopDescription: { $regex: query, $options: 'i' } },
+                    { shopAddress: { $regex: query, $options: 'i' } },
                 ]
             });
             const products = await Product.find({
                 $or: [
                     { productName: { $regex: query, $options: 'i' } },
-                    // { productsDescription: { $regex: query, $options: 'i' } },
+                    { productsDescription: { $regex: query, $options: 'i' } },
+                    { productCategory: { $regex: query, $options: 'i' } },
+                    { productSubCategory: { $regex: query, $options: 'i' } },
+                    { productBrand: { $regex: query, $options: 'i' } },
                 ]
             });
             return { shops, products };
@@ -359,7 +397,24 @@ const ShopService = {
             console.error("Error in setting product discount:", err);
             throw err;
         }
-    }
+    },
+    async updateSubscriptionStatus(data) {
+        try {
+            const shop = await Shop.findById(data.shopId);
+            if (!shop) {
+                return CustomErrorHandler.notFound("Shop Not Found");
+            }
+            shop.packageId = data.packageId;
+            shop.packageStartDate = data.packageStartDate;
+            shop.packageEndDate = data.packageEndDate;
+            shop.isSubscriptionPurchased = true;
 
+            shop.save();
+            return shop;
+        } catch (error) {
+            console.log("Failed to update Subscription Status:", error);
+        }
+
+    },
 }
 export default ShopService;

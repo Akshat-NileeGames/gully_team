@@ -46,12 +46,13 @@ const package_schema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
     //For sponsorship
-    maxMedia: { 
+    maxMedia: {
       type: Number,
       default: 0,
     },
-    maxVideos: { 
+    maxVideos: {
       type: Number,
       default: 0,
     },
@@ -59,7 +60,13 @@ const package_schema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    
+
+    //For shop
+    MaxEditAllowed: {
+      type: Number,
+      default: 0
+    }
+
   },
   {
     timestamps: true,

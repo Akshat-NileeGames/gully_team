@@ -306,7 +306,7 @@ const PromotionalbannerService = {
 
     try {
       const today = new Date();
-      
+
       today.setHours(0, 0, 0, 0);
       let formattedDate = today.toISOString();
       console.log("Today (local):", formattedDate);
@@ -376,14 +376,14 @@ const PromotionalbannerService = {
 
   async updateBanner(bannerId, data) {
 
-    const banner=await Promotional_Banner_model.findById(bannerId);
+    const banner = await Promotional_Banner_model.findById(bannerId);
     let imageUrl = "";
-    if (data.banner_image!=banner.banner_image) {
+    if (data.banner_image != banner.banner_image) {
       imageUrl = await ImageUploader.Upload(
         data.banner_image,
         "Banner_Promotion",
       );
-    }else{
+    } else {
       imageUrl = banner.banner_image;
     }
     console.log("Image URL:", imageUrl);
@@ -391,7 +391,7 @@ const PromotionalbannerService = {
     console.log("The New Banner Title:", data.banner_title);
     banner.banner_title = data.banner_title;
     banner.banner_image = imageUrl;
-    
+
     banner.save();
     return banner;
   },

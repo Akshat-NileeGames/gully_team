@@ -113,6 +113,36 @@ const otherController = {
       return next(err);
     }
   },
+  async createSponsorOrder(req, res, next) {
+    try {
+      const result = await otherServices.createSponsorOrder(req.body);
+
+      return res.status(200).json({
+        sucess: true,
+        message: "OrderID created SucessFully",
+        data: result,
+      });
+    } catch (err) {
+      console.log(" Error in createOrder ");
+      return next(err);
+    }
+  },
+  async createshopOrder(req, res, next) {
+    try {
+      const result = await otherServices.createSponsorOrder(req.body);
+
+      return res.status(200).json({
+        sucess: true,
+        message: "OrderID created SucessFully",
+        data: result,
+      });
+    } catch (err) {
+      console.log(" Error in createOrder ");
+      return next(err);
+    }
+  },
+
+
   async updatePayment(req, res, next) {
     try {
       const result = await otherServices.updatePayment(req.body);
