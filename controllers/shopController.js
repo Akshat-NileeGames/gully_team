@@ -214,12 +214,25 @@ const ShopController = {
             });
         }
         try {
-            const { shops, products } = await ShopService.searchShopsAndProducts(searchQuery);
-
+            const query = searchQuery.trim();
+            const { shops, products, didYouMean,
+                originalQuery, correctedQuery } = await ShopService.searchShopsAndProducts(query);
+            let message = "Search results fetched successfully.";
+            if (correctedQuery) {
+                message = `Showing results for "${correctedQuery}". Search instead for "${originalQuery}"?`;
+            } else if (didYouMean && shops.length === 0 && products.length === 0) {
+                message = `No results found for "${originalQuery}". Did you mean "${didYouMean}"?`;
+            }
             return res.status(200).json({
                 success: true,
-                message: "Search results fetched successfully.",
-                data: { shops, products }
+                message: message,
+                data: {
+                    shops, products, searchInfo: {
+                        originalQuery,
+                        correctedQuery,
+                        didYouMean
+                    }
+                }
             });
         } catch (err) {
             return next(err);

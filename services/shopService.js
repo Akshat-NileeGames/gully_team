@@ -256,30 +256,202 @@ const ShopService = {
     },
 
 
+    //here we are using levenshteinDistance alogrithm to correct the incorrect query provided by user
+    async correctIncorrectQuery(source, target) {
+        const matrix = [];
+
+        // Initialize matrix
+        for (let i = 0; i <= target.length; i++) {
+            matrix[i] = [i];
+        }
+        for (let j = 0; j <= source.length; j++) {
+            matrix[0][j] = j;
+        }
+        // Populate matrix using Levenshtein distance
+        for (let i = 1; i <= target.length; i++) {
+            for (let j = 1; j <= source.length; j++) {
+                if (target.charAt(i - 1) === source.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j] + 1
+                    )
+                }
+            }
+        }
+        return matrix[target.length][source.length];
+    },
+
     async searchShopsAndProducts(query) {
         try {
+            //first we well try to find the orginal query result or partially match result 
+            const originalQueryRegex = new RegExp(query, 'i');
+
+            // Find any shops or products matching the original query
+            const initialShops = await Shop.find({
+                $or: [
+                    { shopName: originalQueryRegex },
+                    { shopDescription: originalQueryRegex },
+                    { shopAddress: originalQueryRegex },
+                ]
+            }).populate('packageId');
+
+            const initialProducts = await Product.find({
+                $or: [
+                    { productName: originalQueryRegex },
+                    { productsDescription: originalQueryRegex },
+                    { productCategory: originalQueryRegex },
+                    { productSubCategory: originalQueryRegex },
+                    { productBrand: originalQueryRegex },
+                ]
+            });
+
+            /* If we find the result based on the user orginal query there is no 
+            need for us to do spell correction such that we return the original result */
+
+            if (initialShops.length > 0 || initialProducts.length > 0) {
+                const shops = await Shop.find({
+                    $or: [
+                        { shopName: originalQueryRegex },
+                        { shopDescription: originalQueryRegex },
+                        { shopAddress: originalQueryRegex },
+                    ]
+                }).populate('packageId');
+
+                const products = await Product.find({
+                    $or: [
+                        { productName: originalQueryRegex },
+                        { productsDescription: originalQueryRegex },
+                        { productCategory: originalQueryRegex },
+                        { productSubCategory: originalQueryRegex },
+                        { productBrand: originalQueryRegex },
+                    ]
+                });
+
+                return { shops, products, didYouMean: null, originalQuery: query, correctedQuery: null };
+            }
+
+            /* if we dont find the result based on user orginal text wheater the query text is incorret
+            we will do an spell correction to find the result using correct query
+            Lets get the relevant field from database that might contain the search term */
+
+            const [
+                categories,
+                subCategories,
+                brands,
+                productNames,
+                shopNames,
+                productDescriptionTerms
+            ] = await Promise.all([
+                Category.distinct('categoryItem'),
+                Product.distinct('productSubCategory'),
+                Product.distinct('productBrand'),
+                Product.distinct('productName'),
+                Shop.distinct('shopName'),
+                Product.find({}, { productsDescription: 1 }).limit(100)
+            ]);
+
+            // Extract and filter meaningful words from product descriptions
+            const descriptionWords = [];
+            productDescriptionTerms.forEach(product => {
+                if (product.productsDescription) {
+                    // Split description and filter out short words and common stop words
+                    const words = product.productsDescription
+                        .split(/\s+/)
+                        .filter(word =>
+                            word.length > 3 &&
+                            !/^(the|and|for|with|this|that|from|have|has|are|not)$/i.test(word)
+                        );
+                    descriptionWords.push(...words);
+                }
+            });
+
+            // Create a single array of all potential search terms from the database
+            const potentialTerms = [
+                ...(Array.isArray(categories) ? categories.flat() : []),
+                ...(Array.isArray(subCategories) ? subCategories : []),
+                ...(Array.isArray(brands) ? brands : []),
+                ...(Array.isArray(productNames) ? productNames : []),
+                ...(Array.isArray(shopNames) ? shopNames : []),
+                ...descriptionWords
+            ];
+
+            // Process and  clean up, filter short words, deduplicate terms
+            const processedTerms = [...new Set(
+                potentialTerms
+                    .filter(term => term && typeof term === 'string')
+                    .map(term => term.toLowerCase().trim())
+                    .filter(term => term.length > 2) // Only consider terms with at least 3 characters
+            )];
+            // Attempt spelling correction for each word in the query
+            const queryWords = query.toLowerCase().trim().split(/\s+/);
+            // For each query word, find the best spelling suggestion
+            const suggestions = [];
+            for (const word of queryWords) {
+                if (word.length <= 2) {
+                    suggestions.push(word);
+                    continue;
+                }
+
+                let bestMatch = word;
+                let minDistance = Infinity;
+
+                for (const term of processedTerms) {
+                    // Only consider terms that are somewhat similar in length to the query word
+                    if (Math.abs(term.length - word.length) > Math.min(3, word.length / 2)) {
+                        continue;
+                    }
+                    const distance = await ShopService.correctIncorrectQuery(word, term);
+                    const normalizedDistance = distance / Math.max(word.length, term.length);
+                    // Consider a term as a potential match if it's similar enough
+                    if (normalizedDistance < 0.4 && distance < minDistance) {
+                        bestMatch = term;
+                        minDistance = distance;
+                    }
+                }
+
+                suggestions.push(bestMatch);
+            }
+
+            // Only accept the suggestion if it's different from the original query
+            const suggestedQuery = suggestions.join(' ');
+            const didYouMean = suggestedQuery !== query.toLowerCase().trim() ? suggestedQuery : null;
+
+            const searchQuery = didYouMean || query;
+            const searchQueryRegex = new RegExp(searchQuery, 'i');
             const shops = await Shop.find({
                 $or: [
-                    { shopName: { $regex: query, $options: 'i' } },
-                    { shopDescription: { $regex: query, $options: 'i' } },
-                    { shopAddress: { $regex: query, $options: 'i' } },
+                    { shopName: searchQueryRegex },
+                    { shopDescription: searchQueryRegex },
+                    { shopAddress: searchQueryRegex },
                 ]
-            });
+            }).populate('packageId');
+
             const products = await Product.find({
                 $or: [
-                    { productName: { $regex: query, $options: 'i' } },
-                    { productsDescription: { $regex: query, $options: 'i' } },
-                    { productCategory: { $regex: query, $options: 'i' } },
-                    { productSubCategory: { $regex: query, $options: 'i' } },
-                    { productBrand: { $regex: query, $options: 'i' } },
+                    { productName: searchQueryRegex },
+                    { productsDescription: searchQueryRegex },
+                    { productCategory: searchQueryRegex },
+                    { productSubCategory: searchQueryRegex },
+                    { productBrand: searchQueryRegex },
                 ]
             });
-            return { shops, products };
+
+            return {
+                shops,
+                products,
+                didYouMean,
+                originalQuery: query,
+                correctedQuery: didYouMean !== null ? suggestedQuery : null
+            };
         } catch (err) {
             console.error("Error in searching shops and products:", err);
             throw new Error("Error in search operation");
         }
     },
+
 
 
     async getSpecificProduct(data) {
