@@ -18,7 +18,7 @@ import {
   Payment,
   Package
   // Transaction
-  
+
 } from "../models/index.js";
 
 import crypto from "crypto";
@@ -217,9 +217,9 @@ const otherServices = {
             image: imagePath
               ? "https://gully-team-bucket.s3.amazonaws.com/" + imagePath
               : updatedNotification.imageUrl
-              ? "https://gully-team-bucket.s3.amazonaws.com/" +
+                ? "https://gully-team-bucket.s3.amazonaws.com/" +
                 updatedNotification.imageUrl
-              : "",
+                : "",
           });
           console.log("Notification sent to user:", user.fcmToken);
         } catch (error) {
@@ -259,7 +259,7 @@ const otherServices = {
   async getBanner() {
     //Find the Banner
     let banner = await Banner.find();
-    
+
     if (!banner) {
       // Handle the case where the user is not found
       throw CustomErrorHandler.notFound("Banner Not Found");
@@ -299,8 +299,8 @@ const otherServices = {
 
   //*************************************    Package   ************************************** */
 
-  
-async createPackage(packageData) {
+
+  async createPackage(packageData) {
     try {
       const newPackage = new Package(packageData);
       await newPackage.save();
@@ -340,8 +340,22 @@ async createPackage(packageData) {
       throw new Error('Error retrieving packages: ' + error.message);
     }
   },
+  async getAdditionalPackages(packageFor) {
+    try {
 
-  
+      const packages = await Package.find({ packageFor: 'shopAdditional' });
+
+      if (packages.length === 0) {
+        throw new Error('No packages found for the given type');
+      }
+
+      return packages;
+    } catch (error) {
+      throw new Error('Error retrieving packages: ' + error.message);
+    }
+  },
+
+
   async updatePackage(id, updatedData) {
     try {
       const updatedPackage = await Package.findByIdAndUpdate(id, updatedData, { new: true });
@@ -350,7 +364,7 @@ async createPackage(packageData) {
       throw new Error('Error updating package: ' + error.message);
     }
   },
-   async deletePackage(id) {
+  async deletePackage(id) {
     try {
       const deletedPackage = await Package.findByIdAndDelete(id);
       return deletedPackage;
@@ -461,7 +475,7 @@ async createPackage(packageData) {
     if (couponData.minAmount >= amount) {
       throw CustomErrorHandler.notFound(
         "This coupon is applicable for amount greather than " +
-          couponData.minAmount
+        couponData.minAmount
       );
     }
 
@@ -488,7 +502,7 @@ async createPackage(packageData) {
 
     return couponHistory;
   },
-//old code
+  //old code
   // async tournamentFees(tournamentId) {
   //   //Calaculate Tournament Fess
   //   const tournament = await Tournament?.find({ _id: tournamentId }); // Limit the number of documents per page
@@ -510,7 +524,7 @@ async createPackage(packageData) {
   //   console.log("Tournament " + JSON.stringify(tournament));
   //   const tournamentLimit = tournament[0]?.tournamentLimit;
   //   console.log("tournamentLimit " + tournamentLimit);
-    
+
   //   const entryFees = await EntryFees.find({
   //     initialteamLimit: { $lte: tournamentLimit },
   //     endteamLimit: { $gte: tournamentLimit },
@@ -521,12 +535,12 @@ async createPackage(packageData) {
 
   async tournamentFees(teamLimit) {
     const entryFees = await EntryFees.find({
-      initialteamLimit: { $lte: teamLimit },  
+      initialteamLimit: { $lte: teamLimit },
       endteamLimit: { $gte: teamLimit },
     });
-  
+
     if (!entryFees || entryFees.length === 0) {
-      return { success: false, message: "No fees found for the provided team limit" }; 
+      return { success: false, message: "No fees found for the provided team limit" };
     }
     return entryFees?.[0]?.fees;
   },
@@ -552,186 +566,186 @@ async createPackage(packageData) {
   //       .limit(pageSize)
   //       .skip(skip)
   //       .exec();
-  
+
   //     // Count total transactions for pagination
   //     const totalCount = await OrderHistory.countDocuments({ userId });
-      
-  
+
+
   //     return {
   //       history: transactions,
   //       totalCount
   //     };
   //   } catch (error) {
-      
+
   //     throw error;
   //   }
   // },
 
-    // Working code for transaction (DG :11/11/24)
-    async transactionBannerHistory(userId, pageSize, skip) {
-      const totalCount = await OrderHistory.countDocuments({ userId, ordertype: "banner" }); // Filter for banner orders
-    
-      const history = await OrderHistory.aggregate([
-        {
-          $match: {
-            userId: mongoose.Types.ObjectId(userId), // Filter by the logged-in user ID
-            ordertype: "banner", // Filter for banner orders
-          },
+  // Working code for transaction (DG :11/11/24)
+  async transactionBannerHistory(userId, pageSize, skip) {
+    const totalCount = await OrderHistory.countDocuments({ userId, ordertype: "banner" }); // Filter for banner orders
+
+    const history = await OrderHistory.aggregate([
+      {
+        $match: {
+          userId: mongoose.Types.ObjectId(userId), // Filter by the logged-in user ID
+          ordertype: "banner", // Filter for banner orders
         },
-        {
-          $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            as: "user",
-          },
-        },
-        {
-          $unwind: "$user",
-        },
-        {
-          $lookup: {
-            from: "promotionalbanners", // Look up promotional banners
-            localField: "bannerId",
-            foreignField: "_id",
-            as: "banner",
-          },
-        },
-        {
-          $unwind: { path: "$banner", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $lookup: {
-            from: "payments",
-            localField: "orderId",
-            foreignField: "orderId",
-            as: "payments",
-          },
-        },
-        {
-          $unwind: { path: "$payments", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $project: {
-            _id: 1,
-            amountDue: 1,
-            orderId: 1,
-            coupon: 1,
-            amountWithoutCoupon: 1,
-            amount: 1,
-            status: 1,
-            createdAt: 1,
-            updatedAt: 1,
-            userName: "$user.fullname",
-            phoneNumber: "$user.phoneNumber",
-            email: "$user.email",
-            bannerTitle: "$banner.banner_title", // Banner details
-            bannerImage: "$banner.banner_image", // Banner image
-            payments: 1, // Include payments in the response
-            invoiceUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", // Placeholder for invoice URL
-          },
-        },
-        {
-          $sort: {
-            createdAt: -1, // Sort by createdAt field in descending order (newest first)
-          },
-        },
-      ])
-        .skip(skip)
-        .limit(pageSize);
-    
-      return { history, totalCount };
-    },
-    
-    async transactionHistory(userId, pageSize, skip) {
-      const totalCount = await OrderHistory.countDocuments({ userId });
-    
-      const history = await OrderHistory.aggregate([
-        {
-          $match: {
-            userId:mongoose.Types.ObjectId(userId) // Filter by the logged-in user ID
-          },
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            as: "user",
-          },
-        },
-        {
-          $unwind: "$user",
-        },
-        {
-          $lookup: {
-            from: "tournaments",
-            localField: "tournamentId",
-            foreignField: "_id",
-            as: "tournament",
-          },
-        },
-        {
-          $unwind: { path: "$tournament", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $lookup: {
-            from: "payments",
-            localField: "orderId",
-            foreignField: "orderId",
-            as: "payments",
-          },
-        },
-        {
-          $unwind: { path: "$payments", preserveNullAndEmptyArrays: true },
       },
-        {
-          $project: {
-            _id: 1,
-            amountDue: 1,
-            orderId: 1,
-            coupon: 1,
-            amountWithoutCoupon: 1,
-            amount: 1,
-            ordertype:1,
-            status: 1,
-            createdAt: 1,
-            updatedAt: 1,
-            userName: "$user.fullname",
-            phoneNumber: "$user.phoneNumber",
-            email: "$user.email",
-            tournament: "$tournament",
-            payments: 1, // Include payments in the response
-            tournamentName: "$tournament.tournamentName",
-            tournamentStartDateTime: "$tournament.tournamentStartDateTime",
-            tournamentEndDateTime: "$tournament.tournamentEndDateTime",
-            invoiceUrl:
-              "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", // Placeholder for invoice URL
-          },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
         },
-        {
-          $sort: {
-            createdAt: -1, // Sort by createdAt field in descending order (newest first)
-          },
+      },
+      {
+        $unwind: "$user",
+      },
+      {
+        $lookup: {
+          from: "promotionalbanners", // Look up promotional banners
+          localField: "bannerId",
+          foreignField: "_id",
+          as: "banner",
         },
-      ]) 
-        .skip(skip)
-        .limit(pageSize);
-    
-      return { history, totalCount };
-    },
-  async getTrans(userId){
+      },
+      {
+        $unwind: { path: "$banner", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $lookup: {
+          from: "payments",
+          localField: "orderId",
+          foreignField: "orderId",
+          as: "payments",
+        },
+      },
+      {
+        $unwind: { path: "$payments", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $project: {
+          _id: 1,
+          amountDue: 1,
+          orderId: 1,
+          coupon: 1,
+          amountWithoutCoupon: 1,
+          amount: 1,
+          status: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          userName: "$user.fullname",
+          phoneNumber: "$user.phoneNumber",
+          email: "$user.email",
+          bannerTitle: "$banner.banner_title", // Banner details
+          bannerImage: "$banner.banner_image", // Banner image
+          payments: 1, // Include payments in the response
+          invoiceUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", // Placeholder for invoice URL
+        },
+      },
+      {
+        $sort: {
+          createdAt: -1, // Sort by createdAt field in descending order (newest first)
+        },
+      },
+    ])
+      .skip(skip)
+      .limit(pageSize);
+
+    return { history, totalCount };
+  },
+
+  async transactionHistory(userId, pageSize, skip) {
+    const totalCount = await OrderHistory.countDocuments({ userId });
+
+    const history = await OrderHistory.aggregate([
+      {
+        $match: {
+          userId: mongoose.Types.ObjectId(userId) // Filter by the logged-in user ID
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: "$user",
+      },
+      {
+        $lookup: {
+          from: "tournaments",
+          localField: "tournamentId",
+          foreignField: "_id",
+          as: "tournament",
+        },
+      },
+      {
+        $unwind: { path: "$tournament", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $lookup: {
+          from: "payments",
+          localField: "orderId",
+          foreignField: "orderId",
+          as: "payments",
+        },
+      },
+      {
+        $unwind: { path: "$payments", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $project: {
+          _id: 1,
+          amountDue: 1,
+          orderId: 1,
+          coupon: 1,
+          amountWithoutCoupon: 1,
+          amount: 1,
+          ordertype: 1,
+          status: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          userName: "$user.fullname",
+          phoneNumber: "$user.phoneNumber",
+          email: "$user.email",
+          tournament: "$tournament",
+          payments: 1, // Include payments in the response
+          tournamentName: "$tournament.tournamentName",
+          tournamentStartDateTime: "$tournament.tournamentStartDateTime",
+          tournamentEndDateTime: "$tournament.tournamentEndDateTime",
+          invoiceUrl:
+            "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", // Placeholder for invoice URL
+        },
+      },
+      {
+        $sort: {
+          createdAt: -1, // Sort by createdAt field in descending order (newest first)
+        },
+      },
+    ])
+      .skip(skip)
+      .limit(pageSize);
+
+    return { history, totalCount };
+  },
+  async getTrans(userId) {
     const totalCount = await OrderHistory.countDocuments({ userId });
     const history = await OrderHistory.find({ userId: userId })
-    .populate('sponsorPackageId')
-    .populate({
-      path: 'bannerId',
-      select: '-locationHistory',
-    });
+      .populate('sponsorPackageId')
+      .populate({
+        path: 'bannerId',
+        select: '-locationHistory',
+      });
 
     console.log("History : ", history);
- 
-    return {history,totalCount};
+
+    return { history, totalCount };
   },
 
   async transactionHistoryById(Id) {
@@ -760,32 +774,32 @@ async createPackage(packageData) {
     return transformedData;
   },
 
- //DG
-async deleteTransaction(userId) {
-  if (!userId) {
-    throw new Error("User ID is required.");
-  }
+  //DG
+  async deleteTransaction(userId) {
+    if (!userId) {
+      throw new Error("User ID is required.");
+    }
 
-  await OrderHistory.deleteMany({ userId }); // Delete all transactions associated with the user
-},
+    await OrderHistory.deleteMany({ userId }); // Delete all transactions associated with the user
+  },
 
-// DG
-async deleteTransactionById(transactionId) {
-  if (!transactionId) {
-    throw new Error("Transaction ID is required.");
-  }
+  // DG
+  async deleteTransactionById(transactionId) {
+    if (!transactionId) {
+      throw new Error("Transaction ID is required.");
+    }
 
-  const transaction = await OrderHistory.findById(transactionId);
-  if (!transaction) {
-    throw new Error("Transaction not found.");
-  }
+    const transaction = await OrderHistory.findById(transactionId);
+    if (!transaction) {
+      throw new Error("Transaction not found.");
+    }
 
-  await OrderHistory.findByIdAndDelete(transactionId); // Delete the specific transaction
-},
+    await OrderHistory.findByIdAndDelete(transactionId); // Delete the specific transaction
+  },
 
 
   //*************************************    Payment   ************************************** */
-//Nikhil
+  //Nikhil
   // async createOrder(data) {
   //   const userInfo = global.user;
 
@@ -816,8 +830,8 @@ async deleteTransactionById(transactionId) {
   //     currency: result.currency,
   //     receipt: result.receipt,
   //     status: result.status,
-   
-      
+
+
   //   });
 
   //   // Save the new Banner and wait for the operation to complete
@@ -842,21 +856,21 @@ async deleteTransactionById(transactionId) {
   // },
 
   //DG
-  
+
   async createOrder(data) {
     const userInfo = global.user;
-  
+
     const receipt = crypto.randomBytes(10).toString("hex");
-  
+
     const paymentData = {
       amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
       currency: "INR",
       receipt: `order_receipt_${receipt}`,
       payment_capture: 1, // Auto capture payment
     };
-    
+
     const result = await RazorpayHandler.createOrder(paymentData);
-  
+
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
@@ -870,9 +884,9 @@ async deleteTransactionById(transactionId) {
       receipt: result.receipt,
       status: "Pending", // Set status as Pending initially
     });
-  
+
     await orderHistory.save();
-  
+
     const payment = new Payment({
       orderId: result.id,
       userId: userInfo.userId,
@@ -882,37 +896,37 @@ async deleteTransactionById(transactionId) {
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
     });
-  
+
     await payment.save();
     return {
       order: result,
       message: "Order created successfully. Payment is pending.",
-  };
+    };
   },
-  
+
   async createBannerOrder(data) {
     const userInfo = global.user;
-  
+
     const receipt = crypto.randomBytes(10).toString("hex");
-  
+
     const paymentData = {
       amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
       currency: "INR",
       receipt: `order_receipt_${receipt}`,
       payment_capture: 1, // Auto capture payment
     };
-  
+
     const result = await RazorpayHandler.createOrder(paymentData);
     const bannerId = mongoose.Types.ObjectId.isValid(data.bannerId) ? data.bannerId : null;
-    const gstRate = 18 / 100; 
+    const gstRate = 18 / 100;
     const gstAmount = (result.amount / 100) * gstRate;
-    const amountBeforeGST = (result.amount / 100) - gstAmount; 
+    const amountBeforeGST = (result.amount / 100) - gstAmount;
     console.log("Result ", result);
 
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
-      bannerId:bannerId,
+      bannerId: bannerId,
       amount: result.amount / 100,
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
@@ -924,21 +938,21 @@ async deleteTransactionById(transactionId) {
       status: data.status || "Pending",
       ordertype: "banner",
     });
-  
+
     await orderHistory.save();
-  
+
     const payment = new Payment({
       orderId: result.id,
       userId: userInfo.userId,
-      bannerId: bannerId, 
+      bannerId: bannerId,
       amountPaid: 0,
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
     });
-  
+
     await payment.save();
-  
+
     return {
       order: result,
       message: "Banner Order created successfully. Payment is pending.",
@@ -947,21 +961,21 @@ async deleteTransactionById(transactionId) {
 
   async createSponsorOrder(data) {
     const userInfo = global.user;
-  
+
     const receipt = crypto.randomBytes(10).toString("hex");
-  
+
     const paymentData = {
       amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
       currency: "INR",
       receipt: `order_receipt_${receipt}`,
       payment_capture: 1, // Auto capture payment
     };
-  
+
     const result = await RazorpayHandler.createOrder(paymentData);
-    const gstRate = 18 / 100; 
-    const gstAmount = (result.amount / 100) * gstRate; 
-    const amountBeforeGST = (result.amount / 100) - gstAmount; 
-  
+    const gstRate = 18 / 100;
+    const gstAmount = (result.amount / 100) * gstRate;
+    const amountBeforeGST = (result.amount / 100) - gstAmount;
+
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
@@ -970,32 +984,32 @@ async deleteTransactionById(transactionId) {
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
       tournamentId: data.tournamentId,
-      amountPaid: 0, 
+      amountPaid: 0,
       amountDue: result.amount / 100,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
       ordertype: "Sponsor",
-      gstAmount: gstAmount, 
+      gstAmount: gstAmount,
       amountbeforegst: amountBeforeGST,
       totalAmountWithGST: result.amount / 100,
     });
-  
+
     await orderHistory.save();
-  
+
     const payment = new Payment({
       orderId: result.id,
       userId: userInfo.userId,
-      sponsorPackageId: data.sponsorPackageId, 
+      sponsorPackageId: data.sponsorPackageId,
       amountPaid: 0,
       tournamentId: data.tournamentId,
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
     });
-  
+
     await payment.save();
-  
+
     return {
       order: result,
       message: "Banner Order created successfully. Payment is pending.",
@@ -1008,107 +1022,107 @@ async deleteTransactionById(transactionId) {
   //     const paymentEntity = data.payload.payment.entity;
   //     if (paymentEntity?.status === "captured") {
   //       const orderId = paymentEntity.order_id;
-  
+
   //       const orderHistory = await OrderHistory.findOne({ orderId }); // Find the order by Razorpay orderId
   //       if (orderHistory) {
   //         orderHistory.status = "Successful"; // Update the status to Successful
   //         orderHistory.amountPaid = paymentEntity.amount / 100; // Update amount paid
   //         orderHistory.amountDue = 0; // No amount due after successful payment
-  
+
   //         await orderHistory.save(); // Save the updated order history
-  
+
   //         // Find the related tournament and update it
   //         const tournament = await Tournament.findById(orderHistory.tournamentId);
-  
+
   //         if (tournament) {
   //           tournament.isActive = true; // Mark tournament as active
   //           tournament.payments.push({
   //             paymentid: paymentEntity.id,
   //             amount: paymentEntity.amount / 100,
   //           }); // Add the payment details to the tournament's payments array
-  
+
   //           await tournament.save(); // Save the updated tournament
   //         }
   //       }
   //     }
   //   }
-  
+
   //   return "Payment update processed successfully";
   // },
 
   //DG 
   async updatePayment(data) {
     if (data?.payload) {
-        const paymentEntity = data.payload.payment.entity;
-        if (paymentEntity) {
-            const orderId = paymentEntity.order_id;
+      const paymentEntity = data.payload.payment.entity;
+      if (paymentEntity) {
+        const orderId = paymentEntity.order_id;
 
-            const orderHistory = await OrderHistory.findOne({ orderId });
-            const payment = await Payment.findOne({ orderId });
+        const orderHistory = await OrderHistory.findOne({ orderId });
+        const payment = await Payment.findOne({ orderId });
 
-            if (orderHistory && payment) {
-                const isCaptured = paymentEntity.status === "captured";
+        if (orderHistory && payment) {
+          const isCaptured = paymentEntity.status === "captured";
 
-                // Update order history and payment details
-                orderHistory.status = isCaptured ? "Successful" : "Failed";
-                orderHistory.amountPaid = isCaptured
-                    ? paymentEntity.amount / 100
-                    : 0;
-                orderHistory.amountDue = isCaptured
-                    ? 0
-                    : orderHistory.amount; // Set amountDue to total if failed
-                await orderHistory.save();
+          // Update order history and payment details
+          orderHistory.status = isCaptured ? "Successful" : "Failed";
+          orderHistory.amountPaid = isCaptured
+            ? paymentEntity.amount / 100
+            : 0;
+          orderHistory.amountDue = isCaptured
+            ? 0
+            : orderHistory.amount; // Set amountDue to total if failed
+          await orderHistory.save();
 
-                payment.paymentStatus = isCaptured ? "Successful" : "Failed";
-                payment.amountPaid = isCaptured
-                    ? paymentEntity.amount / 100
-                    : 0;
-                await payment.save();
+          payment.paymentStatus = isCaptured ? "Successful" : "Failed";
+          payment.amountPaid = isCaptured
+            ? paymentEntity.amount / 100
+            : 0;
+          await payment.save();
 
-                // Update related tournament if payment is successful
-                if (isCaptured) {
-                    const tournament = await Tournament.findById(
-                        orderHistory.tournamentId
-                    );
+          // Update related tournament if payment is successful
+          if (isCaptured) {
+            const tournament = await Tournament.findById(
+              orderHistory.tournamentId
+            );
 
-                    if (tournament) {
-                        tournament.isActive = true; // Mark tournament as active
-                        tournament.payments.push({
-                            paymentid: payment._id,
-                            amount: paymentEntity.amount / 100,
-                        });
-                        await tournament.save();
-                    }
-                }
+            if (tournament) {
+              tournament.isActive = true; // Mark tournament as active
+              tournament.payments.push({
+                paymentid: payment._id,
+                amount: paymentEntity.amount / 100,
+              });
+              await tournament.save();
             }
+          }
         }
+      }
     }
 
     return "Payment update processed successfully";
-},
+  },
 
 
   //DG
   // async handleRazorpayWebhook(data) {
   //   try {
   //     const payment = data.payload.payment.entity; // Extract payment entity
-  
+
   //     if (payment && payment.status) {
   //       // Find the associated order using the order_id
   //       const order = await OrderHistory.findOne({ orderId: payment.order_id });
-  
+
   //       if (!order) {
   //         throw new Error("Order not found");
   //       }
-  
+
   //       // Update the status based on Razorpay's payment status
   //       order.status = payment.status === "captured" ? "Successful" : "Failed";
   //       order.amountPaid = payment.amount / 100; // Update amount paid in INR
   //       order.amountDue = order.amount - order.amountPaid;
-  
+
   //       // Save the updated order
   //       await order.save();
-  
+
   //       return order;
   //     } else {
   //       throw new Error("Invalid Razorpay webhook data");
@@ -1118,7 +1132,7 @@ async deleteTransactionById(transactionId) {
   //     throw error;
   //   }
   // },
-  
+
   //Nikhil
   // async updatePayment(data) {
   //   if (data?.payload) {
@@ -1126,7 +1140,7 @@ async deleteTransactionById(transactionId) {
   //       const orderId = data?.payload?.payment?.entity?.order_id;
 
   //       const orderHistory = await OrderHistory.findOne({ orderId: orderId }); //Nikhil
-    
+
   //       if (orderHistory) {
   //         orderHistory.status = "captured";
   //       }

@@ -267,6 +267,22 @@ const otherController = {
       });
     }
   },
+  async getAdditionalPackages(req, res) {
+    try {
+      const result = await otherServices.getAdditionalPackages();
+
+      return res.status(200).json({
+        status: true,
+        message: "Package retrived successfully",
+        data: {packages:result},
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message: 'Error retrieving packages',
+        error: error.message,
+      });
+    }
+  },
 
 // async transactionHistory(req, res, next) {
 //   try {
