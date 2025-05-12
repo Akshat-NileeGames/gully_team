@@ -85,6 +85,48 @@ const ShopController = {
     },
     //#endregion
 
+    //#region EditShop
+    async EditShop(req, res, next) {
+        const shopSchema = Joi.object({
+            shopId: Joi.string().required(),
+            shopImage: Joi.array().items(Joi.string()).min(1).max(3).optional(),
+            shopName: Joi.string().optional(),
+            shopDescription: Joi.string().optional(),
+            shopAddress: Joi.string().optional(),
+            selectLocation: Joi.string().optional(),
+            longitude: Joi.number().optional(),
+            latitude: Joi.number().optional(),
+            shopContact: Joi.string().optional(),
+            shopEmail: Joi.string().email().optional(),
+            shoplink: Joi.string().optional().allow(null, ''),
+            shopTiming: Joi.object().optional(),
+            ownerName: Joi.string().optional(),
+            ownerPhoneNumber: Joi.string().optional(),
+            ownerEmail: Joi.string().email().optional(),
+            ownerAddress: Joi.string().optional(),
+            ownerPanNumber: Joi.string().optional(),
+            aadharFrontSide: Joi.string().optional(),
+            aadharBackSide: Joi.string().optional(),
+        });
+
+        const { error } = shopSchema.validate(req.body);
+        if (error) return next(error);
+
+        try {
+            const result = await ShopService.editShop(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Shop updated successfully",
+                data: result
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+    //#endregion
+
+
+
     //#region GetMyShop
     async getMyShop(req, res, next) {
         try {
@@ -154,18 +196,48 @@ const ShopController = {
     },
     //#endregion
 
+    //#region EditProduct
+    async EditProduct(req, res, next) {
+        const schema = Joi.object({
+            productId: Joi.string().required(),
+            productName: Joi.string().optional(),
+            productsDescription: Joi.string().optional(),
+            productsPrice: Joi.number().optional(),
+            productCategory: Joi.string().optional(),
+            productSubCategory: Joi.string().optional(),
+            productBrand: Joi.string().optional(),
+            discountedvalue: Joi.number().optional(),
+            discounttype: Joi.string().valid("percent", "fixed").optional(),
+            productsImage: Joi.array().items(Joi.string()).max(3).optional(),
+        });
 
+        const { error } = schema.validate(req.body);
+        if (error) return next(error);
+
+        try {
+            const result = await ShopService.editProduct(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Product updated successfully",
+                data: result
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+    //#endregion
 
 
     //#region GetShopProduct
     async getShopProduct(req, res, next) {
         const shopSchema = Joi.object({
             shopId: Joi.string().required(),
+            page: Joi.number().optional()
         });
+
         const { error } = shopSchema.validate(req.params);
-        if (error) {
-            return next(error);
-        }
+        if (error) return next(error);
+
         try {
             const result = await ShopService.getShopProduct(req.params);
             return res.status(200).json({
@@ -174,7 +246,8 @@ const ShopController = {
                 data: { products: result }
             });
         } catch (error) {
-            console.log("Unable to fetch Shop Product:", error);
+            console.error("Unable to fetch Shop Product:", error);
+            return res.status(500).json({ success: false, message: "Internal Server Error" });
         }
     },
 
@@ -389,7 +462,7 @@ const ShopController = {
             const result = await ShopService.updateSubscriptionStatus(req.body);
             return res.status(200).json({
                 success: true,
-                message: "Product discount updated successfully",
+                message: "Shop Subscription Added successfully",
                 data: result
             });
         } catch (error) {
@@ -397,5 +470,115 @@ const ShopController = {
         }
     },
     //#endregion
+
+    //#region addExtensionPackage
+    async addExtensionPackage(req, res, next) {
+        const shopSchema = Joi.object({
+            shopId: Joi.string().required(),
+            packageId: Joi.string().required(),
+            packageStartDate: Joi.date().iso().required(),
+            packageEndDate: Joi.date().iso().required(),
+        });
+        const { error } = shopSchema.validate(req.body);
+        if (error) {
+            return next(error);
+        }
+        try {
+            const result = await ShopService.addExtensionPackage(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Shop Extension Package Added successfully",
+                data: result
+            });
+        } catch (error) {
+            console.log("Failed to update Subscription Status:", error);
+        }
+    },
+    //#endregion
+
+    //#region GetSimilarProduct
+    async getSimilarProduct(req, res, next) {
+        const schema = Joi.object({
+            productId: Joi.string().required(),
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
+            page: Joi.number().optional(),
+            limit: Joi.number().optional(),
+
+        });
+
+        const { error } = schema.validate(req.body);
+        if (error) {
+            return next(error);
+        }
+
+        try {
+            const result = await ShopService.getSimilarProduct(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Similar products retrieved successfully",
+                data: { similarProduct: result },
+            });
+        } catch (error) {
+            console.error("Failed to fetch similar products:", error);
+            return next(error);
+        }
+    },
+    //#endregion
+
+    //#region getSimilarShopProduct
+    async getSimilarShopProduct(req, res, next) {
+        const similarshop = Joi.object({
+            shopId: Joi.string().required(),
+            productId: Joi.string().required(),
+            page: Joi.number().optional(),
+            limit: Joi.number().optional(),
+        });
+
+        const { error } = similarshop.validate(req.body);
+        if (error) {
+            return next(error);
+        }
+
+        try {
+            const result = await ShopService.getSimilarShopProduct(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "More products from the same shop retrieved successfully",
+                data: { similarshopproduct: result },
+            });
+        } catch (error) {
+            console.error("Failed to fetch more products from the same shop:", error);
+            return next(error);
+        }
+    },
+    //#endregion
+    async moreFromBrand(req, res, next) {
+        const schema = Joi.object({
+            brand: Joi.string().required(),
+            productId: Joi.string().required(),
+            page: Joi.number().optional(),
+            limit: Joi.number().optional(),
+        });
+
+        const { error } = schema.validate(req.body);
+        if (error) {
+            return next(error);
+        }
+
+        try {
+            const { brand, productId, page, limit } = req.body;
+            const result = await ShopService.getMoreFromBrand(brand, productId, page, limit);
+            return res.status(200).json({
+                success: true,
+                message: "More products from the same brand retrieved successfully",
+                data: result,
+            });
+        } catch (error) {
+            console.error("Failed to fetch more products from the same brand:", error);
+            return next(error);
+        }
+    }
+
 }
 export default ShopController;

@@ -2,6 +2,9 @@ import { Shop, Product, Category, Package } from '../models/index.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
 import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
+function isBase64Image(str) {
+    return /^data:image\/[a-zA-Z]+;base64,/.test(str);
+}
 const ShopService = {
 
     async addShop(data) {
@@ -104,6 +107,88 @@ const ShopService = {
         }
     },
 
+    // async editShop(data) {
+    //     const { shopId, ...fieldsToUpdate } = data;
+
+    //     if (fieldsToUpdate.longitude && fieldsToUpdate.latitude) {
+    //         fieldsToUpdate["locationHistory.point"] = {
+    //             type: "Point",
+    //             coordinates: [parseFloat(fieldsToUpdate.longitude), parseFloat(fieldsToUpdate.latitude)],
+    //             selectLocation: fieldsToUpdate.selectLocation || "",
+    //         };
+    //         delete fieldsToUpdate.longitude;
+    //         delete fieldsToUpdate.latitude;
+    //         delete fieldsToUpdate.selectLocation;
+    //     }
+
+    //     if (fieldsToUpdate.aadharFrontSide || fieldsToUpdate.aadharBackSide) {
+    //         fieldsToUpdate.ownerAddharImages = {};
+    //         if (fieldsToUpdate.aadharFrontSide) fieldsToUpdate.ownerAddharImages.aadharFrontSide = fieldsToUpdate.aadharFrontSide;
+    //         if (fieldsToUpdate.aadharBackSide) fieldsToUpdate.ownerAddharImages.aadharBackSide = fieldsToUpdate.aadharBackSide;
+    //         delete fieldsToUpdate.aadharFrontSide;
+    //         delete fieldsToUpdate.aadharBackSide;
+    //     }
+
+    //     try {
+    //         const updatedShop = await Shop.findByIdAndUpdate(shopId, { $set: fieldsToUpdate }, { new: true });
+    //         return updatedShop;
+    //     } catch (err) {
+    //         console.error("Failed to edit shop:", err);
+    //         throw err;
+    //     }
+    // },
+    async editShop(data) {
+        const { shopId, ...fieldsToUpdate } = data;
+
+        if (fieldsToUpdate.longitude && fieldsToUpdate.latitude) {
+            fieldsToUpdate["locationHistory.point"] = {
+                type: "Point",
+                coordinates: [parseFloat(fieldsToUpdate.longitude), parseFloat(fieldsToUpdate.latitude)],
+                selectLocation: fieldsToUpdate.selectLocation || "",
+            };
+            delete fieldsToUpdate.longitude;
+            delete fieldsToUpdate.latitude;
+            delete fieldsToUpdate.selectLocation;
+        }
+
+        if (fieldsToUpdate.aadharFrontSide || fieldsToUpdate.aadharBackSide) {
+            fieldsToUpdate.ownerAddharImages = {};
+            if (fieldsToUpdate.aadharFrontSide)
+                fieldsToUpdate.ownerAddharImages.aadharFrontSide = fieldsToUpdate.aadharFrontSide;
+            if (fieldsToUpdate.aadharBackSide)
+                fieldsToUpdate.ownerAddharImages.aadharBackSide = fieldsToUpdate.aadharBackSide;
+
+            delete fieldsToUpdate.aadharFrontSide;
+            delete fieldsToUpdate.aadharBackSide;
+        }
+        if (fieldsToUpdate.shopImage && Array.isArray(fieldsToUpdate.shopImage)) {
+            const processedImages = [];
+            for (let img of fieldsToUpdate.shopImage) {
+                if (isBase64Image(img)) {
+                    // const uploadedUrl = await ImageUploader.Upload(img, "ShopImages");
+                    // processedImages.push(uploadedUrl);
+                    // // console.log("Found a base64 image");
+                    processedImages.push(img);
+                } else {
+                    processedImages.push(img);
+                }
+            }
+            fieldsToUpdate.shopImage = processedImages;
+        }
+        try {
+            const updatedShop = await Shop.findByIdAndUpdate(
+                shopId,
+                { $set: fieldsToUpdate },
+                { new: true }
+            );
+            return updatedShop;
+        } catch (err) {
+            console.error("Failed to edit shop:", err);
+            throw err;
+        }
+    },
+
+
     async getMyShop() {
         try {
             const userinfo = global.user;
@@ -111,7 +196,7 @@ const ShopService = {
                 updatedAt: 0,
                 createdAt: 0,
                 __v: 0,
-            }).populate('packageId');
+            }).populate('packageId AdditionalPackages');
             return shop;
         } catch (err) {
             console.log("Error in getting my shop:", err);
@@ -174,12 +259,21 @@ const ShopService = {
                     localField: "packageId",
                     foreignField: "_id",
                     as: "packageId"
-                }
+                },
             },
+
             {
                 $unwind: {
                     path: "$packageId",
                     preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
+                    from: "packages",
+                    localField: "AdditionalPackages",
+                    foreignField: "_id",
+                    as: "AdditionalPackages"
                 }
             }
         ]);
@@ -223,19 +317,92 @@ const ShopService = {
         }
 
     },
+    // async editProduct(data) {
+    //     const { productId, discounttype, discountedvalue, ...rest } = data;
 
+    //     if (discounttype && discountedvalue !== undefined) {
+    //         rest.productDiscount = {
+    //             discounttype: discounttype.toLowerCase(),
+    //             discountedvalue: discountedvalue,
+    //         };
+    //     }
+
+    //     try {
+    //         const updatedProduct = await Product.findByIdAndUpdate(productId, { $set: rest }, { new: true });
+    //         return updatedProduct;
+    //     } catch (err) {
+    //         console.error("Failed to edit product:", err);
+    //         throw err;
+    //     }
+    // },
+
+
+    async editProduct(data) {
+        const { productId, discounttype, discountedvalue, productsImage, ...rest } = data;
+
+        if (discounttype && discountedvalue !== undefined) {
+            rest.productDiscount = {
+                discounttype: discounttype.toLowerCase(),
+                discountedvalue: discountedvalue,
+            };
+        }
+
+        if (productsImage && Array.isArray(productsImage)) {
+            const processedImages = [];
+            for (let img of productsImage) {
+                if (isBase64Image(img)) {
+                    const uploadedUrl = await ImageUploader.ImageUploader(img, "Product");
+                    processedImages.push(uploadedUrl);
+                } else {
+                    processedImages.push(img);
+                }
+            }
+            rest.productsImage = processedImages;
+        }
+        try {
+            const updatedProduct = await Product.findByIdAndUpdate(
+                productId,
+                { $set: rest },
+                { new: true }
+            );
+            return updatedProduct;
+        } catch (err) {
+            console.error("Failed to edit product:", err);
+            throw err;
+        }
+    },
     async getShopProduct(data) {
         try {
             const shop = await Shop.findById(data.shopId);
             if (!shop) {
                 return CustomErrorHandler.notFound("The specified shop is not available.");
             }
-            const product = await Product.find({
-                shopId: shop._id
+
+            const page = parseInt(data.page) || 1;
+            const limit = 10;
+            const skip = (page - 1) * limit;
+
+            const products = await Product.find({ shopId: shop._id })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+
+            const totalProducts = await Product.countDocuments({ shopId: shop._id });
+
+            const categorizedProducts = {};
+            products.forEach((product) => {
+                const category = product.productCategory || "Uncategorized";
+                if (!categorizedProducts[category]) {
+                    categorizedProducts[category] = [];
+                }
+                categorizedProducts[category].push(product);
             });
-            return product;
+
+            return categorizedProducts;
         } catch (error) {
-            console.log("Failed to get Shop Products", error);
+            console.log("Failed to get Shop Products with pagination", error);
+            throw error;
         }
     },
 
@@ -586,7 +753,202 @@ const ShopService = {
         } catch (error) {
             console.log("Failed to update Subscription Status:", error);
         }
+    },
+    async addExtensionPackage(data) {
+        try {
+            const shop = await Shop.findById(data.shopId);
+            if (!shop) {
+                return CustomErrorHandler.notFound("Shop Not Found");
+            }
+            if (shop.isSubscriptionPurchased == false) throw CustomErrorHandler.notFound("You Need an Active Subscription To add Extension Package");
+
+            shop.AdditionalPackages.push(data.packageId);
+            shop.save();
+            return shop;
+        } catch (error) {
+            console.log("Failed to update Subscription Status:", error);
+        }
+    },
+
+    async SimilarProduct(data) {
+        const { category, subcategory, brand } = data;
+        const { latitude, longitude } = data;
+        const MAX_DISTANCE_METERS = 15 * 1000;
+
+        const userLocation = {
+            type: "Point",
+            coordinates: [longitude, latitude]
+        };
+
+        // Find shops with expired subscriptions within the defined radius
+        const expiredShops = await Shop.find({
+            "locationHistory.point": {
+                $near: {
+                    $geometry: userLocation,
+                    $maxDistance: MAX_DISTANCE_METERS
+                }
+            },
+            packageEndDate: { $lt: new Date() },
+            isSubscriptionPurchased: true
+        }).select('_id');
+        const products = await Product.find({
+            productCategory: category,
+            productSubCategory: subcategory,
+            productBrand: brand
+        });
 
     },
+    async getSimilarProduct(data) {
+        try {
+            const { productId, latitude, longitude, page = 1, limit = 10 } = data;
+            const MAX_DISTANCE_METERS = 15 * 1000;
+
+            const product = await Product.findById(productId);
+            if (!product) {
+                throw new Error("Product not found");
+            }
+
+            const userLocation = {
+                type: "Point",
+                coordinates: [longitude, latitude]
+            };
+
+            const expiredShops = await Shop.find({
+                "locationHistory.point": {
+                    $near: {
+                        $geometry: userLocation,
+                        $maxDistance: MAX_DISTANCE_METERS
+                    }
+                },
+                packageEndDate: { $lt: new Date() },
+                isSubscriptionPurchased: true
+            }).select('_id');
+
+            if (expiredShops.length > 0) {
+                const expiredShopIds = expiredShops.map(shop => shop._id);
+                await Shop.updateMany(
+                    { _id: { $in: expiredShopIds } },
+                    { $set: { isSubscriptionPurchased: false } }
+                );
+            }
+
+            const nearbyShops = await Shop.aggregate([
+                {
+                    $geoNear: {
+                        near: userLocation,
+                        distanceField: "distance",
+                        spherical: true,
+                        maxDistance: MAX_DISTANCE_METERS
+                    }
+                },
+                {
+                    $addFields: {
+                        distanceInKm: { $divide: ["$distance", 1000] }
+                    }
+                },
+                {
+                    $match: {
+                        distanceInKm: { $lte: 15 },
+                        isSubscriptionPurchased: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "packages",
+                        localField: "packageId",
+                        foreignField: "_id",
+                        as: "packageId"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$packageId",
+                        preserveNullAndEmptyArrays: true
+                    }
+                }
+            ]);
+
+            const shopIds = nearbyShops.map((shop) => shop._id);
+            const skip = (page - 1) * limit;
+            console.log(skip);
+            const similarProducts = await Product.find({
+                shopId: { $in: shopIds },
+                $or: [
+                    { category: product.category },
+                    { productSubCategory: product.subcategory },
+                    { productBrand: product.brand },
+                ],
+                _id: { $ne: productId },
+            })
+                .skip(skip)
+                .limit(limit);
+
+            return similarProducts;
+        } catch (error) {
+            console.error("Error fetching similar products:", error);
+            throw error;
+        }
+    },
+
+
+    async getSimilarShopProduct(data) {
+        try {
+            const { shopId, productId, page = 1, limit = 5 } = data;
+            const skip = (page - 1) * limit;
+            const product = await Product.findById(productId);
+            if (!product) {
+                throw new Error("Product not found");
+            }
+            const products = await Product.find({
+                shopId: shopId,
+                $or: [
+                    { category: product.category },
+                    { productSubCategory: product.subcategory },
+                    { productBrand: product.brand },
+                ],
+                _id: { $ne: productId },
+            })
+                .skip(skip)
+                .limit(limit);
+
+            return products;
+        } catch (error) {
+            console.error("Error fetching more products from the same shop:", error);
+            throw error;
+        }
+    },
+
+    // async getMoreSameShopProduct(shopId, productId) {
+    //     try {
+
+    //         const products = await Product.find({
+    //             shopId: shopId,
+    //             _id: { $ne: productId },
+    //         });
+
+    //         return products;
+    //     } catch (error) {
+    //         console.error("Error fetching more products from the same shop:", error);
+    //         throw error;
+    //     }
+    // },
+
+    async getMoreFromBrand(brand, productId, page = 1, limit = 10) {
+        try {
+            const skip = (page - 1) * limit;
+
+            const products = await Product.find({
+                productBrand: brand,
+                _id: { $ne: productId },
+            })
+                .skip(skip)
+                .limit(limit);
+
+            return products;
+        } catch (error) {
+            console.error("Error fetching more products from the same brand:", error);
+            throw error;
+        }
+    }
 }
 export default ShopService;
