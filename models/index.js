@@ -26,6 +26,8 @@ export {default as Sponsor} from "./sponsor.js";
 export {default as Shop} from "./shop.js";
 export {default as Product} from "./product.js";
 export {default as Category} from "./category.js";
+export {default as ProductView} from "./productViewSchema.js";
+export {default as ShopVisit} from "./shopVisitSchema.js";
 
 // export {default as Transaction} from "./transaction.js";
 

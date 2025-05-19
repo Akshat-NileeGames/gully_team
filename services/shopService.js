@@ -1,7 +1,9 @@
-import { Shop, Product, Category, Package } from '../models/index.js';
+import { Shop, Product, Category, Package, User, ShopVisit, ProductView } from '../models/index.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
 import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
+import nodemailer from "nodemailer";
+import mongoose from "mongoose"
 function isBase64Image(str) {
     return /^data:image\/[a-zA-Z]+;base64,/.test(str);
 }
@@ -12,9 +14,9 @@ const ShopService = {
         let shopImg = [];
         if (data.shopImage && data.shopImage.length > 0) {
             for (let images of data.shopImage) {
-                // const ImageUrl=await ImageUploader.ImageUploader(images,"ShopImages");
-                // shopImg.push(ImageUrl);
-                shopImg.push(images);
+                const ImageUrl = await ImageUploader.ImageUploader(images, "ShopImages");
+                shopImg.push(ImageUrl);
+                // shopImg.push(images);
             }
         }
         const shopTiming = {
@@ -101,11 +103,187 @@ const ShopService = {
         });
         try {
             const result = await newShop.save();
+            setTimeout(async () => {
+                console.log("Sending email after 10 seconds... with Shop id", result._id);
+                const user = await User.findById(userInfo.userId);
+                const mail = await ShopService.sendMail("Shop", user, result);
+
+                console.log(mail);
+            }, 2000);
             return result;
         } catch (err) {
             console.log("Error in adding shop:", err);
         }
     },
+
+    async sendMail(userFor = "", user, shop) {
+        const transporter = nodemailer.createTransport({
+            host: "smtp.gmail.com",
+            port: 587,
+            secure: false,
+            requireTLS: true,
+            auth: {
+                user: "gullyteam33@gmail.com",
+                pass: "iaur qnaj ocsq jyvq",
+            },
+        });
+
+        const mailOptions = {
+            from: "gullyteam33@gmail.com",
+            to: user.email,
+            subject: "Welcome! Your Shop Has Been Successfully Registered",
+            html: `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+            <meta charset="UTF-8">
+            <title>Welcome to Gully App</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+            body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: #f4f6f8;
+            color: #333;
+        }
+        .email-wrapper {
+            padding: 5px;
+        }
+        .email-container {
+            max-width: 720px;
+            margin: auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+        }
+        .email-header {
+            background: linear-gradient(to right, #4e54c8, #8f94fb);
+            color: #fff;
+            padding: 30px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .email-body {
+            padding: 30px;
+        }
+        .email-body h2 {
+            color: #4e54c8;
+            font-size: 20px;
+            margin-top: 0;
+        }
+        .highlight-box {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .highlight-box p {
+            margin: 10px 0;
+        }
+        .tasks {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
+        .tasks li {
+            margin-bottom: 8px;
+        }
+        .footer {
+            padding: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #888;
+        }
+        a.button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 24px;
+            background-color: #4e54c8;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        a.button:hover {
+            background-color: #3b40b0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <div class="email-container">
+            <div class="email-header">
+                <h1>Welcome to Gully App!</h1>
+            </div>
+            <div class="email-body">
+                <h2>Hello ${user.fullName || "User"},</h2>
+
+                <p>We’re thrilled to have you join our growing community of business owners and innovators.</p>
+
+                <div class="highlight-box">
+                    <p><strong>Your shop registration is confirmed with the following details:</strong></p>
+                    <p><strong>Shop Name:</strong> ${shop.shopName}</p>
+                    <p><strong>Owner:</strong> ${shop.ownerName}</p>
+                    <p><strong>Owner Phone:</strong> ${shop.ownerPhoneNumber}</p>
+                    <p><strong>Contact Number:</strong> ${shop.shopContact}</p>
+                    <p><strong>Email:</strong> ${shop.shopEmail}</p>
+                    <p><strong>Address:</strong> ${shop.shopAddress}</p>
+                    ${shop.shoplink ? `<p><strong>Shop Link:</strong> <a href="${shop.shoplink}" target="_blank">${shop.shoplink}</a></p>` : ''}
+                    ${shop.gstNumber ? `<p><strong>GST Number:</strong> ${shop.gstNumber}</p>` : ''}
+                    ${shop.LicenseNumber ? `<p><strong>License Number:</strong> ${shop.LicenseNumber}</p>` : ''}
+                    <p><strong>Registered On:</strong> ${new Date(shop.joinedAt).toLocaleDateString()}</p>
+                </div>
+
+                <p><strong>Start with the basics:</strong></p>
+                <ul class="tasks">
+                    <li>✔ Log into your account and view your dashboard</li>
+                    <li>✔ Add your first product or update shop details</li>
+                    <li>✔ Explore the shop timing settings and customize your hours</li>
+                </ul>
+
+                <p><strong>Beyond the basics:</strong></p>
+                <p>
+                    Be sure to check out our upcoming features and growth tools inside the Gully App.
+                    Engage with our support team and learn how you can promote your shop through digital banners and packages.
+                </p>
+
+                <p>Thank you for joining. Let’s build something amazing together!</p>
+
+                <a href="mailto:gullyteam33@gmail.com" class="button">Contact Support</a>
+            </div>
+            <div class="footer">
+                &copy; ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.<br>
+                Email: <a href="mailto:gullyteam33@gmail.com">gullyteam33@gmail.com</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`};
+
+        transporter.sendMail(mailOptions, function (error, info) {
+            if (error) {
+                console.log("Mail error:", error);
+            } else {
+                console.log("Shop registration mail sent: " + info.response);
+            }
+        });
+    },
+
+    async getShop(data) {
+        try {
+            const shop = await Shop.findById(data.shopId).populate('packageId AdditionalPackages');
+            if (!shop) {
+                throw CustomErrorHandler.notFound("Product Not Found");
+            }
+            return shop;
+        } catch (error) {
+            console.log(`Failed to Get The product: ${error}`);
+        }
+    },
+
 
     // async editShop(data) {
     //     const { shopId, ...fieldsToUpdate } = data;
@@ -165,10 +343,8 @@ const ShopService = {
             const processedImages = [];
             for (let img of fieldsToUpdate.shopImage) {
                 if (isBase64Image(img)) {
-                    // const uploadedUrl = await ImageUploader.Upload(img, "ShopImages");
-                    // processedImages.push(uploadedUrl);
-                    // // console.log("Found a base64 image");
-                    processedImages.push(img);
+                    const uploadedUrl = await ImageUploader.Upload(img, "ShopImages");
+                    processedImages.push(uploadedUrl);
                 } else {
                     processedImages.push(img);
                 }
@@ -176,12 +352,17 @@ const ShopService = {
             fieldsToUpdate.shopImage = processedImages;
         }
         try {
-            const updatedShop = await Shop.findByIdAndUpdate(
+            await Shop.findByIdAndUpdate(
                 shopId,
                 { $set: fieldsToUpdate },
                 { new: true }
             );
-            return updatedShop;
+            const shop = await Shop.findById(shopId, {
+                updatedAt: 0,
+                createdAt: 0,
+                __v: 0,
+            }).populate('packageId AdditionalPackages');
+            return shop;
         } catch (err) {
             console.error("Failed to edit shop:", err);
             throw err;
@@ -202,6 +383,8 @@ const ShopService = {
             console.log("Error in getting my shop:", err);
         }
     },
+
+
     async getNearbyShop(data) {
         const { latitude, longitude } = data;
         const MAX_DISTANCE_METERS = 15 * 1000;
@@ -285,13 +468,13 @@ const ShopService = {
         const { productsImage, productName, productsDescription, productsPrice,
             productCategory, productSubCategory, productBrand, shopId, discountedvalue, discounttype } = data;
         let imagesUrl = [];
-        // if (productsImage && productsImage.length > 0) {
-        //     for (image in productsImage) {
-        //         // const uploadedImage = await ImageUploader.Upload(image, "Product");
-        //         // imagesUrl.push(uploadedImage);
-        //         imagesUrl.push(image);
-        //     }
-        // }
+        if (productsImage && productsImage.length > 0) {
+            for (image in productsImage) {
+                const uploadedImage = await ImageUploader.Upload(image, "Product");
+                imagesUrl.push(uploadedImage);
+                // imagesUrl.push(image);
+            }
+        }
 
         const finalDiscount = {
             discountedvalue: discounttype === 'fixed' ? 0 : discountedvalue,
@@ -338,7 +521,7 @@ const ShopService = {
 
 
     async editProduct(data) {
-        const { productId, discounttype, discountedvalue, productsImage, ...rest } = data;
+        const { productId, shopId, discounttype, discountedvalue, isImageEditDone, productsImage, ...rest } = data;
 
         if (discounttype && discountedvalue !== undefined) {
             rest.productDiscount = {
@@ -346,12 +529,17 @@ const ShopService = {
                 discountedvalue: discountedvalue,
             };
         }
+        const product = await Product.findById(productId);
+        const shop = await Shop.findById(product.shopId);
+        if (isImageEditDone) {
+            shop.TotalEditDone += 1;
+        }
 
         if (productsImage && Array.isArray(productsImage)) {
             const processedImages = [];
             for (let img of productsImage) {
                 if (isBase64Image(img)) {
-                    const uploadedUrl = await ImageUploader.ImageUploader(img, "Product");
+                    const uploadedUrl = await ImageUploader.Upload(img, "Product");
                     processedImages.push(uploadedUrl);
                 } else {
                     processedImages.push(img);
@@ -365,12 +553,205 @@ const ShopService = {
                 { $set: rest },
                 { new: true }
             );
+            shop.save();
+            // const product=await Product.findById(productId)
             return updatedProduct;
         } catch (err) {
             console.error("Failed to edit product:", err);
             throw err;
         }
     },
+
+    async getFilterProduct(filters) {
+        const query = { shopId: filters.shopId };
+
+        if (filters.productCategory && filters.productCategory.length > 0) {
+            query.productCategory = { $in: filters.productCategory };
+        }
+
+        if (filters.productSubCategory && filters.productSubCategory.length > 0) {
+            query.productSubCategory = { $in: filters.productSubCategory };
+        }
+
+        if (filters.productBrand && filters.productBrand.length > 0) {
+            query.productBrand = { $in: filters.productBrand };
+        }
+
+        const page = parseInt(filters.page) || 1;
+        const limit = 10;
+        const skip = (page - 1) * limit;
+
+        try {
+            const allMatchingProducts = await Product.find(query)
+                .sort({ createdAt: -1 })
+                .lean();
+
+            const categorizedProducts = {};
+            for (const product of allMatchingProducts) {
+                const category = product.productCategory || "Uncategorized";
+                if (!categorizedProducts[category]) {
+                    categorizedProducts[category] = [];
+                }
+                categorizedProducts[category].push(product);
+            }
+
+            const filterProducts = {};
+            for (const category in categorizedProducts) {
+                const items = categorizedProducts[category];
+                const total = items.length;
+                const paginatedItems = items.slice(skip, skip + limit);
+                filterProducts[category] = paginatedItems;
+            }
+
+            return filterProducts;
+
+        } catch (err) {
+            console.log("Error fetching categorized filtered products:", err);
+            throw err;
+        }
+    },
+    // async getFilterProduct(data) {
+    //     const { latitude, longitude, shopId, page = 1 } = data;
+    //     const limit = 10;
+    //     const skip = (page - 1) * limit;
+
+    //     try {
+    //         // If shopId is provided, fetch its products
+    //         if (shopId) {
+    //             const shop = await Shop.findById(shopId);
+    //             if (!shop) {
+    //                 return CustomErrorHandler.notFound("The specified shop is not available.");
+    //             }
+
+    //             const products = await Product.find({ shopId: shop._id })
+    //                 .sort({ createdAt: -1 })
+    //                 .skip(skip)
+    //                 .limit(limit)
+    //                 .lean();
+
+    //             const totalProducts = await Product.countDocuments({ shopId: shop._id });
+
+    //             const categorizedProducts = {};
+    //             products.forEach((product) => {
+    //                 const category = product.productCategory || "Uncategorized";
+    //                 if (!categorizedProducts[category]) {
+    //                     categorizedProducts[category] = [];
+    //                 }
+    //                 categorizedProducts[category].push(product);
+    //             });
+
+    //             return {
+    //                 source: "shop",
+    //                 shop: shop,
+    //                 totalProducts,
+    //                 products: categorizedProducts
+    //             };
+    //         }
+
+    //         // If shopId is not provided, proceed with finding nearby shops
+    //         const MAX_DISTANCE_METERS = 15 * 1000;
+    //         const userLocation = {
+    //             type: "Point",
+    //             coordinates: [longitude, latitude]
+    //         };
+
+    //         // Expire subscriptions of outdated shops
+    //         const expiredShops = await Shop.find({
+    //             "locationHistory.point": {
+    //                 $near: {
+    //                     $geometry: userLocation,
+    //                     $maxDistance: MAX_DISTANCE_METERS
+    //                 }
+    //             },
+    //             packageEndDate: { $lt: new Date() },
+    //             isSubscriptionPurchased: true
+    //         }).select('_id');
+
+    //         if (expiredShops.length > 0) {
+    //             const expiredShopIds = expiredShops.map(shop => shop._id);
+    //             await Shop.updateMany(
+    //                 { _id: { $in: expiredShopIds } },
+    //                 { $set: { isSubscriptionPurchased: false } }
+    //             );
+    //         }
+
+    //         // Find nearby active shops
+    //         const nearbyShops = await Shop.aggregate([
+    //             {
+    //                 $geoNear: {
+    //                     near: userLocation,
+    //                     distanceField: "distance",
+    //                     spherical: true,
+    //                     maxDistance: MAX_DISTANCE_METERS
+    //                 }
+    //             },
+    //             {
+    //                 $addFields: {
+    //                     distanceInKm: { $divide: ["$distance", 1000] }
+    //                 }
+    //             },
+    //             {
+    //                 $match: {
+    //                     distanceInKm: { $lte: 15 },
+    //                     isSubscriptionPurchased: true
+    //                 }
+    //             },
+    //             {
+    //                 $lookup: {
+    //                     from: "packages",
+    //                     localField: "packageId",
+    //                     foreignField: "_id",
+    //                     as: "packageId"
+    //                 }
+    //             },
+    //             {
+    //                 $unwind: {
+    //                     path: "$packageId",
+    //                     preserveNullAndEmptyArrays: true
+    //                 }
+    //             },
+    //             {
+    //                 $lookup: {
+    //                     from: "packages",
+    //                     localField: "AdditionalPackages",
+    //                     foreignField: "_id",
+    //                     as: "AdditionalPackages"
+    //                 }
+    //             }
+    //         ]);
+
+    //         // Fetch products from all nearby shops
+    //         const shopIds = nearbyShops.map(shop => shop._id);
+    //         const nearbyProducts = await Product.find({ shopId: { $in: shopIds } })
+    //             .sort({ createdAt: -1 })
+    //             .skip(skip)
+    //             .limit(limit)
+    //             .lean();
+
+    //         return {
+    //             source: "nearby",
+    //             shops: nearbyShops,
+    //             products: nearbyProducts
+    //         };
+
+    //     } catch (error) {
+    //         console.log("Failed to get products based on location or shopId", error);
+    //         throw error;
+    //     }
+    // },
+    async getProduct(data) {
+        try {
+            const product = await Product.findById(data.productId);
+            if (!product) {
+                throw CustomErrorHandler.notFound("Product Not Found");
+            }
+            return product;
+        } catch (error) {
+            console.log(`Failed to Get The product: ${error}`);
+        }
+    },
+
+
     async getShopProduct(data) {
         try {
             const shop = await Shop.findById(data.shopId);
@@ -743,17 +1124,34 @@ const ShopService = {
             if (!shop) {
                 return CustomErrorHandler.notFound("Shop Not Found");
             }
+            const user = await User.findById(shop.userId);
+            if (!user) {
+                return CustomErrorHandler.notFound("User Not Found");
+            }
+            const purchasedPackage = await Package.findById(data.packageId);
+            if (!purchasedPackage) {
+                return CustomErrorHandler.notFound("Package Not Found");
+            }
             shop.packageId = data.packageId;
             shop.packageStartDate = data.packageStartDate;
             shop.packageEndDate = data.packageEndDate;
             shop.isSubscriptionPurchased = true;
-
+            setTimeout(async () => {
+                console.log("Sending email after 10 seconds...",);
+                await ShopService.sendpaymentMail(
+                    "shop-subscription",
+                    user,
+                    shop,
+                    purchasedPackage
+                );
+            }, 10000);
             shop.save();
             return shop;
         } catch (error) {
             console.log("Failed to update Subscription Status:", error);
         }
     },
+
     async addExtensionPackage(data) {
         try {
             const shop = await Shop.findById(data.shopId);
@@ -761,7 +1159,23 @@ const ShopService = {
                 return CustomErrorHandler.notFound("Shop Not Found");
             }
             if (shop.isSubscriptionPurchased == false) throw CustomErrorHandler.notFound("You Need an Active Subscription To add Extension Package");
-
+            const user = await User.findById(shop.userId);
+            if (!user) {
+                return CustomErrorHandler.notFound("User Not Found");
+            }
+            const purchasedPackage = await Package.findById(data.packageId);
+            if (!purchasedPackage) {
+                return CustomErrorHandler.notFound("Package Not Found");
+            }
+            setTimeout(async () => {
+                console.log("Sending email after 10 seconds...",);
+                await ShopService.sendpaymentMail(
+                    "ExtensionPackage",
+                    user,
+                    shop,
+                    purchasedPackage
+                );
+            }, 2000);
             shop.AdditionalPackages.push(data.packageId);
             shop.save();
             return shop;
@@ -770,6 +1184,129 @@ const ShopService = {
         }
     },
 
+    async sendpaymentMail(userFor = "", user, shop, purchasedPackage) {
+        const transporter = nodemailer.createTransport({
+            host: "smtp.gmail.com",
+            port: 587,
+            secure: false,
+            requireTLS: true,
+            auth: {
+                user: "gullyteam33@gmail.com",
+                pass: "iaur qnaj ocsq jyvq",
+            },
+        });
+
+        if (!user || !user.email || !purchasedPackage || typeof purchasedPackage.price !== "number") {
+            console.error("Missing or invalid user/purchasedPackage info.");
+            return;
+        }
+
+        // Price breakdown with fallback
+        const baseAmount = (purchasedPackage.price * 0.82).toFixed(2);
+        const gstAmount = (purchasedPackage.price * 0.18).toFixed(2);
+        const totalAmount = purchasedPackage.price.toFixed(2);
+
+        // Dynamic title & subject
+        const isSubscription = userFor === "shop-subscription";
+        const title = isSubscription
+            ? "Subscription Payment Confirmed"
+            : "Extension Package Activated";
+        const subject = isSubscription
+            ? "Subscription Activated for Your Shop!"
+            : "Extension Package Successfully Added to Your Shop";
+
+        const shopName = shop?.shopName || "your shop";
+
+        const mailOptions = {
+            from: "Gully App <gullyteam33@gmail.com>",
+            to: user.email,
+            subject,
+            html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Arial, sans-serif; background-color: #f4f7fb; color: #333; }
+    .container { max-width: 720px; margin: 30px auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
+    .header { background: linear-gradient(to right, #4e54c8, #8f94fb); color: #fff; padding: 40px 20px; text-align: center; font-size: 26px; font-weight: bold; }
+    .body { padding: 35px 40px; }
+    h2 { font-size: 20px; }
+    .section-title { font-weight: 600; font-size: 18px; color: #4e54c8; margin-bottom: 15px; border-bottom: 2px solid #4e54c8; padding-bottom: 5px; }
+    .invoice-items { margin-top: 20px; border-radius: 8px; }
+    .invoice-item { display: flex; justify-content: space-between; padding: 15px 20px; font-size: 15px; border-bottom: 1px solid #f0f0f0; background: #f9f9fb; }
+    .invoice-item:nth-child(even) { background: #eff1ff; }
+    .invoice-item .label { font-weight: bold; color: #4e54c8; margin-right: 20px; }
+    .invoice-item .value { color: #333; }
+    .total-section { margin-top: 20px; }
+    .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; padding-top: 10px; color: #333; }
+    .next-steps { background: #f9fafb; padding: 20px; border-radius: 8px; margin-top: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .next-steps p, .next-steps li { font-size: 14px; color: #555; }
+    .footer { padding: 25px; text-align: center; font-size: 13px; color: #888; background-color: #f4f7fb; }
+    a.button { display: inline-block; margin-top: 20px; padding: 14px 28px; background: #4e54c8; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; transition: 0.3s; }
+    a.button:hover { background-color: #8f94fb; }
+    @media screen and (max-width: 480px) {
+      .body { padding: 15px; }
+      .header { font-size: 20px; padding: 25px; }
+      .total-row { flex-direction: column; align-items: flex-start; gap: 5px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">${title}</div>
+    <div class="body">
+      <h2>Hello ${user.fullName || "Shop Owner"},</h2>
+      <p>Thank you for purchasing ${isSubscription ? "a subscription" : "an extension package"} for your shop <strong>${shopName}</strong>.</p>
+
+      <div class="section-title">Invoice Items</div>
+      <div class="invoice-items">
+        <div class="invoice-item"><div class="label">Package Name:</div><div class="value">${purchasedPackage.name}</div></div>
+        <div class="invoice-item"><div class="label">Base Amount:</div><div class="value">₹${baseAmount}</div></div>
+        <div class="invoice-item"><div class="label">GST (18%):</div><div class="value">₹${gstAmount}</div></div>
+      </div>
+
+      <div class="total-section">
+        <div class="total-row">
+          <div>Total Paid:</div>
+          <div>₹${totalAmount}</div>
+        </div>
+      </div>
+
+      <div class="next-steps">
+        <div class="section-title">What to Do Next?</div>
+        <p>Now that your ${isSubscription ? "subscription" : "extension package"} is active, you can:</p>
+        <ul>
+          <li><strong>Add products</strong> to your shop.</li>
+          <li><strong>Increase visibility</strong> by showcasing your products on your shop page.</li>
+          <li>View and manage your shop's offerings anytime from your dashboard.</li>
+          <li>Reach out to our <strong>support team</strong> if you need help or have questions.</li>
+        </ul>
+      </div>
+
+      <p>If you need further assistance, feel free to contact our support team.</p>
+      <a href="mailto:gullyteam33@gmail.com" class="button">Contact Support</a>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.<br />
+      Email: <a href="mailto:gullyteam33@gmail.com">gullyteam33@gmail.com</a>
+    </div>
+  </div>
+</body>
+</html>`,
+        };
+
+        transporter.sendMail(mailOptions, function (error, info) {
+            if (error) {
+                console.log("Error sending email:", error);
+            } else {
+                console.log("Subscription/extension email sent:", info.response);
+            }
+        });
+    },
     async SimilarProduct(data) {
         const { category, subcategory, brand } = data;
         const { latitude, longitude } = data;
@@ -947,6 +1484,493 @@ const ShopService = {
             return products;
         } catch (error) {
             console.error("Error fetching more products from the same brand:", error);
+            throw error;
+        }
+    },
+    async getShopAnalytics(shopId) {
+        try {
+            const shop = await Shop.findById(shopId);
+            if (!shop) {
+                throw CustomErrorHandler.notFound("Shop not found");
+            }
+
+            const totalProductViews = await ProductView.countDocuments({ shopId });
+
+            const totalShopVisits = await ShopVisit.countDocuments({ shopId });
+            const totalProducts = await Product.countDocuments({ shopId });
+            const activeProducts = await Product.countDocuments({ shopId, isActive: true });
+            const topProducts = await ProductView.aggregate([
+                {
+                    $match:
+                    {
+                        shopId: mongoose.Types.ObjectId(shopId)
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$productId",
+                        viewCount: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: {
+                        viewCount: -1
+
+                    }
+                },
+                {
+                    $limit: 5
+                },
+                {
+                    $lookup: {
+                        from: "products",
+                        localField: "_id",
+                        foreignField: "_id",
+                        as: "product"
+                    }
+                },
+                {
+                    $unwind: "$product"
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        // productId: "$_id",
+                        viewCount: 1,
+                        product: "$product"
+                    }
+                }
+            ]);
+
+
+            const today = new Date();
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(today.getDate() - 7);
+
+            const visitorTrend = await ShopVisit.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        visitedAt: { $gte: sevenDaysAgo }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            year: { $year: "$visitedAt" },
+                            month: { $month: "$visitedAt" },
+                            day: { $dayOfMonth: "$visitedAt" }
+                        },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        date: {
+                            $dateFromParts: {
+                                year: "$_id.year",
+                                month: "$_id.month",
+                                day: "$_id.day"
+                            }
+                        },
+                        count: 1
+                    }
+                }
+            ]);
+
+            return {
+                totalProductViews,
+                totalShopVisits,
+                totalProducts,
+                activeProducts,
+                topProducts,
+                visitorTrend
+            };
+        } catch (error) {
+            console.error("Error getting shop analytics:", error);
+            throw error;
+        }
+    },
+
+    // Get product view analytics for a specific time range
+    async getProductViewAnalytics(shopId, timeRange) {
+        try {
+            const shop = await Shop.findById(shopId);
+            if (!shop) {
+                throw CustomErrorHandler.notFound("Shop not found");
+            }
+
+            const today = new Date();
+            let startDate;
+
+            switch (timeRange) {
+                case '7days':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 7);
+                    break;
+                case '15days':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 15);
+                    break;
+                case '30days':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 30);
+                    break;
+                case 'all':
+                default:
+                    startDate = new Date(0); // Beginning of time
+            }
+
+            // Get most viewed products within the time range
+            const mostViewedProducts = await ProductView.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        viewedAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$productId",
+                        viewCount: { $sum: 1 }
+                    }
+                },
+                { $sort: { viewCount: -1 } },
+                { $limit: 10 },
+                {
+                    $lookup: {
+                        from: "products",
+                        localField: "_id",
+                        foreignField: "_id",
+                        as: "productDetails"
+                    }
+                },
+                { $unwind: "$productDetails" },
+                {
+                    $project: {
+                        _id: 1,
+                        viewCount: 1,
+                        productName: "$productDetails.productName",
+                        productImage: { $arrayElemAt: ["$productDetails.productsImage", 0] },
+                        price: "$productDetails.productsPrice",
+                        category: "$productDetails.productCategory"
+                    }
+                }
+            ]);
+
+            // Get daily product view trend
+            const dailyViewTrend = await ProductView.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        viewedAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            year: { $year: "$viewedAt" },
+                            month: { $month: "$viewedAt" },
+                            day: { $dayOfMonth: "$viewedAt" }
+                        },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        date: {
+                            $dateFromParts: {
+                                year: "$_id.year",
+                                month: "$_id.month",
+                                day: "$_id.day"
+                            }
+                        },
+                        count: 1
+                    }
+                }
+            ]);
+
+            // Get category-wise view distribution
+            const categoryDistribution = await ProductView.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        viewedAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "products",
+                        localField: "productId",
+                        foreignField: "_id",
+                        as: "productDetails"
+                    }
+                },
+                { $unwind: "$productDetails" },
+                {
+                    $group: {
+                        _id: "$productDetails.productCategory",
+                        viewCount: { $sum: 1 }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        category: "$_id",
+                        viewCount: 1
+                    }
+                },
+                { $sort: { viewCount: -1 } }
+            ]);
+
+            return {
+                mostViewedProducts,
+                dailyViewTrend,
+                categoryDistribution,
+                timeRange
+            };
+        } catch (error) {
+            console.error("Error getting product view analytics:", error);
+            throw error;
+        }
+    },
+
+    // Get visitor analytics
+    async getVisitorAnalytics(shopId, timeRange) {
+        try {
+            const shop = await Shop.findById(shopId);
+            if (!shop) {
+                throw CustomErrorHandler.notFound("Shop not found");
+            }
+
+            const today = new Date();
+            let startDate;
+
+            switch (timeRange) {
+                case '7days':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 7);
+                    break;
+                case '15days':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 15);
+                    break;
+                case '30days':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 30);
+                    break;
+                case 'all':
+                default:
+                    startDate = new Date(0); // Beginning of time
+            }
+
+            // Get total visitors
+            const totalVisitors = await ShopVisit.countDocuments({
+                shopId,
+                visitedAt: { $gte: startDate }
+            });
+
+            // Get unique visitors
+            const uniqueVisitors = await ShopVisit.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        visitedAt: { $gte: startDate },
+                        userId: { $ne: null }
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$userId",
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $count: "uniqueVisitors"
+                }
+            ]);
+
+            // Get daily visitor trend
+            const dailyVisitorTrend = await ShopVisit.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        visitedAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            year: { $year: "$visitedAt" },
+                            month: { $month: "$visitedAt" },
+                            day: { $dayOfMonth: "$visitedAt" }
+                        },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        date: {
+                            $dateFromParts: {
+                                year: "$_id.year",
+                                month: "$_id.month",
+                                day: "$_id.day"
+                            }
+                        },
+                        count: 1
+                    }
+                }
+            ]);
+
+            return {
+                totalVisitors,
+                uniqueVisitors: uniqueVisitors.length > 0 ? uniqueVisitors[0].uniqueVisitors : 0,
+                dailyVisitorTrend,
+                timeRange
+            };
+        } catch (error) {
+            console.error("Error getting visitor analytics:", error);
+            throw error;
+        }
+    },
+
+    // Get daily visitors for the specified number of days
+    async getDailyVisitors(shopId, days) {
+        try {
+            const shop = await Shop.findById(shopId);
+            if (!shop) {
+                throw CustomErrorHandler.notFound("Shop not found");
+            }
+
+            const today = new Date();
+            const startDate = new Date(today);
+            startDate.setDate(today.getDate() - days);
+
+            // Get daily visitor data
+            const dailyVisitorData = await ShopVisit.aggregate([
+                {
+                    $match: {
+                        shopId: mongoose.Types.ObjectId(shopId),
+                        visitedAt: { $gte: startDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            year: { $year: "$visitedAt" },
+                            month: { $month: "$visitedAt" },
+                            day: { $dayOfMonth: "$visitedAt" }
+                        },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        date: {
+                            $dateFromParts: {
+                                year: "$_id.year",
+                                month: "$_id.month",
+                                day: "$_id.day"
+                            }
+                        },
+                        visitors: "$count"
+                    }
+                }
+            ]);
+
+            // Fill in missing dates with zero visitors
+            const result = [];
+            for (let i = 0; i < days; i++) {
+                const date = new Date(today);
+                date.setDate(today.getDate() - i);
+                date.setHours(0, 0, 0, 0);
+
+                const found = dailyVisitorData.find(item =>
+                    new Date(item.date).setHours(0, 0, 0, 0) === date.getTime()
+                );
+
+                if (found) {
+                    result.unshift({
+                        date: date.toISOString().split('T')[0],
+                        visitors: found.visitors
+                    });
+                } else {
+                    result.unshift({
+                        date: date.toISOString().split('T')[0],
+                        visitors: 0
+                    });
+                }
+            }
+
+            return {
+                dailyVisitorData: result,
+                days
+            };
+        } catch (error) {
+            console.error("Error getting daily visitors:", error);
+            throw error;
+        }
+    },
+
+    async recordProductView(data) {
+        const { productId, shopId } = data;
+        try {
+            const userInfo = global.user;
+            const userId = userInfo.userId;
+            const product = await Product.findById(productId);
+            if (!product) {
+                throw CustomErrorHandler.notFound("Product not found");
+            }
+
+            const productView = new ProductView({
+                productId,
+                shopId,
+                userId
+            });
+
+            await productView.save();
+            return true;
+        } catch (error) {
+            console.error("Error recording product view:", error);
+            throw error;
+        }
+    },
+
+    async recordShopVisit(data) {
+        const { shopId } = data;
+        try {
+            const shop = await Shop.findById(shopId);
+            const userInfo = global.user;
+            const userId = userInfo.userId;
+            if (!shop) {
+                throw CustomErrorHandler.notFound("Shop not found");
+            }
+
+            const shopVisit = new ShopVisit({
+                shopId,
+                userId
+            });
+
+            await shopVisit.save();
+            return true;
+        } catch (error) {
+            console.error("Error recording shop visit:", error);
             throw error;
         }
     }

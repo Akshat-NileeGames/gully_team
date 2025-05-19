@@ -17,24 +17,30 @@ const orderHistorySchema = new mongoose.Schema({
   tournamentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Tournament",
-    
+
   },
   bannerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "PromotionalBanner",
     required: false,
   },
-  sponsorPackageId: {
+  shopId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Shop",
+    required: false,
+  },
+  PackageId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Package",
     required: false,
   },
+
   ordertype: {
     type: String,
     required: true,
-    enum: ['tournament', 'banner', 'Sponsor']
+    enum: ['tournament', 'banner', 'Sponsor', 'Shop']
   },
-  
+
   amountWithoutCoupon: { type: Number, required: false },
   coupon: { type: String, required: false },
   couponId: {

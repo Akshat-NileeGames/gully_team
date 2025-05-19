@@ -22,15 +22,20 @@ const paymentSchema = new mongoose.Schema(
       ref: "PromotionalBanner",
       required: false,
     },
-    sponsorPackageId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Package",
-        required: false,
-      },
-    paymentfor:{
-      type:String,
-      required:false,
-      enum:['tournament','banner','Sponsor']
+    shopId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shop",
+      required: false,
+    },
+    PackageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Package",
+      required: false,
+    },
+    paymentfor: {
+      type: String,
+      required: false,
+      enum: ['tournament', 'banner', 'Sponsor']
     },
     amountPaid: {
       type: Number,

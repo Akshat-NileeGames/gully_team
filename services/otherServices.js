@@ -16,7 +16,8 @@ import {
   Tournament,
   User,
   Payment,
-  Package
+  Package,
+  Shop
   // Transaction
 
 } from "../models/index.js";
@@ -737,7 +738,7 @@ const otherServices = {
   async getTrans(userId) {
     const totalCount = await OrderHistory.countDocuments({ userId });
     const history = await OrderHistory.find({ userId: userId })
-      .populate('sponsorPackageId')
+      .populate('PackageId')
       .populate({
         path: 'bannerId',
         select: '-locationHistory',
@@ -959,6 +960,67 @@ const otherServices = {
     };
   },
 
+  async createshopOrder(data) {
+    const userInfo = global.user;
+
+    const receipt = crypto.randomBytes(10).toString("hex");
+
+    const paymentData = {
+      amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
+      currency: "INR",
+      receipt: `order_receipt_${receipt}`,
+      payment_capture: 1, // Auto capture payment
+    };
+
+    const result = await RazorpayHandler.createOrder(paymentData);
+    // const shopId = mongoose.Types.ObjectId.isValid(data.shopId) ? data.shopId : null;
+    const shop = await Shop.findById(data.shopId);
+    if (!shop) {
+      throw CustomErrorHandler.notFound("Shop Not Found");
+    }
+    const gstRate = 18 / 100;
+    const gstAmount = (result.amount / 100) * gstRate;
+    const amountBeforeGST = (result.amount / 100) - gstAmount;
+    // console.log("Result ", result);
+    // console.log(shopId);
+    const orderHistory = new OrderHistory({
+      orderId: result.id,
+      userId: userInfo.userId,
+      shopId: data.shopId,
+      PackageId: data.PackageId,
+      amount: result.amount / 100,
+      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
+      coupon: data.coupon ?? "",
+      totalAmountWithGST: result.amount / 100,
+      gstAmount: gstAmount,
+      amountbeforegst: amountBeforeGST,
+      currency: result.currency,
+      receipt: result.receipt,
+      status: data.status || "Pending",
+      ordertype: "Shop",
+    });
+
+    await orderHistory.save();
+
+    const payment = new Payment({
+      orderId: result.id,
+      userId: userInfo.userId,
+      shopId: data.shopId,
+      PackageId: data.PackageId,
+      amountPaid: 0,
+      paymentStatus: data.status || "Pending",
+      paymentMode: data.paymentMode || "Card",
+      transactionId: result.id,
+    });
+
+    await payment.save();
+
+    return {
+      order: result,
+      message: "Shop Order created successfully. Payment is pending.",
+    };
+  },
+
   async createSponsorOrder(data) {
     const userInfo = global.user;
 
@@ -979,7 +1041,7 @@ const otherServices = {
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
-      sponsorPackageId: data.sponsorPackageId,
+      PackageId: data.PackageId,
       amount: result.amount / 100, // Amount in INR
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
@@ -1000,7 +1062,7 @@ const otherServices = {
     const payment = new Payment({
       orderId: result.id,
       userId: userInfo.userId,
-      sponsorPackageId: data.sponsorPackageId,
+      PackageId: data.PackageId,
       amountPaid: 0,
       tournamentId: data.tournamentId,
       paymentStatus: data.status || "Pending",

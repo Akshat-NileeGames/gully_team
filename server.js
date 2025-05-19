@@ -46,7 +46,7 @@ app.use("/api/team", teamRoute);
 app.use("/api/match", matchRoute);
 app.use("/api/payment", paymentRoute);
 app.use("/api/vendors", vendorRoutes);
-// app.use("/api/shop", shopRoutes);
+app.use("/api/shop", shopRoutes);
 // app.use("/api/performances",matchRoute ) // edited
 app.use('/api/banner', bannerRoute);
 app.use("/admin", adminRoute);

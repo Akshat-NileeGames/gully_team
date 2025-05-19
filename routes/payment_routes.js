@@ -6,6 +6,7 @@ import validateUser from "../middlewares/validateUser.js";
 router.post("/createOrder", validateUser, otherController.createOrder);
 router.post("/createBannerOrder", validateUser, otherController.createBannerOrder);
 router.post("/createSponsorOrder", validateUser, otherController.createSponsorOrder);
+router.post("/createShopOrder", validateUser, otherController.createshopOrder);
 router.put("/updatePayment", otherController.updatePayment);
 router.post("/applyCoupon", validateUser, otherController.applyCoupon);
 // router.post("/tournamentFees", validateUser, otherController.tournamentFees);

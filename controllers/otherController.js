@@ -129,7 +129,7 @@ const otherController = {
   },
   async createshopOrder(req, res, next) {
     try {
-      const result = await otherServices.createSponsorOrder(req.body);
+      const result = await otherServices.createshopOrder(req.body);
 
       return res.status(200).json({
         sucess: true,

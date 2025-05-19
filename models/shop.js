@@ -121,24 +121,39 @@ const shopSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    packageStartDate: { type: Date },
-    packageEndDate: { type: Date },
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    },
+    packageStartDate: {
+        type: Date
+    },
+    packageEndDate: {
+        type: Date
+    },
     isSubscriptionPurchased: {
         type: Boolean,
         default: false
     },
 
-    packageId: { type: mongoose.Schema.Types.ObjectId, ref: "Package" },
-    AdditionalPackages: [{
+    packageId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Package"
-    }],
+    },
+    AdditionalPackages: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Package"
+        }
+    ],
     joinedAt: {
         type: Date,
         required: true,
+    },
+    TotalEditDone: {
+        type: Number,
+        default: 0,
     }
-
 }, {
     timestamps: true
 });
