@@ -29,6 +29,8 @@ router.post("/getFilterProduct", ShopController.getFilterProduct);
 router.get("/getShopAnalytics/:shopId", validateUser, ShopController.getShopAnalytics);
 router.get("/getProductViewAnalytics/:shopId/:timeRange", validateUser, ShopController.getProductViewAnalytics);
 router.get("/getVisitorAnalytics/:shopId/:timeRange", validateUser, ShopController.getVisitorAnalytics);
+
+//If needed we can implement it in future
 router.get("/getDailyVisitors/:shopId/:days", validateUser, ShopController.getDailyVisitors);
 
 router.post("/recordProductView", validateUser, ShopController.recordProductView);

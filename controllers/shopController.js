@@ -6,7 +6,6 @@ const ShopController = {
 
     //#region Add Shop
     async addShop(req, res, next) {
-
         const shopSchema = Joi.object({
             shopImage: Joi.array().items(Joi.string()).min(1).max(3).required(),
             shopName: Joi.string().required(),
@@ -17,7 +16,6 @@ const ShopController = {
             latitude: Joi.number().required(),
             shopContact: Joi.string().required(),
             shopEmail: Joi.string().email().required(),
-            shoplink: Joi.string().optional(),
             // LicenseNumber: Joi.string().pattern(/^[A-Za-z0-9-]+$/).required(),
             // gstNumber: Joi.string().pattern(/^[0-9]{15}$/).required(),
             ownerName: Joi.string().required(),

@@ -10,15 +10,28 @@ function isBase64Image(str) {
 const ShopService = {
 
     async addShop(data) {
+
         const userInfo = global.user;
         let shopImg = [];
-        if (data.shopImage && data.shopImage.length > 0) {
-            for (let images of data.shopImage) {
-                const ImageUrl = await ImageUploader.ImageUploader(images, "ShopImages");
-                shopImg.push(ImageUrl);
-                // shopImg.push(images);
+        if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
+            for (const image of data.shopImage) {
+                try {
+                    const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
+
+                    if (!uploadedUrl) {
+                        throw new Error("Image upload failed or returned empty URL.");
+                    }
+
+                    shopImg.push(uploadedUrl);
+                } catch (uploadError) {
+                    console.error("Image upload failed:", uploadError);
+                    throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
+                }
             }
+        } else {
+            throw CustomErrorHandler.badRequest("Shop images are required.");
         }
+
         const shopTiming = {
             Monday: {
                 isOpen: data.shopTiming.Monday.isOpen,
@@ -468,11 +481,17 @@ const ShopService = {
         const { productsImage, productName, productsDescription, productsPrice,
             productCategory, productSubCategory, productBrand, shopId, discountedvalue, discounttype } = data;
         let imagesUrl = [];
+        // if (productsImage && productsImage.length > 0) {
+        //     for (let image in productsImage) {
+        //         const uploadedImage = await ImageUploader.Upload(image, "Product");
+        //         imagesUrl.push(uploadedImage);
+        //         // imagesUrl.push(image);
+        //     }
+        // }
         if (productsImage && productsImage.length > 0) {
-            for (image in productsImage) {
+            for (const image of productsImage) {
                 const uploadedImage = await ImageUploader.Upload(image, "Product");
-                imagesUrl.push(uploadedImage);
-                // imagesUrl.push(image);
+                imagesUrl.push(uploadedImage); 
             }
         }
 
@@ -1515,12 +1534,11 @@ const ShopService = {
                 {
                     $sort: {
                         viewCount: -1
-
                     }
                 },
-                {
-                    $limit: 5
-                },
+                // {
+                //     $limit: 5
+                // },
                 {
                     $lookup: {
                         from: "products",
@@ -1846,7 +1864,7 @@ const ShopService = {
         }
     },
 
-    // Get daily visitors for the specified number of days
+
     async getDailyVisitors(shopId, days) {
         try {
             const shop = await Shop.findById(shopId);
@@ -1858,7 +1876,6 @@ const ShopService = {
             const startDate = new Date(today);
             startDate.setDate(today.getDate() - days);
 
-            // Get daily visitor data
             const dailyVisitorData = await ShopVisit.aggregate([
                 {
                     $match: {
@@ -1894,7 +1911,6 @@ const ShopService = {
                 }
             ]);
 
-            // Fill in missing dates with zero visitors
             const result = [];
             for (let i = 0; i < days; i++) {
                 const date = new Date(today);
