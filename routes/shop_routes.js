@@ -10,6 +10,7 @@ router.post("/getNearbyShop", validateUser, ShopController.GetNearbyShop);
 router.post("/addProduct", validateUser, ShopController.AddProduct);
 router.post("/getProduct", validateUser, ShopController.getProduct);
 router.get("/getShopProduct/:shopId/:page", validateUser, ShopController.getShopProduct);
+router.get("/getShopImageCount/:shopId", validateUser, ShopController.getTotalImageCount);
 router.post("/ChangedProductStatus", validateUser, ShopController.setProductActiveStatus);
 router.post("/addCategory", validateUser, ShopController.addCategory);
 router.get("/getcategory", validateUser, ShopController.getCategory);

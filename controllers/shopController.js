@@ -120,7 +120,7 @@ const ShopController = {
             latitude: Joi.number().optional(),
             shopContact: Joi.string().optional(),
             shopEmail: Joi.string().email().optional(),
-            shoplink: Joi.string().optional().allow(null, ''),
+            shopLink: Joi.string().optional().allow(null, ''),
             shopTiming: Joi.object().optional(),
             ownerName: Joi.string().optional(),
             ownerPhoneNumber: Joi.string().optional(),
@@ -321,9 +321,31 @@ const ShopController = {
             return res.status(500).json({ success: false, message: "Internal Server Error" });
         }
     },
-
     //#endregion
 
+    //#region getTotalImageCount
+    async getTotalImageCount(req, res, next) {
+        const shopSchema = Joi.object({
+            shopId: Joi.string().required()
+        });
+
+        const { error } = shopSchema.validate(req.params);
+        if (error) return next(error);
+
+        try {
+            const result = await ShopService.getTotalImageCount(req.params.shopId);
+            return res.status(200).json({
+                success: true,
+                message: "Total image count fetched successfully",
+                data:result
+            });
+        } catch (error) {
+            console.error("Unable to fetch total image count:", error);
+            return res.status(500).json({ success: false, message: "Internal Server Error" });
+        }
+    },
+
+    //#endregion
     //#region setProductActiveStatus
     async setProductActiveStatus(req, res, next) {
         const productSchema = Joi.object({

@@ -13,24 +13,24 @@ const ShopService = {
 
         const userInfo = global.user;
         let shopImg = [];
-        if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
-            for (const image of data.shopImage) {
-                try {
-                    const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
+        // if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
+        //     for (const image of data.shopImage) {
+        //         try {
+        //             const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
 
-                    if (!uploadedUrl) {
-                        throw new Error("Image upload failed or returned empty URL.");
-                    }
+        //             if (!uploadedUrl) {
+        //                 throw new Error("Image upload failed or returned empty URL.");
+        //             }
 
-                    shopImg.push(uploadedUrl);
-                } catch (uploadError) {
-                    console.error("Image upload failed:", uploadError);
-                    throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
-                }
-            }
-        } else {
-            throw CustomErrorHandler.badRequest("Shop images are required.");
-        }
+        //             shopImg.push(uploadedUrl);
+        //         } catch (uploadError) {
+        //             console.error("Image upload failed:", uploadError);
+        //             throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
+        //         }
+        //     }
+        // } else {
+        //     throw CustomErrorHandler.badRequest("Shop images are required.");
+        // }
 
         const shopTiming = {
             Monday: {
@@ -341,7 +341,7 @@ const ShopService = {
             delete fieldsToUpdate.latitude;
             delete fieldsToUpdate.selectLocation;
         }
-
+        console.log(data.shopLink);
         if (fieldsToUpdate.aadharFrontSide || fieldsToUpdate.aadharBackSide) {
             fieldsToUpdate.ownerAddharImages = {};
             if (fieldsToUpdate.aadharFrontSide)
@@ -500,7 +500,7 @@ const ShopService = {
             discounttype: discounttype.toLowerCase() === 'fixed' ? 'fixed' : 'percent'
         };
         const product = new Product({
-            productsImage: productsImage,
+            productsImage: imagesUrl,
             productName: productName,
             productsDescription: productsDescription,
             productsPrice: productsPrice,
@@ -789,7 +789,6 @@ const ShopService = {
                 .lean();
 
             const totalProducts = await Product.countDocuments({ shopId: shop._id });
-
             const categorizedProducts = {};
             products.forEach((product) => {
                 const category = product.productCategory || "Uncategorized";
@@ -805,7 +804,41 @@ const ShopService = {
             throw error;
         }
     },
+    async getTotalImageCount(shopId) {
+        try {
+            const shop = await Shop.findById(shopId)
+                .populate('packageId')
+                .populate('AdditionalPackages');
 
+            if (!shop) {
+                throw CustomErrorHandler.notFound("The specified shop is not available.");
+            }
+
+            const products = await Product.find({ shopId: shop._id }).select('productsImage').lean();
+            let totalImageCount = 0;
+            products.forEach(product => {
+                totalImageCount += product.productsImage?.length || 0;
+            });
+            let totalMediaLimit = 0;
+            if (shop.packageId) {
+                totalMediaLimit += shop.packageId.maxMedia || 0;
+            }
+            if (Array.isArray(shop.AdditionalPackages) && shop.AdditionalPackages.length > 0) {
+                shop.AdditionalPackages.forEach(pkg => {
+                    totalMediaLimit += pkg.maxMedia || 0;
+                });
+            }
+
+            return {
+                totalImageCount,
+                totalMediaLimit
+            };
+
+        } catch (error) {
+            console.error("Error calculating total image count:", error);
+            throw error;
+        }
+    },
     async setProductActiveStatus(data) {
         try {
 
@@ -1083,6 +1116,7 @@ const ShopService = {
 
     async getSubCategory(data) {
         const category = data.category;
+        console.log(category);
         const subCategory = await Category.find({
             categoryFor: `${category} sub`
         }, {

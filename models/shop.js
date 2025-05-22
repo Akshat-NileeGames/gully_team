@@ -43,6 +43,7 @@ const shopSchema = new mongoose.Schema({
     shoplink: {
         type: String,
         required: false,
+        default:null
     },
     shopTiming: {
         Monday: {
