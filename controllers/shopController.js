@@ -337,7 +337,7 @@ const ShopController = {
             return res.status(200).json({
                 success: true,
                 message: "Total image count fetched successfully",
-                data:result
+                data: result
             });
         } catch (error) {
             console.error("Unable to fetch total image count:", error);
@@ -788,7 +788,7 @@ const ShopController = {
     async recordProductView(req, res, next) {
         const schema = Joi.object({
             productId: Joi.string().required(),
-            shopId: Joi.string().required(),
+            shopId: Joi.string().required()
         });
 
         const { error } = schema.validate(req.body);

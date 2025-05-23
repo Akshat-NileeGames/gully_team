@@ -491,7 +491,7 @@ const ShopService = {
         if (productsImage && productsImage.length > 0) {
             for (const image of productsImage) {
                 const uploadedImage = await ImageUploader.Upload(image, "Product");
-                imagesUrl.push(uploadedImage); 
+                imagesUrl.push(uploadedImage);
             }
         }
 
@@ -1980,14 +1980,24 @@ const ShopService = {
 
     async recordProductView(data) {
         const { productId, shopId } = data;
+
         try {
             const userInfo = global.user;
             const userId = userInfo.userId;
+
             const product = await Product.findById(productId);
             if (!product) {
                 throw CustomErrorHandler.notFound("Product not found");
             }
+            const existingView = await ProductView.findOne({
+                productId,
+                userId,
+            });
 
+            if (existingView) {
+                // console.log("View already recorded for this device serial number.");
+                return false;
+            }
             const productView = new ProductView({
                 productId,
                 shopId,
@@ -2011,12 +2021,19 @@ const ShopService = {
             if (!shop) {
                 throw CustomErrorHandler.notFound("Shop not found");
             }
-
-            const shopVisit = new ShopVisit({
+            const existingView = await ShopVisit.findOne({
                 shopId,
                 userId
             });
 
+            if (existingView) {
+                // console.log("View already recorded for this device serial number.");
+                return false;
+            }
+            const shopVisit = new ShopVisit({
+                shopId,
+                userId
+            });
             await shopVisit.save();
             return true;
         } catch (error) {
