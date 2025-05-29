@@ -14,7 +14,7 @@ import firebaseNotification from "../helpers/firebaseNotification.js";
 import RazorpayHandler from "../helpers/RazorPayHandler.js";
 
 const userServices = {
-  
+
   async createProfile(data) {
     const { base64Image, nickName, phoneNumber } = data;
     const userInfo = global.user;
@@ -89,30 +89,30 @@ const userServices = {
   //   if (!user) {
   //     throw CustomErrorHandler.notFound("User Not Found");
   //   }
-  
+
   //   // Check if a player exists with this phoneNumber in the Player collection
   //   const player = await Player.findOne({ phoneNumber });
-  
+
   //   if (player) {
   //     // Update the player document to reference the correct userId
   //     player.userId = user._id;
   //     await player.save();
   //   }
-  
+
   //   // Update the user's profile in the User collection
   //   const imagePath = await ImageUploader.Upload(base64Image, "profile_photos");
-  
+
   //   user.profilePhoto = imagePath;
   //   user.nickName = nickName;
   //   user.phoneNumber = phoneNumber;
-  
+
   //   // Save the updated user document
   //   user = await user.save();
-  
+
   //   return user;
   // },  
-// 
-//recent commented//
+  // 
+  //recent commented//
   // async createProfile(data) {
   //   const { base64Image, nickName, phoneNumber } = data;
   //   // const userInfo = global.user;
@@ -172,7 +172,7 @@ const userServices = {
   async deleteProfile(userId) {
     //Find the user by ID
     const userInfo = global.user;
-    console.log("UserId:",userInfo.userId);
+    console.log("UserId:", userInfo.userId);
     let user = await User.findById(userInfo.userId);
     if (!user) {
       // Handle the case where the user is not found
@@ -198,18 +198,18 @@ const userServices = {
       .map((byte) => (byte % 10).toString())
       .join("")
       .slice(0, otpLength);
-      
+
     const route = "dlt";
 
     const config = {
       params: {
         authorization: apiKey,
         sender_id: SENDER_ID,
-        message:MESSAGE_ID,
+        message: MESSAGE_ID,
         variables_values: otp,
         route: route,
         numbers: phoneNumber,
-        flash:0
+        flash: 0
       },
 
       headers: {
@@ -277,79 +277,6 @@ const userServices = {
     }
   },
 
-  //Use of Quick SMS API from Fast2sms
-//   async sendOTP(userId, phoneNumber, otpExpiryMinutes) {
-//     const mode = "prod";
-//     const apiUrl = "https://www.fast2sms.com/dev/bulkV2";
-//     const apiKey = FAST_SMS_KEY; 
-//     const otpLength = 5;
-//     const otp = Array.from(crypto.randomBytes(otpLength))
-//       .map((byte) => (byte % 10).toString())
-//       .join("")
-//       .slice(0, otpLength);
-//     const route = "q"; 
-//     const message = `Your OTP code is ${otp}. It will expire in ${otpExpiryMinutes} minutes.`; // Custom message
-
-//     const config = {
-//       headers: {
-//         "authorization": apiKey,
-//         "Content-Type": "application/x-www-form-urlencoded",
-//       },
-//     };
-
-//     const body = new URLSearchParams({
-//       message: message,
-//       language: "english",
-//       route: route,
-//       numbers: phoneNumber,
-//     });
-
-//     const expiryTime = new Date();
-//     expiryTime.setMinutes(expiryTime.getMinutes() + otpExpiryMinutes);
-
-//     const otpexist = await OTP.findOne({ userId });
-
-//     if (otpexist) {
-//       if (otpexist.attempts > 2) {
-//         const currentDate = new Date();
-//         const expiredDate = otpexist.expiryTime;
-//         const timeDifference = currentDate.getTime() - expiredDate.getTime();
-//         const hoursDifference = timeDifference / (1000 * 60 * 60);
-
-//         if (hoursDifference > 5) {
-//           await OTP.updateOne({ _id: otpexist._id }, { attempts: 0 });
-//         } else {
-//           throw CustomErrorHandler.notFound("Maximum attempts exceeded");
-//         }
-//       }
-
-//       await OTP.updateOne(
-//         { _id: otpexist._id },
-//         { otp, expiryTime, $inc: { attempts: 1 } }
-//       );
-//     } else {
-//       await OTP.create({ userId, otp, expiryTime });
-//     }
-
-//     try {
-//       if (mode === "prod") {
-//         const response = await axios.post(apiUrl, body, config); // Use POST request
-//         if (response.data.return === true) {
-//           console.log("OTP sent successfully.");
-//           return true;
-//         } else {
-//           throw new Error("Failed to send OTP.");
-//         }
-//       } else {
-//         return true; // In dev mode, just return true without sending SMS
-//       }
-//     } catch (error) {
-//       console.error("Error sending OTP:", error.response?.data || error.message);
-//       throw CustomErrorHandler.serverError(
-//         error.response?.data?.message ?? "Phone Number not valid"
-//       );
-//     }
-// },
   async verifyOTP(data) {
     console.log(data);
     const otp = data.OTP;
@@ -419,7 +346,7 @@ const userServices = {
 
   // ***********************    admin releated services     ****************************
 
-  async getAllUser(pageSize, skip,search) {
+  async getAllUser(pageSize, skip, search) {
     // Query to count the total number of subadmins
     const totalusers = await User.countDocuments();
 
@@ -609,8 +536,8 @@ const userServices = {
   async testapi() {
     //const userInfo = global.user;
     const result = await RazorpayHandler.createOrder();
-    
-  return result;
+
+    return result;
 
   },
 

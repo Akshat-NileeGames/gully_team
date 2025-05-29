@@ -4,6 +4,8 @@ import mongoose from 'mongoose';
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js";
 import ImageUploader from "../helpers/ImageUploader.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
+import { ShopService } from "../services/index.js"
+import nodemailer from "nodemailer"
 import {
   Banner,
   Content,
@@ -978,6 +980,16 @@ const otherServices = {
     if (!shop) {
       throw CustomErrorHandler.notFound("Shop Not Found");
     }
+    const user = await User.findById(shop.userId);
+    if (!user) {
+      return CustomErrorHandler.notFound("User Not Found");
+    }
+
+    const purchasedPackage = await Package.findById(data.PackageId);
+    if (!purchasedPackage) {
+      return CustomErrorHandler.notFound("Package Not Found");
+    }
+
     const gstRate = 18 / 100;
     const gstAmount = (result.amount / 100) * gstRate;
     const amountBeforeGST = (result.amount / 100) - gstAmount;
@@ -1014,12 +1026,268 @@ const otherServices = {
     });
 
     await payment.save();
-
+    setTimeout(async () => {
+      console.log("Sending email after 10 seconds...",);
+      await otherServices.sendpaymentMail(
+        "shop-subscription",
+        user,
+        shop,
+        purchasedPackage
+      );
+    }, 10000);
     return {
       order: result,
       message: "Shop Order created successfully. Payment is pending.",
     };
   },
+
+  async sendpaymentMail(userFor = "", user, shop, purchasedPackage) {
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      auth: {
+        user: "gullyteam33@gmail.com",
+        pass: "iaur qnaj ocsq jyvq",
+      },
+    });
+
+    if (!user || !user.email || !purchasedPackage || typeof purchasedPackage.price !== "number") {
+      console.error("Missing or invalid user/purchasedPackage info.");
+      return;
+    }
+
+    // Price breakdown with fallback
+    const baseAmount = (purchasedPackage.price * 0.82).toFixed(2);
+    const gstAmount = (purchasedPackage.price * 0.18).toFixed(2);
+    const totalAmount = purchasedPackage.price.toFixed(2);
+
+    // Dynamic title & subject
+    const isSubscription = userFor === "shop-subscription";
+    const title = isSubscription
+      ? "Subscription Payment Confirmed"
+      : "Extension Package Activated";
+    const subject = isSubscription
+      ? "Subscription Activated for Your Shop!"
+      : "Extension Package Successfully Added to Your Shop";
+
+    const shopName = shop?.shopName || "your shop";
+
+    const mailOptions = {
+      from: "Gully App <gullyteam33@gmail.com>",
+      to: user.email,
+      subject,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+      background-color: #f4f7fb;
+      color: #333;
+    }
+    .container {
+      max-width: 720px;
+      margin: 20px auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(to right, #4e54c8, #8f94fb);
+      color: #fff;
+      padding: 35px 20px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .body {
+      padding: 30px 40px;
+    }
+    h2 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-weight: 600;
+      font-size: 18px;
+      color: #4e54c8;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      border-bottom: 2px solid #4e54c8;
+      padding-bottom: 5px;
+    }
+    .invoice-items, .shop-details {
+      margin-top: 15px;
+      border-radius: 8px;
+    }
+    .invoice-item, .shop-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      font-size: 15px;
+      border-bottom: 1px solid #f0f0f0;
+      background: #f9f9fb;
+    }
+    .invoice-item:nth-child(even), .shop-item:nth-child(even) {
+      background: #eff1ff;
+    }
+    .label {
+      font-weight: bold;
+      color: #4e54c8;
+      margin-right: 20px;
+    }
+    .value {
+      color: #333;
+    }
+    .total-section {
+      margin-top: 20px;
+    }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-weight: bold;
+      font-size: 16px;
+      padding-top: 10px;
+    }
+    .next-steps {
+      background: #f9fafb;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 30px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .next-steps ul {
+      padding-left: 20px;
+    }
+    .next-steps p, .next-steps li {
+      font-size: 14px;
+      color: #555;
+    }
+    .footer {
+      padding: 25px;
+      text-align: center;
+      font-size: 13px;
+      color: #888;
+      background-color: #f4f7fb;
+    }
+    a.button {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 14px 28px;
+      background: #4e54c8;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: bold;
+      transition: 0.3s;
+    }
+    a.button:hover {
+      background-color: #3b40b0;
+    }
+    @media screen and (max-width: 600px) {
+      .body {
+        padding: 20px;
+      }
+      .invoice-item, .shop-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .total-row {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">${title}</div>
+    <div class="body">
+      <h2>Hello ${user.fullName || "Shop Owner"},</h2>
+      <p>Thank you for purchasing ${isSubscription ? "a subscription" : "an extension package"} for your shop <strong>${shopName}</strong>.</p>
+
+<div class="section-title">Invoice Summary</div>
+<table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; border-radius: 8px; overflow: hidden;">
+  <tbody>
+    <tr style="background-color: #f9f9fb;">
+      <td style="padding: 12px; font-weight: bold; color: #4e54c8; width: 40%;">Package Name</td>
+      <td style="padding: 12px;">${purchasedPackage.name}</td>
+    </tr>
+    <tr style="background-color: #eff1ff;">
+      <td style="padding: 12px; font-weight: bold; color: #4e54c8;">Transaction ID</td>
+      <td style="padding: 12px;">${shop?.transactionId || "Not Available"}</td>
+    </tr>
+    <tr style="background-color: #f9f9fb;">
+      <td style="padding: 12px; font-weight: bold; color: #4e54c8;">Base Amount</td>
+      <td style="padding: 12px;">₹${baseAmount}</td>
+    </tr>
+    <tr style="background-color: #eff1ff;">
+      <td style="padding: 12px; font-weight: bold; color: #4e54c8;">GST (18%)</td>
+      <td style="padding: 12px;">₹${gstAmount}</td>
+    </tr>
+    <tr style="background-color: #e2e6ff;">
+      <td style="padding: 14px; font-weight: bold; color: #333; font-size: 16px;">Total Paid</td>
+      <td style="padding: 14px; font-weight: bold; font-size: 16px;">₹${totalAmount}</td>
+    </tr>
+  </tbody>
+</table>
+
+
+
+      <div class="section-title">Shop Details</div>
+      <div class="shop-details">
+        <div class="shop-item"><div class="label">Shop Name:</div><div class="value">${shop.shopName}</div></div>
+        <div class="shop-item"><div class="label">Owner Name:</div><div class="value">${shop.ownerName}</div></div>
+        <div class="shop-item"><div class="label">Phone Number:</div><div class="value">${shop.ownerPhoneNumber}</div></div>
+        <div class="shop-item"><div class="label">Email:</div><div class="value">${shop.ownerEmail}</div></div>
+        <div class="shop-item"><div class="label">Address:</div><div class="value">${shop.shopAddress}</div></div>
+        ${shop.shoplink ? `<div class="shop-item"><div class="label">Shop Link:</div><div class="value"><a href="${shop.shoplink}" target="_blank">${shop.shoplink}</a></div></div>` : ''}
+      </div>
+
+      <div class="next-steps">
+        <div class="section-title">What's Next?</div>
+        <p>Your ${isSubscription ? "subscription" : "extension package"} is now active. Here are some recommended actions:</p>
+        <ul>
+          <li>Add or update products in your shop.</li>
+          <li>Customize your shop’s settings (timing, banners, etc.).</li>
+          <li>Track analytics and package validity from your dashboard.</li>
+          <li>Contact support for any help needed along the way.</li>
+        </ul>
+      </div>
+
+      <p>If you need further assistance, feel free to contact our support team.</p>
+      <a href="mailto:gullyteam33@gmail.com" class="button">Contact Support</a>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.<br />
+      Email: <a href="mailto:gullyteam33@gmail.com">gullyteam33@gmail.com</a>
+    </div>
+  </div>
+</body>
+</html>
+`
+      ,
+    };
+
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log("Error sending email:", error);
+      } else {
+        console.log("Subscription/extension email sent:", info.response);
+      }
+    });
+  },
+
 
   async createSponsorOrder(data) {
     const userInfo = global.user;

@@ -27,6 +27,8 @@ class MediaUploader {
       contentType = "image/png";
     } else if (base64Media.startsWith("data:image/jpeg;base64,")) {
       contentType = "image/jpeg";
+    } else if (base64Media.startsWith("data:image/jpg;base64,")) {
+      contentType = "image/jpeg";
     }
     else if (base64Media.startsWith("data:video/mp4;base64,")) {
       contentType = "video/mp4";

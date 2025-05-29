@@ -36,4 +36,9 @@ router.get("/getDailyVisitors/:shopId/:days", validateUser, ShopController.getDa
 
 router.post("/recordProductView", validateUser, ShopController.recordProductView);
 router.post("/recordShopVisit", validateUser, ShopController.recordShopVisit);
+
+
+//For Verification 
+router.post("/sendShopOwnerVerifyOTP", validateUser, ShopController.sendOTP);
+router.post("/verifyOTP", validateUser, ShopController.verifyOTP);
 export default router;

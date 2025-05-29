@@ -16,6 +16,7 @@ router.post("/editProfile",validateUser, userController.editProfile);
 
 router.post("/sendOTP",validateUser, userController.sendOTP);
 
+
 router.post("/verifyOTP",validateUser, userController.verifyOTP);
 
 router.post("/updateLocation",validateUser, userController.updateLocation);

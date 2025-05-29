@@ -16,8 +16,8 @@ const ShopController = {
             latitude: Joi.number().required(),
             shopContact: Joi.string().required(),
             shopEmail: Joi.string().email().required(),
-            // LicenseNumber: Joi.string().pattern(/^[A-Za-z0-9-]+$/).required(),
-            // gstNumber: Joi.string().pattern(/^[0-9]{15}$/).required(),
+            LicenseNumber: Joi.string().pattern(/^[A-Za-z0-9\-\/]{8,20}$/).required(),
+            GstNumber: Joi.string().pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).required(),
             ownerName: Joi.string().required(),
             ownerPhoneNumber: Joi.string().required(),
             ownerEmail: Joi.string().email().required(),
@@ -63,7 +63,7 @@ const ShopController = {
                     closeTime: Joi.string().optional(),
                 }),
             }).required(),
-            shopLink: Joi.string().allow(null, '').optional(),
+            shoplink: Joi.string().allow('').optional(),
             joinedAt: Joi.date().iso().required(),
         });
 
@@ -111,7 +111,7 @@ const ShopController = {
     async EditShop(req, res, next) {
         const shopSchema = Joi.object({
             shopId: Joi.string().required(),
-            shopImage: Joi.array().items(Joi.string()).min(1).max(3).optional(),
+            shopImage: Joi.array().items(Joi.string()).optional(),
             shopName: Joi.string().optional(),
             shopDescription: Joi.string().optional(),
             shopAddress: Joi.string().optional(),
@@ -120,7 +120,9 @@ const ShopController = {
             latitude: Joi.number().optional(),
             shopContact: Joi.string().optional(),
             shopEmail: Joi.string().email().optional(),
-            shopLink: Joi.string().optional().allow(null, ''),
+            shoplink: Joi.string().allow('').optional(),
+            LicenseNumber: Joi.string().allow('').pattern(/^[A-Za-z0-9\-\/]{8,20}$/).required(),
+            GstNumber: Joi.string().allow('').pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).required(),
             shopTiming: Joi.object().optional(),
             ownerName: Joi.string().optional(),
             ownerPhoneNumber: Joi.string().optional(),
@@ -206,7 +208,7 @@ const ShopController = {
             const result = await ShopService.AddProduct(req.body);
             return res.status(200).json({
                 success: true,
-                message: "Product Added Successful",
+                message: "Product Added Successfully",
                 data: result,
             });
         } catch (error) {
@@ -227,7 +229,7 @@ const ShopController = {
             productBrand: Joi.string().optional(),
             discountedvalue: Joi.number().optional(),
             discounttype: Joi.string().valid("percent", "fixed").optional(),
-            productsImage: Joi.array().items(Joi.string()).max(3).optional(),
+            productsImage: Joi.array().items(Joi.string()).optional(),
             isImageEditDone: Joi.boolean().required()
         });
 
@@ -830,8 +832,62 @@ const ShopController = {
             console.error("Failed to record shop visit:", error);
             return next(error);
         }
-    }
+    },
     //#endregion
 
+    //#region SendOtp
+    async sendOTP(req, res, next) {
+        const UserSchema = Joi.object({
+            phoneNumber: Joi.string()
+                .pattern(/^[6789]\d{9}$/)
+                .required(),
+        });
+
+        const { error } = UserSchema.validate(req.body);
+
+        if (error) {
+            console.log("Error in sendOTP validation", error);
+            return next(error);
+        }
+        try {
+            const result = await ShopService.sendOTP(req.body);
+
+            return res.status(200).json({
+                success: true,
+                message: "Otp Sent successfully",
+                data: { message: result },
+            });
+        } catch (err) {
+            console.log(" Error in sendOTP ", err);
+            return next(err);
+        }
+    },
+    //#endregion
+
+    //#region VerifyOtp
+    async verifyOTP(req, res, next) {
+        const OtpSchema = Joi.object({
+            OTP: Joi.required(),
+        });
+
+        const { error } = OtpSchema.validate(req.body);
+
+        if (error) {
+            return next(error);
+        }
+        try {
+            const result = await ShopService.verifyOTP(req.body);
+
+            return res.status(200).json({
+                sucess: true,
+                message: "Otp Verified Successfully",
+                 data: { message: result },
+            });
+        } catch (err) {
+            console.log(" Error in verifyOTP ");
+            return next(err);
+        }
+    },
+    //#endregion
 }
 export default ShopController;

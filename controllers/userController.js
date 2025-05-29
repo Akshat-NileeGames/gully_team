@@ -132,7 +132,7 @@ const userController = {
   // },
 
 
-  
+
   // Sheetal
   // async createProfile(req, res, next) {
   //   const UserSchema = Joi.object({
@@ -146,16 +146,16 @@ const userController = {
   //       }),
   //     base64Image: Joi.required(),
   //   });
-  
+
   //   const { error } = UserSchema.validate(req.body);
-  
+
   //   if (error) {
   //     return next(error);
   //   }
-  
+
   //   try {
   //     const result = await userServices.createProfile(req.body);
-  
+
   //     return res.status(200).json({
   //       success: true,
   //       message: "Profile created successfully",
@@ -230,7 +230,7 @@ const userController = {
   //   }
   // },
 
-//Sheetal
+  //Sheetal
   async editProfile(req, res, next) {
     //validation
     const UserSchema = Joi.object({
@@ -261,9 +261,9 @@ const userController = {
 
   async deleteProfile(req, res, next) {
     // const userId = global.user.userId;
-    const {userId} = req.params;
+    const { userId } = req.params;
     try {
-      
+
       const result = await userServices.deleteProfile();
 
       return res.status(200).json({
@@ -305,7 +305,7 @@ const userController = {
 
       return res.status(200).json({
         success: true,
-        message: "Otp Sent suessfully",
+        message: "Otp Sent Successfully",
         data: { message: result },
       });
     } catch (err) {
@@ -313,6 +313,9 @@ const userController = {
       return next(err);
     }
   },
+
+  
+
 
   async verifyOTP(req, res, next) {
     //validation

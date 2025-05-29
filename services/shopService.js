@@ -1,9 +1,12 @@
-import { Shop, Product, Category, Package, User, ShopVisit, ProductView } from '../models/index.js';
+import { Shop, Product, Category, Package, User, ShopVisit, ProductView, OTP } from '../models/index.js';
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
 import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
 import nodemailer from "nodemailer";
 import mongoose from "mongoose"
+import { FAST_SMS_KEY, SENDER_ID, MESSAGE_ID } from "../config/index.js";
+import axios from "axios";
+import crypto from "crypto";
 function isBase64Image(str) {
     return /^data:image\/[a-zA-Z]+;base64,/.test(str);
 }
@@ -13,25 +16,41 @@ const ShopService = {
 
         const userInfo = global.user;
         let shopImg = [];
-        // if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
-        //     for (const image of data.shopImage) {
-        //         try {
-        //             const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
+        if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
+            for (const image of data.shopImage) {
+                try {
+                    const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
 
-        //             if (!uploadedUrl) {
-        //                 throw new Error("Image upload failed or returned empty URL.");
-        //             }
+                    if (!uploadedUrl) {
+                        throw new Error("Image upload failed or returned empty URL.");
+                    }
 
-        //             shopImg.push(uploadedUrl);
-        //         } catch (uploadError) {
-        //             console.error("Image upload failed:", uploadError);
-        //             throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
-        //         }
-        //     }
-        // } else {
-        //     throw CustomErrorHandler.badRequest("Shop images are required.");
-        // }
+                    shopImg.push(uploadedUrl);
+                } catch (uploadError) {
+                    console.error("Image upload failed:", uploadError);
+                    throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
+                }
+            }
+        } else {
+            throw CustomErrorHandler.badRequest("Shop images are required.");
+        }
 
+        let aadharFrontUrl = null;
+        let aadharBackUrl = null;
+        if (data.aadharFrontSide && data.aadharBackSide) {
+            try {
+                aadharFrontUrl = await ImageUploader.Upload(data.aadharFrontSide, "AadharImages");
+                if (!aadharFrontUrl) throw new Error("Aadhar front side upload failed.");
+
+                aadharBackUrl = await ImageUploader.Upload(data.aadharBackSide, "AadharImages");
+                if (!aadharBackUrl) throw new Error("Aadhar back side upload failed.");
+            } catch (uploadError) {
+                console.error("Aadhar image upload failed:", uploadError);
+                throw CustomErrorHandler.serverError("Failed to upload Aadhar card images.");
+            }
+        } else {
+            throw CustomErrorHandler.badRequest("Both Aadhar front and back images are required.");
+        }
         const shopTiming = {
             Monday: {
                 isOpen: data.shopTiming.Monday.isOpen,
@@ -100,14 +119,14 @@ const ShopService = {
             shopLink: data.shoplink || null,
             shopTiming: shopTiming,
             LicenseNumber: data.LicenseNumber,
-            gstNumber: data.gstNumber,
+            GstNumber: data.GstNumber,
             ownerName: data.ownerName,
             ownerPhoneNumber: data.ownerPhoneNumber,
             ownerEmail: data.ownerEmail,
             ownerAddress: data.ownerAddress,
             ownerAddharImages: {
-                aadharFrontSide: data.aadharFrontSide,
-                aadharBackSide: data.aadharBackSide
+                aadharFrontSide: aadharFrontUrl,
+                aadharBackSide: aadharBackUrl
             },
             ownerPanNumber: data.ownerPanNumber,
             userId: userInfo.userId,
@@ -236,19 +255,20 @@ const ShopService = {
 
                 <p>We’re thrilled to have you join our growing community of business owners and innovators.</p>
 
-                <div class="highlight-box">
-                    <p><strong>Your shop registration is confirmed with the following details:</strong></p>
-                    <p><strong>Shop Name:</strong> ${shop.shopName}</p>
-                    <p><strong>Owner:</strong> ${shop.ownerName}</p>
-                    <p><strong>Owner Phone:</strong> ${shop.ownerPhoneNumber}</p>
-                    <p><strong>Contact Number:</strong> ${shop.shopContact}</p>
-                    <p><strong>Email:</strong> ${shop.shopEmail}</p>
-                    <p><strong>Address:</strong> ${shop.shopAddress}</p>
-                    ${shop.shoplink ? `<p><strong>Shop Link:</strong> <a href="${shop.shoplink}" target="_blank">${shop.shoplink}</a></p>` : ''}
-                    ${shop.gstNumber ? `<p><strong>GST Number:</strong> ${shop.gstNumber}</p>` : ''}
-                    ${shop.LicenseNumber ? `<p><strong>License Number:</strong> ${shop.LicenseNumber}</p>` : ''}
-                    <p><strong>Registered On:</strong> ${new Date(shop.joinedAt).toLocaleDateString()}</p>
-                </div>
+          <div class="highlight-box">
+    <p><strong>Your shop registration is confirmed with the following details:</strong></p>
+    <p><strong>Shop Name:</strong> ${shop.shopName}</p>
+    <p><strong>Description:</strong> ${shop.shopDescription}</p>
+    <p><strong>Address:</strong> ${shop.shopAddress}</p>
+    <p><strong>Contact Number:</strong> ${shop.shopContact}</p>
+    <p><strong>Email:</strong> ${shop.shopEmail}</p>
+    <p><strong>Owner Name:</strong> ${shop.ownerName}</p>
+    <p><strong>Owner Phone:</strong> ${shop.ownerPhoneNumber}</p>
+    <p><strong>Owner Email:</strong> ${shop.ownerEmail}</p>
+    <p><strong>Owner Address:</strong> ${shop.ownerAddress}</p>
+    <p><strong>PAN Number:</strong> ${shop.ownerPanNumber}</p>
+    <p><strong>Registered On:</strong> ${new Date(shop.joinedAt).toLocaleDateString()}</p>
+</div>
 
                 <p><strong>Start with the basics:</strong></p>
                 <ul class="tasks">
@@ -330,7 +350,7 @@ const ShopService = {
     // },
     async editShop(data) {
         const { shopId, ...fieldsToUpdate } = data;
-
+        console.log(data.shopLink);
         if (fieldsToUpdate.longitude && fieldsToUpdate.latitude) {
             fieldsToUpdate["locationHistory.point"] = {
                 type: "Point",
@@ -1189,15 +1209,15 @@ const ShopService = {
             shop.packageStartDate = data.packageStartDate;
             shop.packageEndDate = data.packageEndDate;
             shop.isSubscriptionPurchased = true;
-            setTimeout(async () => {
-                console.log("Sending email after 10 seconds...",);
-                await ShopService.sendpaymentMail(
-                    "shop-subscription",
-                    user,
-                    shop,
-                    purchasedPackage
-                );
-            }, 10000);
+            // setTimeout(async () => {
+            //     console.log("Sending email after 10 seconds...",);
+            //     await ShopService.sendpaymentMail(
+            //         "shop-subscription",
+            //         user,
+            //         shop,
+            //         purchasedPackage
+            //     );
+            // }, 10000);
             shop.save();
             return shop;
         } catch (error) {
@@ -1237,129 +1257,9 @@ const ShopService = {
         }
     },
 
-    async sendpaymentMail(userFor = "", user, shop, purchasedPackage) {
-        const transporter = nodemailer.createTransport({
-            host: "smtp.gmail.com",
-            port: 587,
-            secure: false,
-            requireTLS: true,
-            auth: {
-                user: "gullyteam33@gmail.com",
-                pass: "iaur qnaj ocsq jyvq",
-            },
-        });
 
-        if (!user || !user.email || !purchasedPackage || typeof purchasedPackage.price !== "number") {
-            console.error("Missing or invalid user/purchasedPackage info.");
-            return;
-        }
 
-        // Price breakdown with fallback
-        const baseAmount = (purchasedPackage.price * 0.82).toFixed(2);
-        const gstAmount = (purchasedPackage.price * 0.18).toFixed(2);
-        const totalAmount = purchasedPackage.price.toFixed(2);
 
-        // Dynamic title & subject
-        const isSubscription = userFor === "shop-subscription";
-        const title = isSubscription
-            ? "Subscription Payment Confirmed"
-            : "Extension Package Activated";
-        const subject = isSubscription
-            ? "Subscription Activated for Your Shop!"
-            : "Extension Package Successfully Added to Your Shop";
-
-        const shopName = shop?.shopName || "your shop";
-
-        const mailOptions = {
-            from: "Gully App <gullyteam33@gmail.com>",
-            to: user.email,
-            subject,
-            html: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>${title}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Arial, sans-serif; background-color: #f4f7fb; color: #333; }
-    .container { max-width: 720px; margin: 30px auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
-    .header { background: linear-gradient(to right, #4e54c8, #8f94fb); color: #fff; padding: 40px 20px; text-align: center; font-size: 26px; font-weight: bold; }
-    .body { padding: 35px 40px; }
-    h2 { font-size: 20px; }
-    .section-title { font-weight: 600; font-size: 18px; color: #4e54c8; margin-bottom: 15px; border-bottom: 2px solid #4e54c8; padding-bottom: 5px; }
-    .invoice-items { margin-top: 20px; border-radius: 8px; }
-    .invoice-item { display: flex; justify-content: space-between; padding: 15px 20px; font-size: 15px; border-bottom: 1px solid #f0f0f0; background: #f9f9fb; }
-    .invoice-item:nth-child(even) { background: #eff1ff; }
-    .invoice-item .label { font-weight: bold; color: #4e54c8; margin-right: 20px; }
-    .invoice-item .value { color: #333; }
-    .total-section { margin-top: 20px; }
-    .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; padding-top: 10px; color: #333; }
-    .next-steps { background: #f9fafb; padding: 20px; border-radius: 8px; margin-top: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .next-steps p, .next-steps li { font-size: 14px; color: #555; }
-    .footer { padding: 25px; text-align: center; font-size: 13px; color: #888; background-color: #f4f7fb; }
-    a.button { display: inline-block; margin-top: 20px; padding: 14px 28px; background: #4e54c8; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; transition: 0.3s; }
-    a.button:hover { background-color: #8f94fb; }
-    @media screen and (max-width: 480px) {
-      .body { padding: 15px; }
-      .header { font-size: 20px; padding: 25px; }
-      .total-row { flex-direction: column; align-items: flex-start; gap: 5px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">${title}</div>
-    <div class="body">
-      <h2>Hello ${user.fullName || "Shop Owner"},</h2>
-      <p>Thank you for purchasing ${isSubscription ? "a subscription" : "an extension package"} for your shop <strong>${shopName}</strong>.</p>
-
-      <div class="section-title">Invoice Items</div>
-      <div class="invoice-items">
-        <div class="invoice-item"><div class="label">Package Name:</div><div class="value">${purchasedPackage.name}</div></div>
-        <div class="invoice-item"><div class="label">Base Amount:</div><div class="value">₹${baseAmount}</div></div>
-        <div class="invoice-item"><div class="label">GST (18%):</div><div class="value">₹${gstAmount}</div></div>
-      </div>
-
-      <div class="total-section">
-        <div class="total-row">
-          <div>Total Paid:</div>
-          <div>₹${totalAmount}</div>
-        </div>
-      </div>
-
-      <div class="next-steps">
-        <div class="section-title">What to Do Next?</div>
-        <p>Now that your ${isSubscription ? "subscription" : "extension package"} is active, you can:</p>
-        <ul>
-          <li><strong>Add products</strong> to your shop.</li>
-          <li><strong>Increase visibility</strong> by showcasing your products on your shop page.</li>
-          <li>View and manage your shop's offerings anytime from your dashboard.</li>
-          <li>Reach out to our <strong>support team</strong> if you need help or have questions.</li>
-        </ul>
-      </div>
-
-      <p>If you need further assistance, feel free to contact our support team.</p>
-      <a href="mailto:gullyteam33@gmail.com" class="button">Contact Support</a>
-    </div>
-    <div class="footer">
-      &copy; ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.<br />
-      Email: <a href="mailto:gullyteam33@gmail.com">gullyteam33@gmail.com</a>
-    </div>
-  </div>
-</body>
-</html>`,
-        };
-
-        transporter.sendMail(mailOptions, function (error, info) {
-            if (error) {
-                console.log("Error sending email:", error);
-            } else {
-                console.log("Subscription/extension email sent:", info.response);
-            }
-        });
-    },
     async SimilarProduct(data) {
         const { category, subcategory, brand } = data;
         const { latitude, longitude } = data;
@@ -2040,6 +1940,127 @@ const ShopService = {
             console.error("Error recording shop visit:", error);
             throw error;
         }
-    }
+    },
+
+
+    async sendOTP(data) {
+        const { phoneNumber } = data;
+        const userId = global.user.userId;
+        const otpExpiryMinutes = 10;
+        const mode = "prod";
+        const apiUrl = "https://www.fast2sms.com/dev/bulkV2";
+        const apiKey = FAST_SMS_KEY;
+        const otpLength = 5; // You can change this to the desired length of your OTP
+        // Generate a random string of numeric characters
+        const otp = Array.from(crypto.randomBytes(otpLength))
+            .map((byte) => (byte % 10).toString())
+            .join("")
+            .slice(0, otpLength);
+
+        const route = "dlt";
+
+        const config = {
+            params: {
+                authorization: apiKey,
+                sender_id: SENDER_ID,
+                message: MESSAGE_ID,
+                variables_values: otp,
+                route: route,
+                numbers: phoneNumber,
+                flash: 0
+            },
+
+            headers: {
+                "cache-control": "no-cache",
+            },
+        };
+
+        const expiryTime = new Date();
+        expiryTime.setMinutes(expiryTime.getMinutes() + otpExpiryMinutes);
+
+        const otpexist = await OTP.findOne({ userId });
+
+        if (otpexist) {
+            if (otpexist.attempts > 2) {
+                // Current date-time
+                const currentDate = new Date();
+
+                const expiredDate = otpexist.expiryTime;
+
+                console.log("expiredDate  ", expiredDate);
+
+                console.log("currentDate  ", currentDate);
+
+                // Calculate the difference in milliseconds
+                const timeDifference = currentDate.getTime() - expiredDate.getTime();
+
+                // Convert the difference to hours
+                const hoursDifference = timeDifference / (1000 * 60 * 60);
+
+                console.log("hoursDifference  ", hoursDifference);
+
+                if (hoursDifference > 5) {
+                    await OTP.updateOne({ _id: otpexist._id }, { attempts: 0 });
+                } else {
+                    throw CustomErrorHandler.notFound("Maximum attempts exceeded");
+                }
+            }
+
+            await OTP.updateOne(
+                { _id: otpexist._id },
+                { otp, expiryTime, $inc: { attempts: 1 } }
+            );
+        } else {
+            // Store OTP and related data in MongoDB
+            await OTP.create({ userId, otp, expiryTime });
+        }
+        try {
+            if (mode == "prod") {
+                const response = await axios.get(apiUrl, config);
+                if (response) {
+                    // console.log("responce",response);
+                    return true;
+                }
+            } else {
+                return true;
+            }
+            console.log(response);
+        } catch (error) {
+            console.log(error.response.data);
+            console.log(error?.data?.message);
+            console.log(error?.data);
+            throw CustomErrorHandler.serverError(
+                error?.response?.data?.message ?? "Phone Number not valid"
+            );
+        }
+    },
+
+    async verifyOTP(data) {
+        console.log(data);
+        const otp = data.OTP;
+        const userInfo = global.user;
+        const userId = userInfo.userId;
+        const maxAttempts = 5;
+        const otpData = await OTP.findOne({ userId });
+
+        console.log(otpData);
+        if (!otpData) {
+            throw CustomErrorHandler.notFound("Invalid OTP or OTP expired");
+        }
+
+        const { attempts, expiryTime } = otpData;
+        if (attempts >= maxAttempts) {
+            throw CustomErrorHandler.notFound("Maximum attempts exceeded");
+        }
+        if (otp === otpData.otp && new Date() <= new Date(expiryTime)) {
+            await OTP.deleteOne({ userId });
+            return true;
+        } else {
+            await OTP.updateOne({ userId }, { $inc: { attempts: 1 } });
+            console.log("Found not otp");
+            throw CustomErrorHandler.notFound("Invalid OTP or OTP expired");
+        }
+    },
+
 }
 export default ShopService;

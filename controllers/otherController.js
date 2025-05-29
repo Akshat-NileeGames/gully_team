@@ -83,8 +83,8 @@ const otherController = {
       return next(err);
     }
   },
-  
- async createBannerOrder(req, res, next) {
+
+  async createBannerOrder(req, res, next) {
     try {
       const result = await otherServices.createBannerOrder(req.body);
 
@@ -201,7 +201,7 @@ const otherController = {
     const teamLimit = req.params.tournamentLimit;
 
     try {
-      const result = await otherServices.tournamentFees(teamLimit); 
+      const result = await otherServices.tournamentFees(teamLimit);
 
       return res.status(200).json({
         success: true,
@@ -229,7 +229,7 @@ const otherController = {
     }
   },
 
- 
+
   async getPackageById(req, res) {
     const { id } = req.params;
     try {
@@ -246,7 +246,7 @@ const otherController = {
       return res.status(500).json({ message: 'Error fetching package', error: error.message });
     }
   },
-  
+
 
   async getPackagesByType(req, res) {
     const { packageFor } = req.params;
@@ -258,7 +258,7 @@ const otherController = {
       return res.status(200).json({
         status: true,
         message: "Package retrived successfully",
-        data: {packages:result},
+        data: { packages: result },
       });
     } catch (error) {
       return res.status(500).json({
@@ -274,7 +274,7 @@ const otherController = {
       return res.status(200).json({
         status: true,
         message: "Package retrived successfully",
-        data: {packages:result},
+        data: { packages: result },
       });
     } catch (error) {
       return res.status(500).json({
@@ -284,34 +284,34 @@ const otherController = {
     }
   },
 
-// async transactionHistory(req, res, next) {
-//   try {
-//     if (!req.user || !req.user.userId) {
-//       console.log("User not authorized in controller");
-//       return res.status(400).json({
-//         success: false,
-//         status: false,
-//         message: "User not authorized",
-//       });
-//     }
+  // async transactionHistory(req, res, next) {
+  //   try {
+  //     if (!req.user || !req.user.userId) {
+  //       console.log("User not authorized in controller");
+  //       return res.status(400).json({
+  //         success: false,
+  //         status: false,
+  //         message: "User not authorized",
+  //       });
+  //     }
 
-//     const { userId } = req.user;
-//     const pageSize = parseInt(req.query.pageSize) || 10;
-//     const skip = parseInt(req.query.skip) || 0;
+  //     const { userId } = req.user;
+  //     const pageSize = parseInt(req.query.pageSize) || 10;
+  //     const skip = parseInt(req.query.skip) || 0;
 
-//     const result = await otherServices.transactionHistory(userId, pageSize, skip);
+  //     const result = await otherServices.transactionHistory(userId, pageSize, skip);
 
-//     return res.status(200).json({
-//       success: true,
-//       status: true,
-//       message: "Transaction History Retrieved Successfully",
-//       data: { transactions: result.history, totalCount: result.totalCount },
-//     });
-//   } catch (err) {
-//     console.log("Error in transactionHistory controller:", err);
-//     return next(err);
-//   }
-// },
+  //     return res.status(200).json({
+  //       success: true,
+  //       status: true,
+  //       message: "Transaction History Retrieved Successfully",
+  //       data: { transactions: result.history, totalCount: result.totalCount },
+  //     });
+  //   } catch (err) {
+  //     console.log("Error in transactionHistory controller:", err);
+  //     return next(err);
+  //   }
+  // },
 
 
   //nikhil
@@ -330,119 +330,119 @@ const otherController = {
   //     return next(err);
   //   }
   // },
-  
+
   //Anurag's Code
-  
+
   async transactionHistory(req, res, next) {
     try {
-        const { userId } = req.user; 
-        const pageSize = parseInt(req.query.pageSize) || 10;
-        const skip = parseInt(req.query.skip) || 0;
+      const { userId } = req.user;
+      const pageSize = parseInt(req.query.pageSize) || 10;
+      const skip = parseInt(req.query.skip) || 0;
 
-        let result = await otherServices.getTrans(userId, pageSize, skip);
+      let result = await otherServices.getTrans(userId, pageSize, skip);
 
-        return res.status(200).json({
-            success: true,
-            message: "Transaction History Retrieved Successfully",
-            data: { transactions: result.history, totalCount: result.totalCount},
-        });
+      return res.status(200).json({
+        success: true,
+        message: "Transaction History Retrieved Successfully",
+        data: { transactions: result.history, totalCount: result.totalCount },
+      });
     } catch (err) {
-        console.log("Error in transactionHistory", err);
-        return next(err);
+      console.log("Error in transactionHistory", err);
+      return next(err);
     }
-},
+  },
 
 
 
-// DG
-async deleteTransaction(req, res, next) {
-  try {
-    const { userId } = req.user; 
+  // DG
+  async deleteTransaction(req, res, next) {
+    try {
+      const { userId } = req.user;
 
-    await otherServices.deleteTransaction(userId);
+      await otherServices.deleteTransaction(userId);
 
-    return res.status(200).json({
-      success: true,
-      message: "All transactions deleted successfully.",
-    });
-  } catch (err) {
-    console.error("Error in deleteTransaction:", err);
-    return next(err);
-  }
-},
+      return res.status(200).json({
+        success: true,
+        message: "All transactions deleted successfully.",
+      });
+    } catch (err) {
+      console.error("Error in deleteTransaction:", err);
+      return next(err);
+    }
+  },
 
-//DG
-async deleteTransactionById(req, res, next) {
-  try {
-    const { transactionId } = req.params; 
+  //DG
+  async deleteTransactionById(req, res, next) {
+    try {
+      const { transactionId } = req.params;
 
-    if (!transactionId) {
-      return res.status(400).json({
+      if (!transactionId) {
+        return res.status(400).json({
+          success: false,
+          message: "Transaction ID is required.",
+        });
+      }
+
+      await otherServices.deleteTransactionById(transactionId);
+
+      return res.status(200).json({
+        success: true,
+        message: "Transaction deleted successfully.",
+      });
+    } catch (err) {
+      console.error("Error in deleteTransactionById:", err);
+      return next(err);
+    }
+  },
+
+
+  //DG
+  async razorpayWebhook(req, res, next) {
+    try {
+      // Razorpay sends webhook data in the body
+      const result = await otherServices.handleRazorpayWebhook(req.body);
+
+      return res.status(200).json({
+        success: true,
+        message: "Transaction status updated successfully",
+        data: result,
+      });
+    } catch (error) {
+      console.error("Error in Razorpay webhook:", error);
+      return res.status(500).json({
         success: false,
-        message: "Transaction ID is required.",
+        message: "Failed to update transaction status",
       });
     }
+  },
 
-    await otherServices.deleteTransactionById(transactionId);
+  //DG 
+  // async updateTransactionStatus(req, res, next) {
+  //   try {
+  //     const { orderId, paymentId } = req.body;
 
-    return res.status(200).json({
-      success: true,
-      message: "Transaction deleted successfully.",
-    });
-  } catch (err) {
-    console.error("Error in deleteTransactionById:", err);
-    return next(err);
-  }
-},
+  //     const updatedOrder = await verifyAndUpdateTransactionStatus(
+  //       orderId,
+  //       paymentId
+  //     );
 
+  //     if (!updatedOrder) {
+  //       return res.status(404).json({
+  //         success: false,
+  //         message: "Order not found or already updated.",
+  //       });
+  //     }
 
-//DG
-async razorpayWebhook(req, res, next) {
-  try {
-    // Razorpay sends webhook data in the body
-    const result = await otherServices.handleRazorpayWebhook(req.body);
-
-    return res.status(200).json({
-      success: true,
-      message: "Transaction status updated successfully",
-      data: result,
-    });
-  } catch (error) {
-    console.error("Error in Razorpay webhook:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update transaction status",
-    });
-  }
-},
-
-//DG 
-// async updateTransactionStatus(req, res, next) {
-//   try {
-//     const { orderId, paymentId } = req.body;
-
-//     const updatedOrder = await verifyAndUpdateTransactionStatus(
-//       orderId,
-//       paymentId
-//     );
-
-//     if (!updatedOrder) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Order not found or already updated.",
-//       });
-//     }
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Transaction status updated successfully",
-//       data: updatedOrder,
-//     });
-//   } catch (error) {
-//     console.error("Error updating transaction status:", error);
-//     return next(error);
-//   }
-// }
-  };
+  //     return res.status(200).json({
+  //       success: true,
+  //       message: "Transaction status updated successfully",
+  //       data: updatedOrder,
+  //     });
+  //   } catch (error) {
+  //     console.error("Error updating transaction status:", error);
+  //     return next(error);
+  //   }
+  // }
+};
 
 export default otherController;
