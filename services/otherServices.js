@@ -993,8 +993,6 @@ const otherServices = {
     const gstRate = 18 / 100;
     const gstAmount = (result.amount / 100) * gstRate;
     const amountBeforeGST = (result.amount / 100) - gstAmount;
-    // console.log("Result ", result);
-    // console.log(shopId);
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
@@ -1026,13 +1024,18 @@ const otherServices = {
     });
 
     await payment.save();
+
     setTimeout(async () => {
+
       console.log("Sending email after 10 seconds...",);
       await otherServices.sendpaymentMail(
         "shop-subscription",
         user,
         shop,
-        purchasedPackage
+        purchasedPackage,
+        result.id,
+        orderHistory.receipt,
+        data.status
       );
     }, 10000);
     return {
@@ -1041,7 +1044,7 @@ const otherServices = {
     };
   },
 
-  async sendpaymentMail(userFor = "", user, shop, purchasedPackage) {
+  async sendpaymentMail(userFor = "", user, shop, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
@@ -1076,202 +1079,579 @@ const otherServices = {
 
     const mailOptions = {
       from: "Gully App <gullyteam33@gmail.com>",
-      to: user.email,
-      subject,
-      html: `
-<!DOCTYPE html>
+      to: shop.ownerEmail,
+      subject: "Payment Confirmation – Gully App Subscription",
+      html: `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>${title}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Confirmation – Gully App</title>
   <style>
-    * { box-sizing: border-box; }
+    body, table, td, p, a, li, blockquote {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    
+    table, td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+    
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+    }
+
     body {
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-      background-color: #f4f7fb;
-      color: #333;
+      margin: 0 !important;
+      padding: 0 !important;
+      background-color: #f4f6f8 !important;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    .container {
-      max-width: 720px;
-      margin: 20px auto;
-      background: #fff;
+
+    .email-wrapper {
+      width: 100% !important;
+      background-color: #f4f6f8;
+      padding: 20px 0;
+    }
+
+    .email-container {
+      max-width: 650px;
+      margin: 0 auto;
+      background-color: #ffffff;
       border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
       overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
+
     .header {
-      background: linear-gradient(to right, #4e54c8, #8f94fb);
-      color: #fff;
-      padding: 35px 20px;
+      background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+      padding: 40px 30px;
       text-align: center;
-      font-size: 24px;
+    }
+
+    .header h1 {
+      margin: 0;
+      color: #ffffff;
+      font-size: 28px;
       font-weight: bold;
+      line-height: 1.2;
     }
-    .body {
-      padding: 30px 40px;
+
+    .header p {
+      margin: 8px 0 0 0;
+      color: #bfdbfe;
+      font-size: 16px;
     }
-    h2 {
+
+    .content {
+      padding: 40px 30px;
+    }
+
+    .welcome-text {
       font-size: 20px;
-      margin-bottom: 10px;
-    }
-    .section-title {
-      font-weight: 600;
-      font-size: 18px;
-      color: #4e54c8;
-      margin-top: 30px;
-      margin-bottom: 15px;
-      border-bottom: 2px solid #4e54c8;
-      padding-bottom: 5px;
-    }
-    .invoice-items, .shop-details {
-      margin-top: 15px;
-      border-radius: 8px;
-    }
-    .invoice-item, .shop-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 12px 20px;
-      font-size: 15px;
-      border-bottom: 1px solid #f0f0f0;
-      background: #f9f9fb;
-    }
-    .invoice-item:nth-child(even), .shop-item:nth-child(even) {
-      background: #eff1ff;
-    }
-    .label {
       font-weight: bold;
-      color: #4e54c8;
-      margin-right: 20px;
+      color: #1f2937;
+      margin: 0 0 20px 0;
+      line-height: 1.3;
     }
-    .value {
-      color: #333;
+
+    .intro-text {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0 0 30px 0;
+      line-height: 1.6;
     }
-    .total-section {
-      margin-top: 20px;
-    }
-    .total-row {
+
+    .section-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2563eb;
+      margin: 30px 0 20px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
       display: flex;
-      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-icon {
+      font-size: 20px;
+    }
+
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .details-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: top;
+    }
+
+    .details-table tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    .details-table tr:nth-child(odd) {
+      background-color: #ffffff;
+    }
+
+    .details-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .details-table td.label {
+      font-weight: 600;
+      color: #374151;
+      width: 35%;
+      font-size: 14px;
+    }
+
+    .details-table td.value {
+      color: #6b7280;
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    /* Payment Summary Styles */
+    .payment-summary {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border: 2px solid #0ea5e9;
+      border-radius: 12px;
+      padding: 25px;
+      margin: 30px 0;
+    }
+
+    .payment-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #0c4a6e;
+      margin: 0 0 20px 0;
+      text-align: center;
+    }
+
+    .payment-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .payment-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .payment-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .payment-table .payment-label {
+      font-weight: 600;
+      color: #1e40af;
+      width: 45%;
+      font-size: 15px;
+    }
+
+    .payment-table .payment-value {
+      color: #374151;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .payment-table .total-row {
+      background-color: #1e40af;
+      color: #ffffff;
       font-weight: bold;
       font-size: 16px;
-      padding-top: 10px;
     }
-    .next-steps {
-      background: #f9fafb;
-      padding: 20px;
-      border-radius: 8px;
-      margin-top: 30px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+    .payment-table .total-row .payment-label,
+    .payment-table .total-row .payment-value {
+      color: #ffffff;
     }
-    .next-steps ul {
-      padding-left: 20px;
-    }
-    .next-steps p, .next-steps li {
-      font-size: 14px;
-      color: #555;
-    }
-    .footer {
-      padding: 25px;
-      text-align: center;
-      font-size: 13px;
-      color: #888;
-      background-color: #f4f7fb;
-    }
-    a.button {
-      display: inline-block;
-      margin-top: 20px;
-      padding: 14px 28px;
-      background: #4e54c8;
-      color: #fff;
-      text-decoration: none;
+
+    .transaction-id {
+      background-color: #fef3c7;
+      border: 1px solid #f59e0b;
       border-radius: 6px;
+      padding: 12px 16px;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    .transaction-id .label {
+      font-size: 12px;
+      color: #92400e;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .transaction-id .value {
+      font-size: 16px;
+      color: #92400e;
       font-weight: bold;
-      transition: 0.3s;
+      font-family: 'Courier New', monospace;
     }
-    a.button:hover {
-      background-color: #3b40b0;
+
+    .highlight-section {
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 30px 0;
     }
-    @media screen and (max-width: 600px) {
-      .body {
+
+    .highlight-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #166534;
+      margin: 0 0 15px 0;
+    }
+
+    .task-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .task-item {
+      margin: 8px 0;
+      color: #166534;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .checkmark {
+      color: #16a34a;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    .info-section {
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 20px 0;
+    }
+
+    .info-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1e40af;
+      margin: 0 0 15px 0;
+    }
+
+    .info-text {
+      color: #1e40af;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .cta-section {
+      text-align: center;
+      margin: 40px 0 20px 0;
+    }
+
+    .cta-text {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0 0 25px 0;
+      line-height: 1.6;
+    }
+
+    .cta-button {
+      display: inline-block;
+      padding: 14px 28px;
+      background-color: #2563eb;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      line-height: 1;
+      margin: 0 10px 10px 0;
+    }
+
+    .cta-button.secondary {
+      background-color: #059669;
+    }
+
+    .footer {
+      background-color: #f9fafb;
+      padding: 30px;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .footer-text {
+      font-size: 13px;
+      color: #6b7280;
+      margin: 0 0 8px 0;
+      line-height: 1.5;
+    }
+
+    .footer-link {
+      color: #2563eb;
+      text-decoration: none;
+    }
+
+    .footer-link:hover {
+      color: #1d4ed8;
+    }
+
+    /* Mobile responsiveness */
+    @media only screen and (max-width: 600px) {
+      .email-wrapper {
+        padding: 10px 0;
+      }
+      
+      .email-container {
+        margin: 0 10px;
+        border-radius: 8px;
+      }
+      
+      .header {
+        padding: 30px 20px;
+      }
+      
+      .header h1 {
+        font-size: 24px;
+      }
+      
+      .content {
+        padding: 30px 20px;
+      }
+      
+      .details-table td.label {
+        width: 40%;
+      }
+      
+      .payment-table .payment-label {
+        width: 50%;
+      }
+      
+      .highlight-section,
+      .info-section,
+      .payment-summary {
         padding: 20px;
       }
-      .invoice-item, .shop-item {
-        flex-direction: column;
-        align-items: flex-start;
+      
+      .cta-button {
+        display: block;
+        margin: 10px 0;
       }
-      .total-row {
-        flex-direction: column;
-        align-items: flex-start;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .email-container {
+        background-color: #ffffff !important;
       }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">${title}</div>
-    <div class="body">
-      <h2>Hello ${user.fullName || "Shop Owner"},</h2>
-      <p>Thank you for purchasing ${isSubscription ? "a subscription" : "an extension package"} for your shop <strong>${shopName}</strong>.</p>
+  <div class="email-wrapper">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+      <tr>
+        <td align="center">
+          <div class="email-container">
+            <!-- Header -->
+            <div class="header">
+              <h1>Subscription Package Successfully Purchased</h1>
+              <p>Welcome to the Gully App community</p>
+            </div>
 
-<div class="section-title">Invoice Summary</div>
-<table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; border-radius: 8px; overflow: hidden;">
-  <tbody>
-    <tr style="background-color: #f9f9fb;">
-      <td style="padding: 12px; font-weight: bold; color: #4e54c8; width: 40%;">Package Name</td>
-      <td style="padding: 12px;">${purchasedPackage.name}</td>
-    </tr>
-    <tr style="background-color: #eff1ff;">
-      <td style="padding: 12px; font-weight: bold; color: #4e54c8;">Transaction ID</td>
-      <td style="padding: 12px;">${shop?.transactionId || "Not Available"}</td>
-    </tr>
-    <tr style="background-color: #f9f9fb;">
-      <td style="padding: 12px; font-weight: bold; color: #4e54c8;">Base Amount</td>
-      <td style="padding: 12px;">₹${baseAmount}</td>
-    </tr>
-    <tr style="background-color: #eff1ff;">
-      <td style="padding: 12px; font-weight: bold; color: #4e54c8;">GST (18%)</td>
-      <td style="padding: 12px;">₹${gstAmount}</td>
-    </tr>
-    <tr style="background-color: #e2e6ff;">
-      <td style="padding: 14px; font-weight: bold; color: #333; font-size: 16px;">Total Paid</td>
-      <td style="padding: 14px; font-weight: bold; font-size: 16px;">₹${totalAmount}</td>
-    </tr>
-  </tbody>
-</table>
+            <!-- Content -->
+            <div class="content">
+              <!-- Welcome Message -->
+              <p class="welcome-text">Hello ${user.fullName}! 👋</p>
+              <p class="intro-text">
+  We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully App — We’re excited to have you onboard and look forward to supporting your business growth through the Gully App.
+</p>
 
 
+              <div class="transaction-id">
+                <div class="label">Transaction ID:</div>
+                <div class="value">${TRANSACTION_ID}</div>
+              </div>
 
-      <div class="section-title">Shop Details</div>
-      <div class="shop-details">
-        <div class="shop-item"><div class="label">Shop Name:</div><div class="value">${shop.shopName}</div></div>
-        <div class="shop-item"><div class="label">Owner Name:</div><div class="value">${shop.ownerName}</div></div>
-        <div class="shop-item"><div class="label">Phone Number:</div><div class="value">${shop.ownerPhoneNumber}</div></div>
-        <div class="shop-item"><div class="label">Email:</div><div class="value">${shop.ownerEmail}</div></div>
-        <div class="shop-item"><div class="label">Address:</div><div class="value">${shop.shopAddress}</div></div>
-        ${shop.shoplink ? `<div class="shop-item"><div class="label">Shop Link:</div><div class="value"><a href="${shop.shoplink}" target="_blank">${shop.shoplink}</a></div></div>` : ''}
-      </div>
+              <div class="payment-summary">
+                <h3 class="payment-title">Payment Summary</h3>
+                <table class="payment-table" role="presentation">
+                  <tr>
+                    <td class="payment-label">Package Name:</td>
+                    <td class="payment-value">${purchasedPackage.name}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Base Amount:</td>
+                    <td class="payment-value">₹${baseAmount}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">GST (18%):</td>
+                    <td class="payment-value">₹${gstAmount}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Payment Status:</td>
+                    <td class="payment-value">${PAYMENT_STATUS}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Receipt Number:</td>
+                    <td class="payment-value">${RECEIPT_NUMBER}</td>
+                  </tr>
+                  <tr class="total-row">
+                    <td class="payment-label">Total Amount Paid:</td>
+                    <td class="payment-value">₹${totalAmount}</td>
+                  </tr>
+                </table>
+              </div>
+              <h3 class="section-title">
+                Shop Information
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Shop Name:</td>
+                  <td class="value">${shop.shopName}</td>
+                </tr>
+                <tr>
+                  <td class="label">Description:</td>
+                  <td class="value">${shop.shopDescription}</td>
+                </tr>
+                <tr>
+                  <td class="label">Address:</td>
+                  <td class="value">${shop.shopAddress}</td>
+                </tr>
+                <tr>
+                  <td class="label">Contact Number:</td>
+                  <td class="value">${shop.shopContact}</td>
+                </tr>
+                <tr>
+                  <td class="label">Email:</td>
+                  <td class="value">${shop.shopEmail}</td>
+                </tr>
+              </table>
 
-      <div class="next-steps">
-        <div class="section-title">What's Next?</div>
-        <p>Your ${isSubscription ? "subscription" : "extension package"} is now active. Here are some recommended actions:</p>
-        <ul>
-          <li>Add or update products in your shop.</li>
-          <li>Customize your shop’s settings (timing, banners, etc.).</li>
-          <li>Track analytics and package validity from your dashboard.</li>
-          <li>Contact support for any help needed along the way.</li>
-        </ul>
-      </div>
+              <!-- Owner Information -->
+              <h3 class="section-title">
+                Owner Information
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Owner Name:</td>
+                  <td class="value">${shop.ownerName}</td>
+                </tr>
+                <tr>
+                  <td class="label">Owner Phone:</td>
+                  <td class="value">${shop.ownerPhoneNumber}</td>
+                </tr>
+                <tr>
+                  <td class="label">Owner Email:</td>
+                  <td class="value">${shop.ownerEmail}</td>
+                </tr>
+                <tr>
+                  <td class="label">Owner Address:</td>
+                  <td class="value">${shop.ownerAddress}</td>
+                </tr>
+                <tr>
+                  <td class="label">PAN Number:</td>
+                  <td class="value">${shop.ownerPanNumber}</td>
+                </tr>
+              </table>
+              <h3 class="section-title">
+                Additional Details
+              </h3>
+              <table class="details-table" role="presentation">
+               ${shop.LicenseNumber ? `<tr><td class="label">License Number:</td><td class="value">${shop.LicenseNumber}</td></tr>` : ''}
+                ${shop.GstNumber ? `<tr><td class="label">GST Number:</td><td class="value">${shop.GstNumber}</td></tr>` : ''}
+                <tr>
+                  <td class="label">Registered On:</td>
+                  <td class="value">${new Date(shop.joinedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                </tr>
+              </table>
 
-      <p>If you need further assistance, feel free to contact our support team.</p>
-      <a href="mailto:gullyteam33@gmail.com" class="button">Contact Support</a>
-    </div>
-    <div class="footer">
-      &copy; ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.<br />
-      Email: <a href="mailto:gullyteam33@gmail.com">gullyteam33@gmail.com</a>
-    </div>
+              <!-- Getting Started -->
+              <div class="highlight-section">
+                <h3 class="highlight-title">Start with the basics:</h3>
+                <ul class="task-list">
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Log into your account and view your dashboard
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Add your first product or update shop details
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Explore the shop timing settings and customize your hours
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Upload high-quality images of your shop and products
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Track your subscription and analytics from the dashboard
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Upcoming Features -->
+              <div class="info-section">
+                <h3 class="info-title">What's Included in Your Subscription</h3>
+<p class="info-text">
+  Your subscription gives you access to essential tools to manage and grow your business. This includes the ability to list and manage products, edit your shop details, and monitor performance through the analytics dashboard.
+  <br><br>
+  Log in to your Gully App dashboard to get started and make the most of these features.
+</p>
+
+              </div>
+
+              <!-- Call to Action -->
+              <div class="cta-section">
+                <p class="cta-text">
+                  Thank you for joining us and trusting Gully App with your business growth. We look forward to building something amazing together!
+                </p>
+                <a href="mailto:gullyteam33@gmail.com" class="cta-button">
+                  Contact Support
+                </a>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <p class="footer-text">
+                © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
+              </p>
+              <p class="footer-text">
+                Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
+              </p>
+              <p class="footer-text">
+                For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
+              </p>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </table>
   </div>
 </body>
 </html>

@@ -881,7 +881,7 @@ const ShopController = {
             return res.status(200).json({
                 sucess: true,
                 message: "Otp Verified Successfully",
-                 data: { message: result },
+                data: { message: result },
             });
         } catch (err) {
             console.log(" Error in verifyOTP ");

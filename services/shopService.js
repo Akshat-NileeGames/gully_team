@@ -16,41 +16,41 @@ const ShopService = {
 
         const userInfo = global.user;
         let shopImg = [];
-        if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
-            for (const image of data.shopImage) {
-                try {
-                    const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
+        // if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
+        //     for (const image of data.shopImage) {
+        //         try {
+        //             const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
 
-                    if (!uploadedUrl) {
-                        throw new Error("Image upload failed or returned empty URL.");
-                    }
+        //             if (!uploadedUrl) {
+        //                 throw new Error("Image upload failed or returned empty URL.");
+        //             }
 
-                    shopImg.push(uploadedUrl);
-                } catch (uploadError) {
-                    console.error("Image upload failed:", uploadError);
-                    throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
-                }
-            }
-        } else {
-            throw CustomErrorHandler.badRequest("Shop images are required.");
-        }
+        //             shopImg.push(uploadedUrl);
+        //         } catch (uploadError) {
+        //             console.error("Image upload failed:", uploadError);
+        //             throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
+        //         }
+        //     }
+        // } else {
+        //     throw CustomErrorHandler.badRequest("Shop images are required.");
+        // }
 
-        let aadharFrontUrl = null;
-        let aadharBackUrl = null;
-        if (data.aadharFrontSide && data.aadharBackSide) {
-            try {
-                aadharFrontUrl = await ImageUploader.Upload(data.aadharFrontSide, "AadharImages");
-                if (!aadharFrontUrl) throw new Error("Aadhar front side upload failed.");
+        // let aadharFrontUrl = null;
+        // let aadharBackUrl = null;
+        // if (data.aadharFrontSide && data.aadharBackSide) {
+        //     try {
+        //         aadharFrontUrl = await ImageUploader.Upload(data.aadharFrontSide, "AadharImages");
+        //         if (!aadharFrontUrl) throw new Error("Aadhar front side upload failed.");
 
-                aadharBackUrl = await ImageUploader.Upload(data.aadharBackSide, "AadharImages");
-                if (!aadharBackUrl) throw new Error("Aadhar back side upload failed.");
-            } catch (uploadError) {
-                console.error("Aadhar image upload failed:", uploadError);
-                throw CustomErrorHandler.serverError("Failed to upload Aadhar card images.");
-            }
-        } else {
-            throw CustomErrorHandler.badRequest("Both Aadhar front and back images are required.");
-        }
+        //         aadharBackUrl = await ImageUploader.Upload(data.aadharBackSide, "AadharImages");
+        //         if (!aadharBackUrl) throw new Error("Aadhar back side upload failed.");
+        //     } catch (uploadError) {
+        //         console.error("Aadhar image upload failed:", uploadError);
+        //         throw CustomErrorHandler.serverError("Failed to upload Aadhar card images.");
+        //     }
+        // } else {
+        //     throw CustomErrorHandler.badRequest("Both Aadhar front and back images are required.");
+        // }
         const shopTiming = {
             Monday: {
                 isOpen: data.shopTiming.Monday.isOpen,
@@ -89,7 +89,6 @@ const ShopService = {
             },
         };
 
-        console.log("The got datetime:", data.joinedAt);
         const formatDateTime = (dateTimeString) => {
             const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
             if (!parsedDate.isValid) {
@@ -125,8 +124,8 @@ const ShopService = {
             ownerEmail: data.ownerEmail,
             ownerAddress: data.ownerAddress,
             ownerAddharImages: {
-                aadharFrontSide: aadharFrontUrl,
-                aadharBackSide: aadharBackUrl
+                aadharFrontSide: 'aadharFrontUrl',
+                aadharBackSide: 'aadharBackUrl'
             },
             ownerPanNumber: data.ownerPanNumber,
             userId: userInfo.userId,
@@ -138,7 +137,8 @@ const ShopService = {
             setTimeout(async () => {
                 console.log("Sending email after 10 seconds... with Shop id", result._id);
                 const user = await User.findById(userInfo.userId);
-                const mail = await ShopService.sendMail("Shop", user, result);
+                console.log(data.ownerEmail);
+                const mail = await ShopService.sendMail("Shop", user, data.ownerEmail, result);
 
                 console.log(mail);
             }, 2000);
@@ -148,7 +148,7 @@ const ShopService = {
         }
     },
 
-    async sendMail(userFor = "", user, shop) {
+    async sendMail(userFor = "", user, ownerEmail, shop) {
         const transporter = nodemailer.createTransport({
             host: "smtp.gmail.com",
             port: 587,
@@ -162,137 +162,433 @@ const ShopService = {
 
         const mailOptions = {
             from: "gullyteam33@gmail.com",
-            to: user.email,
+            to: ownerEmail,
             subject: "Welcome! Your Shop Has Been Successfully Registered",
             html: `<!DOCTYPE html>
-            <html lang="en">
-            <head>
-            <meta charset="UTF-8">
-            <title>Welcome to Gully App</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-            body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-            background-color: #f4f6f8;
-            color: #333;
-        }
-        .email-wrapper {
-            padding: 5px;
-        }
-        .email-container {
-            max-width: 720px;
-            margin: auto;
-            background-color: #ffffff;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.05);
-        }
-        .email-header {
-            background: linear-gradient(to right, #4e54c8, #8f94fb);
-            color: #fff;
-            padding: 30px;
-            text-align: center;
-        }
-        .email-header h1 {
-            margin: 0;
-            font-size: 24px;
-        }
-        .email-body {
-            padding: 30px;
-        }
-        .email-body h2 {
-            color: #4e54c8;
-            font-size: 20px;
-            margin-top: 0;
-        }
-        .highlight-box {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        .highlight-box p {
-            margin: 10px 0;
-        }
-        .tasks {
-            padding-left: 20px;
-            margin-top: 10px;
-        }
-        .tasks li {
-            margin-bottom: 8px;
-        }
-        .footer {
-            padding: 20px;
-            text-align: center;
-            font-size: 13px;
-            color: #888;
-        }
-        a.button {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 10px 24px;
-            background-color: #4e54c8;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: bold;
-        }
-        a.button:hover {
-            background-color: #3b40b0;
-        }
-    </style>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop Registration Successful - Gully App</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset styles for email clients */
+    body, table, td, p, a, li, blockquote {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    
+    table, td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+    
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+    }
+
+    /* Main styles */
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background-color: #f4f6f8 !important;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .email-wrapper {
+      width: 100% !important;
+      background-color: #f4f6f8;
+      padding: 20px 0;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .header {
+      background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+      padding: 40px 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: bold;
+      line-height: 1.2;
+    }
+
+    .header p {
+      margin: 8px 0 0 0;
+      color: #bfdbfe;
+      font-size: 16px;
+    }
+
+    .content {
+      padding: 40px 30px;
+    }
+
+    .welcome-text {
+      font-size: 20px;
+      font-weight: bold;
+      color: #1f2937;
+      margin: 0 0 20px 0;
+      line-height: 1.3;
+    }
+
+    .intro-text {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0 0 30px 0;
+      line-height: 1.6;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2563eb;
+      margin: 30px 0 20px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+
+    .details-table td {
+      padding: 12px 0;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: top;
+    }
+
+    .details-table td.label {
+      font-weight: 600;
+      color: #374151;
+      width: 35%;
+      font-size: 14px;
+    }
+
+    .details-table td.value {
+      color: #6b7280;
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    .highlight-section {
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 30px 0;
+    }
+
+    .highlight-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #166534;
+      margin: 0 0 15px 0;
+    }
+
+    .task-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .task-item {
+      margin: 8px 0;
+      color: #166534;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .checkmark {
+      color: #16a34a;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    .info-section {
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 20px 0;
+    }
+
+    .info-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1e40af;
+      margin: 0 0 15px 0;
+    }
+
+    .info-text {
+      color: #1e40af;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .cta-section {
+      text-align: center;
+      margin: 40px 0 20px 0;
+    }
+
+    .cta-text {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0 0 25px 0;
+      line-height: 1.6;
+    }
+
+    .cta-button {
+      display: inline-block;
+      padding: 14px 28px;
+      background-color: #2563eb;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .cta-button:hover {
+      background-color: #1d4ed8;
+    }
+
+    .footer {
+      background-color: #f9fafb;
+      padding: 30px;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .footer-text {
+      font-size: 13px;
+      color: #6b7280;
+      margin: 0 0 8px 0;
+      line-height: 1.5;
+    }
+
+    .footer-link {
+      color: #2563eb;
+      text-decoration: none;
+    }
+
+    .footer-link:hover {
+      color: #1d4ed8;
+    }
+
+    /* Mobile responsiveness */
+    @media only screen and (max-width: 600px) {
+      .email-wrapper {
+        padding: 10px 0;
+      }
+      
+      .email-container {
+        margin: 0 10px;
+        border-radius: 8px;
+      }
+      
+      .header {
+        padding: 30px 20px;
+      }
+      
+      .header h1 {
+        font-size: 24px;
+      }
+      
+      .content {
+        padding: 30px 20px;
+      }
+      
+      .details-table td.label {
+        width: 40%;
+      }
+      
+      .highlight-section,
+      .info-section {
+        padding: 20px;
+      }
+      
+      .cta-button {
+        padding: 12px 24px;
+        font-size: 15px;
+      }
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      .email-container {
+        background-color: #ffffff !important;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="email-wrapper">
-        <div class="email-container">
-            <div class="email-header">
-                <h1>Welcome to Gully App!</h1>
+  <div class="email-wrapper">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+      <tr>
+        <td align="center">
+          <div class="email-container">
+            <!-- Header -->
+            <div class="header">
+              <h1>Shop Registration Successful!</h1>
+              <p>Welcome to the Gully App community</p>
             </div>
-            <div class="email-body">
-                <h2>Hello ${user.fullName || "User"},</h2>
 
-                <p>We’re thrilled to have you join our growing community of business owners and innovators.</p>
+            <!-- Content -->
+            <div class="content">
+              <!-- Welcome Message -->
+              <p class="welcome-text">Hello ${user.fullName || "User"}!</p>
+              <p class="intro-text">
+                Your shop has been successfully registered on the Gully App. We're delighted to welcome you to our growing network of innovative business owners and entrepreneurs.
+              </p>
+            
+              <!-- Shop Information -->
+              <h3 class="section-title">Shop Information</h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Shop Name:</td>
+                  <td class="value">${shop.shopName}</td>
+                </tr>
+                <tr>
+                  <td class="label">Description:</td>
+                  <td class="value">${shop.shopDescription}</td>
+                </tr>
+                <tr>
+                  <td class="label">Address:</td>
+                  <td class="value">${shop.shopAddress}</td>
+                </tr>
+                <tr>
+                  <td class="label">Contact Number:</td>
+                  <td class="value">${shop.shopContact}</td>
+                </tr>
+                <tr>
+                  <td class="label">Email:</td>
+                  <td class="value">${shop.shopEmail}</td>
+                </tr>
+                ${shop.shopLink ? `<tr><td class="label">Shop Link:</td><td class="value">${shop.shopLink}</td></tr>` : ''}
+              </table>
 
-          <div class="highlight-box">
-    <p><strong>Your shop registration is confirmed with the following details:</strong></p>
-    <p><strong>Shop Name:</strong> ${shop.shopName}</p>
-    <p><strong>Description:</strong> ${shop.shopDescription}</p>
-    <p><strong>Address:</strong> ${shop.shopAddress}</p>
-    <p><strong>Contact Number:</strong> ${shop.shopContact}</p>
-    <p><strong>Email:</strong> ${shop.shopEmail}</p>
-    <p><strong>Owner Name:</strong> ${shop.ownerName}</p>
-    <p><strong>Owner Phone:</strong> ${shop.ownerPhoneNumber}</p>
-    <p><strong>Owner Email:</strong> ${shop.ownerEmail}</p>
-    <p><strong>Owner Address:</strong> ${shop.ownerAddress}</p>
-    <p><strong>PAN Number:</strong> ${shop.ownerPanNumber}</p>
-    <p><strong>Registered On:</strong> ${new Date(shop.joinedAt).toLocaleDateString()}</p>
-</div>
+              <!-- Owner Information -->
+              <h3 class="section-title">Owner Information</h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Owner Name:</td>
+                  <td class="value">${shop.ownerName}</td>
+                </tr>
+                <tr>
+                  <td class="label">Owner Phone:</td>
+                  <td class="value">${shop.ownerPhoneNumber}</td>
+                </tr>
+                <tr>
+                  <td class="label">Owner Email:</td>
+                  <td class="value">${shop.ownerEmail}</td>
+                </tr>
+                <tr>
+                  <td class="label">Owner Address:</td>
+                  <td class="value">${shop.ownerAddress}</td>
+                </tr>
+                <tr>
+                  <td class="label">PAN Number:</td>
+                  <td class="value">${shop.ownerPanNumber}</td>
+                </tr>
+              </table>
 
-                <p><strong>Start with the basics:</strong></p>
-                <ul class="tasks">
-                    <li>✔ Log into your account and view your dashboard</li>
-                    <li>✔ Add your first product or update shop details</li>
-                    <li>✔ Explore the shop timing settings and customize your hours</li>
+              <!-- Additional Details -->
+              <h3 class="section-title">Additional Details</h3>
+              <table class="details-table" role="presentation">
+                ${shop.LicenseNumber ? `<tr><td class="label">License Number:</td><td class="value">${shop.LicenseNumber}</td></tr>` : ''}
+                ${shop.GstNumber ? `<tr><td class="label">GST Number:</td><td class="value">${shop.GstNumber}</td></tr>` : ''}
+                <tr>
+                  <td class="label">Registered On:</td>
+                  <td class="value">${new Date(shop.joinedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                </tr>
+              </table>
+
+              <!-- Getting Started -->
+              <div class="highlight-section">
+                <h3 class="highlight-title">Start with the basics:</h3>
+                <ul class="task-list">
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Log into your account and view your dashboard
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Add your first product or update shop details
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Explore the shop timing settings and customize your hours
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Upload high-quality images of your shop and products
+                  </li>
                 </ul>
+              </div>
 
-                <p><strong>Beyond the basics:</strong></p>
-                <p>
-                    Be sure to check out our upcoming features and growth tools inside the Gully App.
-                    Engage with our support team and learn how you can promote your shop through digital banners and packages.
+              <!-- Upcoming Features -->
+              <div class="info-section">
+                <h3 class="info-title">Stay tuned!</h3>
+                <p class="info-text">
+                  We're actively working on new promotional tools designed to help boost your shop's visibility — including digital banners, featured listings, and marketing packages. These features will be available soon within the Gully App to support your growth journey.
                 </p>
+              </div>
 
-                <p>Thank you for joining. Let’s build something amazing together!</p>
-
-                <a href="mailto:gullyteam33@gmail.com" class="button">Contact Support</a>
+              <!-- Call to Action -->
+              <div class="cta-section">
+                <p class="cta-text">
+                  Thank you for joining us. We look forward to building something amazing together!
+                </p>
+                <a href="mailto:gullyteam33@gmail.com" class="cta-button">
+                  ✉️ Need Help? Contact Us
+                </a>
+              </div>
             </div>
+
+            <!-- Footer -->
             <div class="footer">
-                &copy; ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.<br>
-                Email: <a href="mailto:gullyteam33@gmail.com">gullyteam33@gmail.com</a>
+              <p class="footer-text">
+                © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
+              </p>
+              <p class="footer-text">
+                Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
+              </p>
             </div>
-        </div>
-    </div>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
 </body>
 </html>`};
 
@@ -308,6 +604,7 @@ const ShopService = {
     async getShop(data) {
         try {
             const shop = await Shop.findById(data.shopId).populate('packageId AdditionalPackages');
+            
             if (!shop) {
                 throw CustomErrorHandler.notFound("Product Not Found");
             }
@@ -1209,15 +1506,6 @@ const ShopService = {
             shop.packageStartDate = data.packageStartDate;
             shop.packageEndDate = data.packageEndDate;
             shop.isSubscriptionPurchased = true;
-            // setTimeout(async () => {
-            //     console.log("Sending email after 10 seconds...",);
-            //     await ShopService.sendpaymentMail(
-            //         "shop-subscription",
-            //         user,
-            //         shop,
-            //         purchasedPackage
-            //     );
-            // }, 10000);
             shop.save();
             return shop;
         } catch (error) {
@@ -1240,15 +1528,6 @@ const ShopService = {
             if (!purchasedPackage) {
                 return CustomErrorHandler.notFound("Package Not Found");
             }
-            setTimeout(async () => {
-                console.log("Sending email after 10 seconds...",);
-                await ShopService.sendpaymentMail(
-                    "ExtensionPackage",
-                    user,
-                    shop,
-                    purchasedPackage
-                );
-            }, 2000);
             shop.AdditionalPackages.push(data.packageId);
             shop.save();
             return shop;
@@ -1256,9 +1535,6 @@ const ShopService = {
             console.log("Failed to update Subscription Status:", error);
         }
     },
-
-
-
 
     async SimilarProduct(data) {
         const { category, subcategory, brand } = data;
