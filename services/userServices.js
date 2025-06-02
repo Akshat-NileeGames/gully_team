@@ -311,7 +311,7 @@ const userServices = {
     } else {
       // Increment attempts in MongoDB
       await OTP.updateOne({ userId }, { $inc: { attempts: 1 } });
-      throw CustomErrorHandler.unAuthorized("Invalid OTP or OTP expired");
+      throw CustomErrorHandler.notFound("Invalid OTP or OTP expired");
     }
   },
 

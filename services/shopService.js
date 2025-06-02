@@ -16,41 +16,41 @@ const ShopService = {
 
         const userInfo = global.user;
         let shopImg = [];
-        // if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
-        //     for (const image of data.shopImage) {
-        //         try {
-        //             const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
+        if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
+            for (const image of data.shopImage) {
+                try {
+                    const uploadedUrl = await ImageUploader.Upload(image, "ShopImages");
 
-        //             if (!uploadedUrl) {
-        //                 throw new Error("Image upload failed or returned empty URL.");
-        //             }
+                    if (!uploadedUrl) {
+                        throw new Error("Image upload failed or returned empty URL.");
+                    }
 
-        //             shopImg.push(uploadedUrl);
-        //         } catch (uploadError) {
-        //             console.error("Image upload failed:", uploadError);
-        //             throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
-        //         }
-        //     }
-        // } else {
-        //     throw CustomErrorHandler.badRequest("Shop images are required.");
-        // }
+                    shopImg.push(uploadedUrl);
+                } catch (uploadError) {
+                    console.error("Image upload failed:", uploadError);
+                    throw CustomErrorHandler.serverError("Failed to upload one or more shop images.");
+                }
+            }
+        } else {
+            throw CustomErrorHandler.badRequest("Shop images are required.");
+        }
 
-        // let aadharFrontUrl = null;
-        // let aadharBackUrl = null;
-        // if (data.aadharFrontSide && data.aadharBackSide) {
-        //     try {
-        //         aadharFrontUrl = await ImageUploader.Upload(data.aadharFrontSide, "AadharImages");
-        //         if (!aadharFrontUrl) throw new Error("Aadhar front side upload failed.");
+        let aadharFrontUrl = null;
+        let aadharBackUrl = null;
+        if (data.aadharFrontSide && data.aadharBackSide) {
+            try {
+                aadharFrontUrl = await ImageUploader.Upload(data.aadharFrontSide, "AadharImages");
+                if (!aadharFrontUrl) throw new Error("Aadhar front side upload failed.");
 
-        //         aadharBackUrl = await ImageUploader.Upload(data.aadharBackSide, "AadharImages");
-        //         if (!aadharBackUrl) throw new Error("Aadhar back side upload failed.");
-        //     } catch (uploadError) {
-        //         console.error("Aadhar image upload failed:", uploadError);
-        //         throw CustomErrorHandler.serverError("Failed to upload Aadhar card images.");
-        //     }
-        // } else {
-        //     throw CustomErrorHandler.badRequest("Both Aadhar front and back images are required.");
-        // }
+                aadharBackUrl = await ImageUploader.Upload(data.aadharBackSide, "AadharImages");
+                if (!aadharBackUrl) throw new Error("Aadhar back side upload failed.");
+            } catch (uploadError) {
+                console.error("Aadhar image upload failed:", uploadError);
+                throw CustomErrorHandler.serverError("Failed to upload Aadhar card images.");
+            }
+        } else {
+            throw CustomErrorHandler.badRequest("Both Aadhar front and back images are required.");
+        }
         const shopTiming = {
             Monday: {
                 isOpen: data.shopTiming.Monday.isOpen,
@@ -124,8 +124,8 @@ const ShopService = {
             ownerEmail: data.ownerEmail,
             ownerAddress: data.ownerAddress,
             ownerAddharImages: {
-                aadharFrontSide: 'aadharFrontUrl',
-                aadharBackSide: 'aadharBackUrl'
+                aadharFrontSide: aadharFrontUrl,
+                aadharBackSide: aadharBackUrl
             },
             ownerPanNumber: data.ownerPanNumber,
             userId: userInfo.userId,
@@ -604,7 +604,7 @@ const ShopService = {
     async getShop(data) {
         try {
             const shop = await Shop.findById(data.shopId).populate('packageId AdditionalPackages');
-            
+
             if (!shop) {
                 throw CustomErrorHandler.notFound("Product Not Found");
             }
@@ -703,12 +703,31 @@ const ShopService = {
     async getMyShop() {
         try {
             const userinfo = global.user;
-            const shop = await Shop.find({ userId: userinfo.userId }, {
-                updatedAt: 0,
-                createdAt: 0,
-                __v: 0,
-            }).populate('packageId AdditionalPackages');
-            return shop;
+
+            const shops = await Shop.find(
+                { userId: userinfo.userId },
+                {
+                    updatedAt: 0,
+                    createdAt: 0,
+                    __v: 0,
+                }
+            ).populate('packageId AdditionalPackages');
+
+            const now = new Date();
+
+            for (const shop of shops) {
+                const isExpired = shop.packageEndDate && shop.packageEndDate < now;
+                const shouldBeFalse = isExpired && shop.isSubscriptionPurchased;
+                const shouldBeTrue = !isExpired && !shop.isSubscriptionPurchased;
+
+                if (shouldBeFalse || shouldBeTrue) {
+                    shop.isSubscriptionPurchased = !isExpired;
+                    await shop.save();
+                }
+            }
+
+            return shops;
+
         } catch (err) {
             console.log("Error in getting my shop:", err);
         }
@@ -798,13 +817,6 @@ const ShopService = {
         const { productsImage, productName, productsDescription, productsPrice,
             productCategory, productSubCategory, productBrand, shopId, discountedvalue, discounttype } = data;
         let imagesUrl = [];
-        // if (productsImage && productsImage.length > 0) {
-        //     for (let image in productsImage) {
-        //         const uploadedImage = await ImageUploader.Upload(image, "Product");
-        //         imagesUrl.push(uploadedImage);
-        //         // imagesUrl.push(image);
-        //     }
-        // }
         if (productsImage && productsImage.length > 0) {
             for (const image of productsImage) {
                 const uploadedImage = await ImageUploader.Upload(image, "Product");
@@ -897,28 +909,33 @@ const ShopService = {
             throw err;
         }
     },
-
     async getFilterProduct(filters) {
-        const query = { shopId: filters.shopId };
+        const baseQuery = { shopId: filters.shopId };
+        const orConditions = [];
 
-        if (filters.productCategory && filters.productCategory.length > 0) {
-            query.productCategory = { $in: filters.productCategory };
+        if (filters.productCategory?.length > 0) {
+            orConditions.push({ productCategory: { $in: filters.productCategory } });
         }
 
-        if (filters.productSubCategory && filters.productSubCategory.length > 0) {
-            query.productSubCategory = { $in: filters.productSubCategory };
+        if (filters.productSubCategory?.length > 0) {
+            orConditions.push({ productSubCategory: { $in: filters.productSubCategory } });
         }
 
-        if (filters.productBrand && filters.productBrand.length > 0) {
-            query.productBrand = { $in: filters.productBrand };
+        if (filters.productBrand?.length > 0) {
+            orConditions.push({ productBrand: { $in: filters.productBrand } });
         }
+
+        const finalQuery = {
+            ...baseQuery,
+            ...(orConditions.length > 0 ? { $or: orConditions } : {}),
+        };
 
         const page = parseInt(filters.page) || 1;
         const limit = 10;
         const skip = (page - 1) * limit;
 
         try {
-            const allMatchingProducts = await Product.find(query)
+            const allMatchingProducts = await Product.find(finalQuery)
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -934,7 +951,6 @@ const ShopService = {
             const filterProducts = {};
             for (const category in categorizedProducts) {
                 const items = categorizedProducts[category];
-                const total = items.length;
                 const paginatedItems = items.slice(skip, skip + limit);
                 filterProducts[category] = paginatedItems;
             }
@@ -942,10 +958,58 @@ const ShopService = {
             return filterProducts;
 
         } catch (err) {
-            console.log("Error fetching categorized filtered products:", err);
+            console.error("Error fetching categorized filtered products:", err);
             throw err;
         }
     },
+    // async getFilterProduct(filters) {
+    //     const query = { shopId: filters.shopId };
+
+    //     if (filters.productCategory && filters.productCategory.length > 0) {
+    //         query.productCategory = { $in: filters.productCategory };
+    //     }
+
+    //     if (filters.productSubCategory && filters.productSubCategory.length > 0) {
+    //         query.productSubCategory = { $in: filters.productSubCategory };
+    //     }
+
+    //     if (filters.productBrand && filters.productBrand.length > 0) {
+    //         query.productBrand = { $in: filters.productBrand };
+    //     }
+
+    //     const page = parseInt(filters.page) || 1;
+    //     const limit = 10;
+    //     const skip = (page - 1) * limit;
+
+    //     try {
+    //         const allMatchingProducts = await Product.find(query)
+    //             .sort({ createdAt: -1 })
+    //             .lean();
+
+    //         const categorizedProducts = {};
+    //         for (const product of allMatchingProducts) {
+    //             const category = product.productCategory || "Uncategorized";
+    //             if (!categorizedProducts[category]) {
+    //                 categorizedProducts[category] = [];
+    //             }
+    //             categorizedProducts[category].push(product);
+    //         }
+
+    //         const filterProducts = {};
+    //         for (const category in categorizedProducts) {
+    //             const items = categorizedProducts[category];
+    //             const total = items.length;
+    //             const paginatedItems = items.slice(skip, skip + limit);
+    //             filterProducts[category] = paginatedItems;
+    //         }
+
+    //         return filterProducts;
+
+    //     } catch (err) {
+    //         console.log("Error fetching categorized filtered products:", err);
+    //         throw err;
+    //     }
+    // },
     // async getFilterProduct(data) {
     //     const { latitude, longitude, shopId, page = 1 } = data;
     //     const limit = 10;
@@ -1145,10 +1209,13 @@ const ShopService = {
                     totalMediaLimit += pkg.maxMedia || 0;
                 });
             }
+            let TotalEditDone = shop.TotalEditDone;
+
 
             return {
                 totalImageCount,
-                totalMediaLimit
+                totalMediaLimit,
+                TotalEditDone
             };
 
         } catch (error) {
