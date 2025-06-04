@@ -742,12 +742,31 @@ const otherServices = {
     const history = await OrderHistory.find({ userId: userId })
       .populate('PackageId')
       .populate({
+        path: 'shopId',
+        populate: [
+          { path: 'packageId' },
+          { path: 'AdditionalPackages' }
+        ]
+      })
+      // .populate({
+      //   path: 'tournamentId',
+      //   populate: [
+      //     { path: 'ballType', select: 'name' },
+      //     { path: 'gameType', select: 'name' },
+      //     { path: 'pitchType', select: 'name' },
+      //     { path: 'matchType', select: 'name' },
+      //     { path: 'tournamentCategory', select: 'name' },
+      //     { path: 'tournamentPrize', select: 'name' },
+      //     {
+      //       path: 'user',
+      //       select: 'email phoneNumber fullName locations.placeName',
+      //     },
+      //   ]
+      // })
+      .populate({
         path: 'bannerId',
         select: '-locationHistory',
       });
-
-    console.log("History : ", history);
-
     return { history, totalCount };
   },
 
@@ -1066,27 +1085,99 @@ const otherServices = {
     const gstAmount = (purchasedPackage.price * 0.18).toFixed(2);
     const totalAmount = purchasedPackage.price.toFixed(2);
 
-    // Dynamic title & subject
-    const isSubscription = userFor === "shop-subscription";
-    const title = isSubscription
-      ? "Subscription Payment Confirmed"
-      : "Extension Package Activated";
-    const subject = isSubscription
-      ? "Subscription Activated for Your Shop!"
-      : "Extension Package Successfully Added to Your Shop";
+    // Determine status-specific content
+    let headerTitle, headerColor, statusBadgeColor, statusMessage, introText, ctaText, ctaButtons;
 
-    const shopName = shop?.shopName || "your shop";
+    // Set content based on payment status
+    if (PAYMENT_STATUS === "Failed") {
+      headerTitle = "Payment Failed - Action Required";
+      headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)";
+      statusBadgeColor = "#fee2e2";
+      statusMessage = `
+        <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
+          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
+          <p style="color: #b91c1c; margin: 0; font-size: 14px;">
+            We were unable to process your payment for the subscription package. Please check your payment details and try again.
+          </p>
+        </div>
+      `;
+      introText = `
+        We regret to inform you that your payment for the ${purchasedPackage.name} subscription package could not be processed. 
+        This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
+      `;
+      ctaText = "Please retry your payment to activate your subscription and access all features.";
+      ctaButtons = `
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+          Contact Support
+        </a>
+      `;
+    } else if (PAYMENT_STATUS === "Pending") {
+      headerTitle = "Payment Pending - Verification in Progress";
+      headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)";
+      statusBadgeColor = "#fef3c7";
+      statusMessage = `
+        <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
+          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Pending</p>
+          <p style="color: #92400e; margin: 0; font-size: 14px;">
+            Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
+          </p>
+        </div>
+      `;
+      introText = `
+        Thank you for purchasing the ${purchasedPackage.name} subscription package. Your payment is currently being processed.
+        You will receive a confirmation email once the payment is successfully verified.
+      `;
+      ctaText = "You can check the status of your payment in your Transaction History.";
+      ctaButtons = `
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+          Contact Support
+        </a>
+      `;
+    } else {
+      // Success or any other status
+      headerTitle = "Subscription Package Successfully Purchased";
+      headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)";
+      statusBadgeColor = "#fef3c7"; // Keep the same for transaction ID
+      statusMessage = `
+        <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
+          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
+          <p style="color: #166534; margin: 0; font-size: 14px;">
+            Your payment has been successfully processed and your subscription is now active.
+          </p>
+        </div>
+      `;
+      introText = `
+        We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully App — 
+        We're excited to have you onboard and look forward to supporting your business growth through the Gully App.
+      `;
+      ctaText = "Thank you for joining us and trusting Gully App with your business growth. We look forward to building something amazing together!";
+      ctaButtons = `
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+          Contact Support
+        </a>
+      `;
+    }
+
+    // Dynamic title & subject based on payment status
+    let subject;
+    if (PAYMENT_STATUS === "Failed") {
+      subject = "Payment Failed - Action Required for Your Gully App Subscription";
+    } else if (PAYMENT_STATUS === "Pending") {
+      subject = "Payment Pending - Your Gully App Subscription";
+    } else {
+      subject = "Payment Confirmation – Gully App Subscription";
+    }
 
     const mailOptions = {
       from: "Gully App <gullyteam33@gmail.com>",
       to: shop.ownerEmail,
-      subject: "Payment Confirmation – Gully App Subscription",
+      subject: subject,
       html: `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Confirmation – Gully App</title>
+  <title>Payment Status – Gully App</title>
   <style>
     body, table, td, p, a, li, blockquote {
       -webkit-text-size-adjust: 100%;
@@ -1132,7 +1223,7 @@ const otherServices = {
     }
 
     .header {
-      background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+      background: ${headerColor};
       padding: 40px 30px;
       text-align: center;
     }
@@ -1274,6 +1365,12 @@ const otherServices = {
       font-weight: 500;
     }
 
+    .payment-table .status-${PAYMENT_STATUS.toLowerCase()} {
+      color: ${PAYMENT_STATUS === "Failed" ? "#dc2626" :
+          PAYMENT_STATUS === "Pending" ? "#92400e" : "#16a34a"};
+      font-weight: bold;
+    }
+
     .payment-table .total-row {
       background-color: #1e40af;
       color: #ffffff;
@@ -1287,7 +1384,7 @@ const otherServices = {
     }
 
     .transaction-id {
-      background-color: #fef3c7;
+      background-color: ${statusBadgeColor};
       border: 1px solid #f59e0b;
       border-radius: 6px;
       padding: 12px 16px;
@@ -1476,18 +1573,18 @@ const otherServices = {
           <div class="email-container">
             <!-- Header -->
             <div class="header">
-              <h1>Subscription Package Successfully Purchased</h1>
-              <p>Welcome to the Gully App community</p>
+              <h1>${headerTitle}</h1>
+              <p>Gully App Subscription</p>
             </div>
 
             <!-- Content -->
             <div class="content">
               <!-- Welcome Message -->
               <p class="welcome-text">Hello ${user.fullName}! 👋</p>
-              <p class="intro-text">
-  We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully App — We’re excited to have you onboard and look forward to supporting your business growth through the Gully App.
-</p>
+              <p class="intro-text">${introText}</p>
 
+              <!-- Status Message -->
+              ${statusMessage}
 
               <div class="transaction-id">
                 <div class="label">Transaction ID:</div>
@@ -1511,14 +1608,14 @@ const otherServices = {
                   </tr>
                   <tr>
                     <td class="payment-label">Payment Status:</td>
-                    <td class="payment-value">${PAYMENT_STATUS}</td>
+                    <td class="payment-value status-${PAYMENT_STATUS.toLowerCase()}">${PAYMENT_STATUS}</td>
                   </tr>
                   <tr>
                     <td class="payment-label">Receipt Number:</td>
                     <td class="payment-value">${RECEIPT_NUMBER}</td>
                   </tr>
                   <tr class="total-row">
-                    <td class="payment-label">Total Amount Paid:</td>
+                    <td class="payment-label">Total Amount:</td>
                     <td class="payment-value">₹${totalAmount}</td>
                   </tr>
                 </table>
@@ -1587,6 +1684,7 @@ const otherServices = {
                 </tr>
               </table>
 
+              ${PAYMENT_STATUS !== "Failed" ? `
               <!-- Getting Started -->
               <div class="highlight-section">
                 <h3 class="highlight-title">Start with the basics:</h3>
@@ -1613,26 +1711,35 @@ const otherServices = {
                   </li>
                 </ul>
               </div>
+              ` : ''}
 
-              <!-- Upcoming Features -->
+              <!-- Info Section -->
               <div class="info-section">
-                <h3 class="info-title">What's Included in Your Subscription</h3>
-<p class="info-text">
-  Your subscription gives you access to essential tools to manage and grow your business. This includes the ability to list and manage products, edit your shop details, and monitor performance through the analytics dashboard.
-  <br><br>
-  Log in to your Gully App dashboard to get started and make the most of these features.
-</p>
-
+                <h3 class="info-title">${PAYMENT_STATUS === "Failed" ? "Payment Failed - What to Do Next" : "What's Included in Your Subscription"}</h3>
+                <p class="info-text">
+                  ${PAYMENT_STATUS === "Failed" ? `
+                    Your payment could not be processed. This might be due to:
+                    <br><br>
+                    • Insufficient funds in your account<br>
+                    • Incorrect card details<br>
+                    • Bank declined the transaction<br>
+                    • Temporary issue with the payment gateway
+                    <br><br>
+                    Please try again with a different payment method or contact your bank for more information.
+                  ` : `
+                    Your subscription gives you access to essential tools to manage and grow your business. This includes the ability to list and manage products, edit your shop details, and monitor performance through the analytics dashboard.
+                    <br><br>
+                    Log in to your Gully App dashboard to get started and make the most of these features.
+                  `}
+                </p>
               </div>
 
               <!-- Call to Action -->
               <div class="cta-section">
                 <p class="cta-text">
-                  Thank you for joining us and trusting Gully App with your business growth. We look forward to building something amazing together!
+                  ${ctaText}
                 </p>
-                <a href="mailto:gullyteam33@gmail.com" class="cta-button">
-                  Contact Support
-                </a>
+                ${ctaButtons}
               </div>
             </div>
 
@@ -1656,7 +1763,6 @@ const otherServices = {
 </body>
 </html>
 `
-      ,
     };
 
     transporter.sendMail(mailOptions, function (error, info) {

@@ -86,14 +86,13 @@ const ShopController = {
 
     //#region GetShop
     async getShop(req, res, next) {
-        const productschema = Joi.object({
+        const shopSchema = Joi.object({
             shopId: Joi.string().required(),
         });
 
-        const { error } = productschema.validate(req.body);
+        const { error } = shopSchema.validate(req.body);
         if (error) return next(error);
         try {
-
             const result = await ShopService.getShop(req.body);
             return res.status(200).json({
                 success: true,
@@ -101,7 +100,7 @@ const ShopController = {
                 data: { shop: result }
             });
         } catch (error) {
-            console.log(`Failed to Get The product: ${error}`);
+            console.log(`Failed to Get The shop: ${error}`);
         }
     },
     //#endregion

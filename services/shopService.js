@@ -603,14 +603,15 @@ const ShopService = {
 
     async getShop(data) {
         try {
-            const shop = await Shop.findById(data.shopId).populate('packageId AdditionalPackages');
-
+            const { shopId } = data;
+            const shop = await Shop.findById(shopId).populate('packageId AdditionalPackages');
+            console.log(shop);
             if (!shop) {
-                throw CustomErrorHandler.notFound("Product Not Found");
+                throw CustomErrorHandler.notFound("Shop Not Found");
             }
             return shop;
         } catch (error) {
-            console.log(`Failed to Get The product: ${error}`);
+            console.log(`Failed to Get The shop: ${error}`);
         }
     },
 
@@ -716,12 +717,23 @@ const ShopService = {
             const now = new Date();
 
             for (const shop of shops) {
-                const isExpired = shop.packageEndDate && shop.packageEndDate < now;
-                const shouldBeFalse = isExpired && shop.isSubscriptionPurchased;
-                const shouldBeTrue = !isExpired && !shop.isSubscriptionPurchased;
+                let shouldUpdate = false;
 
-                if (shouldBeFalse || shouldBeTrue) {
-                    shop.isSubscriptionPurchased = !isExpired;
+                if (!shop.packageEndDate) {
+                    if (shop.isSubscriptionPurchased !== false) {
+                        shop.isSubscriptionPurchased = false;
+                        shouldUpdate = true;
+                    }
+                } else {
+                    const isExpired = shop.packageEndDate < now;
+                    const newStatus = !isExpired;
+                    if (shop.isSubscriptionPurchased !== newStatus) {
+                        shop.isSubscriptionPurchased = newStatus;
+                        shouldUpdate = true;
+                    }
+                }
+
+                if (shouldUpdate) {
                     await shop.save();
                 }
             }
@@ -742,7 +754,8 @@ const ShopService = {
             type: "Point",
             coordinates: [longitude, latitude]
         };
-
+        //TODO:Need to remove these comment below
+        console.log("The current location:", userLocation);
         // Find shops with expired subscriptions within the defined radius
         const expiredShops = await Shop.find({
             "locationHistory.point": {
@@ -809,7 +822,6 @@ const ShopService = {
                 }
             }
         ]);
-
         return nearbyShops;
     },
 
@@ -1210,12 +1222,20 @@ const ShopService = {
                 });
             }
             let TotalEditDone = shop.TotalEditDone;
-
-
+            let totalMaxEditsAllowed = 0;
+            if (shop.packageId) {
+                totalMaxEditsAllowed += shop.packageId.MaxEditAllowed || 0;
+            }
+            if (Array.isArray(shop.AdditionalPackages) && shop.AdditionalPackages.length > 0) {
+                shop.AdditionalPackages.forEach(pkg => {
+                    totalMaxEditsAllowed += pkg.MaxEditAllowed || 0;
+                });
+            }
             return {
                 totalImageCount,
                 totalMediaLimit,
-                TotalEditDone
+                TotalEditDone,
+                totalMaxEditsAllowed
             };
 
         } catch (error) {
