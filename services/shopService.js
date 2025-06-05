@@ -1197,6 +1197,39 @@ const ShopService = {
             throw error;
         }
     },
+    async getShopProductForUser(data) {
+        try {
+            const shop = await Shop.findById(data.shopId);
+            if (!shop) {
+                return CustomErrorHandler.notFound("The specified shop is not available.");
+            }
+
+            const page = parseInt(data.page) || 1;
+            const limit = 10;
+            const skip = (page - 1) * limit;
+
+            const products = await Product.find({ shopId: shop._id, isActive: true })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+
+            const totalProducts = await Product.countDocuments({ shopId: shop._id });
+            const categorizedProducts = {};
+            products.forEach((product) => {
+                const category = product.productCategory || "Uncategorized";
+                if (!categorizedProducts[category]) {
+                    categorizedProducts[category] = [];
+                }
+                categorizedProducts[category].push(product);
+            });
+
+            return categorizedProducts;
+        } catch (error) {
+            console.log("Failed to get Shop Products with pagination", error);
+            throw error;
+        }
+    },
     async getTotalImageCount(shopId) {
         try {
             const shop = await Shop.findById(shopId)

@@ -324,6 +324,30 @@ const ShopController = {
     },
     //#endregion
 
+    //#region GetShopProduct
+    async getShopProductForUser(req, res, next) {
+        const shopSchema = Joi.object({
+            shopId: Joi.string().required(),
+            page: Joi.number().optional()
+        });
+
+        const { error } = shopSchema.validate(req.params);
+        if (error) return next(error);
+
+        try {
+            const result = await ShopService.getShopProductForUser(req.params);
+            return res.status(200).json({
+                success: true,
+                message: "Shop Product Fetch Successfully",
+                data: { products: result }
+            });
+        } catch (error) {
+            console.error("Unable to fetch Shop Product:", error);
+            return res.status(500).json({ success: false, message: "Internal Server Error" });
+        }
+    },
+    //#endregion
+
     //#region getTotalImageCount
     async getTotalImageCount(req, res, next) {
         const shopSchema = Joi.object({
