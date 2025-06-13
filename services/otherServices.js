@@ -1147,10 +1147,10 @@ const otherServices = {
         </div>
       `;
       introText = `
-        We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully App — 
-        We're excited to have you onboard and look forward to supporting your business growth through the Gully App.
+        We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully Team — 
+        We're excited to have you onboard and look forward to supporting your business growth through the Gully Team.
       `;
-      ctaText = "Thank you for joining us and trusting Gully App with your business growth. We look forward to building something amazing together!";
+      ctaText = "Thank you for joining us and trusting Gully Team with your business growth. We look forward to building something amazing together!";
       ctaButtons = `
         <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
           Contact Support
@@ -1161,15 +1161,15 @@ const otherServices = {
     // Dynamic title & subject based on payment status
     let subject;
     if (PAYMENT_STATUS === "Failed") {
-      subject = "Payment Failed - Action Required for Your Gully App Subscription";
+      subject = "Payment Failed - Action Required for Your Gully Team Subscription";
     } else if (PAYMENT_STATUS === "Pending") {
-      subject = "Payment Pending - Your Gully App Subscription";
+      subject = "Payment Pending - Your Gully Team Subscription";
     } else {
-      subject = "Payment Confirmation – Gully App Subscription";
+      subject = "Payment Confirmation – Gully Team Subscription";
     }
 
     const mailOptions = {
-      from: "Gully App <gullyteam33@gmail.com>",
+      from: "gullyteam33@gmail.com",
       to: shop.ownerEmail,
       subject: subject,
       html: `<!DOCTYPE html>
@@ -1177,7 +1177,7 @@ const otherServices = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Status – Gully App</title>
+  <title>Payment Status – Gully Team</title>
   <style>
     body, table, td, p, a, li, blockquote {
       -webkit-text-size-adjust: 100%;
@@ -1574,7 +1574,7 @@ const otherServices = {
             <!-- Header -->
             <div class="header">
               <h1>${headerTitle}</h1>
-              <p>Gully App Subscription</p>
+              <p>Gully Team Subscription</p>
             </div>
 
             <!-- Content -->
@@ -1729,7 +1729,7 @@ const otherServices = {
                   ` : `
                     Your subscription gives you access to essential tools to manage and grow your business. This includes the ability to list and manage products, edit your shop details, and monitor performance through the analytics dashboard.
                     <br><br>
-                    Log in to your Gully App dashboard to get started and make the most of these features.
+                    Log in to your Gully Team dashboard to get started and make the most of these features.
                   `}
                 </p>
               </div>

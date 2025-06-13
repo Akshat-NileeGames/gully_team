@@ -53,16 +53,16 @@ export const updateVendor = async (id, data) => {
 
 
 export const deleteVendorById = async (id) => {
-  try {
-      const vendor = await Vendor.findById(id);
-      if (!vendor) throw CustomErrorHandler.notFound('Vendor not found');
+    try {
+        const vendor = await Vendor.findById(id);
+        if (!vendor) throw CustomErrorHandler.notFound('Vendor not found');
 
-      vendor.isVendorDeleted = true; // Soft delete logic
-      vendor.deletedAt = new Date(); // Set the deletion timestamp
-      return await vendor.save(); // Save the updated vendor
-  } catch (error) {
-      throw CustomErrorHandler.serverError('Database error during vendor deletion');
-  }
+        vendor.isVendorDeleted = true; // Soft delete logic
+        vendor.deletedAt = new Date(); // Set the deletion timestamp
+        return await vendor.save(); // Save the updated vendor
+    } catch (error) {
+        throw CustomErrorHandler.serverError('Database error during vendor deletion');
+    }
 };
 
 // export const getUnverifiedVendors = async () => {

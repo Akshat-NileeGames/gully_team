@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js";
-import {Sponsor} from "../models/index.js";
+import { Sponsor, Tournament } from "../models/index.js";
 import { adminService } from "../services/index.js";
 import ImageUploader from "../helpers/ImageUploader.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
@@ -35,16 +35,18 @@ const SponsorService = {
 
     },
 
-    
+
     async getSponsor(tournamentId) {
         try {
-            const sponsor = await Sponsor.find({ tournamentId: Types.ObjectId(tournamentId),isActive:true });
+            const sponsor = await Sponsor.find({ tournamentId: Types.ObjectId(tournamentId), isActive: true });
             return sponsor;
         } catch (err) {
             console.log("Error in fetching Sponsor:", err);
             throw err;
         }
     },
+
+
 
     async editSponsor(sponsorId, data) {
 
@@ -81,7 +83,10 @@ const SponsorService = {
             if (!sponsor) {
                 throw new CustomErrorHandler("Sponsor not found", 404);
             }
-
+            const tournament = await Tournament.findById(data.tournamentId);
+            if (!tournament) throw CustomErrorHandler.notFound("Tournament Not Found");
+            tournament.TotalEditDone += 1;
+            await tournament.save();
             return sponsor;
         } catch (err) {
             console.log("Error in editing Sponsor:", err);

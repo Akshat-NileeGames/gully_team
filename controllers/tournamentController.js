@@ -540,7 +540,7 @@ const tournamentController = {
 
     const sponsor_schema = Joi.object({
       tournamentId: Joi.string().required(),
-      SponsorshipPackageId: Joi.string().required()
+      PackageId: Joi.string().required()
     });
     const { error } = sponsor_schema.validate(req.body);
 
@@ -548,7 +548,7 @@ const tournamentController = {
       return next(error);
     }
     try {
-      const result=await tournamentServices.setSponsor(req.body);
+      const result = await tournamentServices.setSponsor(req.body);
       return res.status(200).json({
         success: true,
         message: "Sponsor for these Tournament Activated Successfully",
@@ -560,7 +560,7 @@ const tournamentController = {
     }
   },
 
-  
+
 
   // const tournamentController = {
   // async createTournament(req, res, next) {

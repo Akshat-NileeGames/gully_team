@@ -169,7 +169,7 @@ const ShopService = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shop Registration Successful - Gully App</title>
+  <title>Shop Registration Successful - Gully Team App</title>
   <!--[if mso]>
   <noscript>
     <xml>
@@ -460,7 +460,7 @@ const ShopService = {
             <!-- Header -->
             <div class="header">
               <h1>Shop Registration Successful!</h1>
-              <p>Welcome to the Gully App community</p>
+              <p>Welcome to the Gully Team App</p>
             </div>
 
             <!-- Content -->
@@ -468,7 +468,7 @@ const ShopService = {
               <!-- Welcome Message -->
               <p class="welcome-text">Hello ${user.fullName || "User"}!</p>
               <p class="intro-text">
-                Your shop has been successfully registered on the Gully App. We're delighted to welcome you to our growing network of innovative business owners and entrepreneurs.
+                Your shop has been successfully registered on the Gully Team App. We're delighted to welcome you to our growing network of innovative business owners and entrepreneurs.
               </p>
             
               <!-- Shop Information -->
@@ -560,7 +560,7 @@ const ShopService = {
               <div class="info-section">
                 <h3 class="info-title">Stay tuned!</h3>
                 <p class="info-text">
-                  We're actively working on new promotional tools designed to help boost your shop's visibility — including digital banners, featured listings, and marketing packages. These features will be available soon within the Gully App to support your growth journey.
+                  We're actively working on new promotional tools designed to help boost your shop's visibility — including digital banners, featured listings, and marketing packages. These features will be available soon within the Gully Team App to support your growth journey.
                 </p>
               </div>
 
@@ -659,7 +659,6 @@ const ShopService = {
             delete fieldsToUpdate.latitude;
             delete fieldsToUpdate.selectLocation;
         }
-        console.log(data.shopLink);
         if (fieldsToUpdate.aadharFrontSide || fieldsToUpdate.aadharBackSide) {
             fieldsToUpdate.ownerAddharImages = {};
             if (fieldsToUpdate.aadharFrontSide)
@@ -716,9 +715,10 @@ const ShopService = {
 
             const now = new Date();
 
+
             for (const shop of shops) {
                 let shouldUpdate = false;
-
+console.log('packageEndDate:', shop.packageEndDate, 'Type:', typeof shop.packageEndDate);
                 if (!shop.packageEndDate) {
                     if (shop.isSubscriptionPurchased !== false) {
                         shop.isSubscriptionPurchased = false;

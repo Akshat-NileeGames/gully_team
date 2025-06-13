@@ -109,7 +109,7 @@ const tournamentServices = {
 
   async setSponsor(data) {
     const userInfo = global.user;
-    const { tournamentId, SponsorshipPackageId } = data;
+    const { tournamentId, PackageId } = data;
   
     try {
       const tour = await Tournament.findById(tournamentId);
@@ -119,8 +119,8 @@ const tournamentServices = {
       }
   
       tour.isSponsorshippurchase = true;
-      tour.SponsorshipPackageId = SponsorshipPackageId;
-      const purchasedPackage = await Package.findById(SponsorshipPackageId);
+      tour.SponsorshipPackageId = PackageId;
+      const purchasedPackage = await Package.findById(PackageId);
       const user = await User.findById(userInfo.userId);
      
   
