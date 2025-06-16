@@ -13,6 +13,7 @@ export {default as matchServices} from "./matchServices.js"
 export {default as PromotionalbannerService } from "./Promotional_bannerService.js"
 export {default as SponsorService } from "./sponsorService.js"
 export {default as ShopService } from "./shopService.js"
+export {default as ProviderServices } from "./providerServices.js"
 
 //admin
 

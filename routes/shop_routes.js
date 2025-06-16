@@ -14,9 +14,8 @@ router.get("/getShopProductForUser/:shopId/:page", validateUser, ShopController.
 router.get("/getShopImageCount/:shopId", validateUser, ShopController.getTotalImageCount);
 router.post("/ChangedProductStatus", validateUser, ShopController.setProductActiveStatus);
 router.post("/addCategory", validateUser, ShopController.addCategory);
-router.get("/getcategory", validateUser, ShopController.getCategory);
-router.get("/getsubcategory/:category", validateUser, ShopController.getSubCategory);
-router.get("/getSportsBrand", validateUser, ShopController.getBrand);
+
+
 router.post("/UpdateshopSubscriptionStatus", validateUser, ShopController.updateSubscriptionStatus);
 router.post("/additionalPackage", validateUser, ShopController.addExtensionPackage);
 router.get("/search/:querytext", validateUser, ShopController.search);

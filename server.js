@@ -16,7 +16,7 @@ import {
   adminRoute,
   paymentRoute,
   bannerRoute,
-  vendorRoutes,
+  providerRoute,
   shopRoutes
 } from "./routes/index.js";
 
@@ -45,7 +45,7 @@ app.use("/api/tournament", tournamentRoute); // Ensure this matches the import
 app.use("/api/team", teamRoute);
 app.use("/api/match", matchRoute);
 app.use("/api/payment", paymentRoute);
-app.use("/api/vendors", vendorRoutes);
+app.use("/api/service", providerRoute);
 app.use("/api/shop", shopRoutes);
 // app.use("/api/performances",matchRoute ) // edited
 app.use('/api/banner', bannerRoute);
