@@ -51,10 +51,6 @@ const ProviderController = {
                     certificateUrl: Joi.string(),
                 }),
             ),
-            location: Joi.object({
-                coordinates: Joi.array().items(Joi.number()).length(2).required(),
-                address: Joi.string().required(),
-            }).required(),
             packageRef: Joi.string().required(),
             selectLocation: Joi.string().required(),
             longitude: Joi.number().required(),
@@ -63,7 +59,7 @@ const ProviderController = {
 
         const { error } = individualValidation.validate(req.body)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError(`Failed to Validate request:${error}`, ));
         }
 
         try {
@@ -74,7 +70,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
     //#endregion
@@ -99,7 +95,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -111,7 +107,7 @@ const ProviderController = {
 
         const { error } = validation.validate(req.params)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -122,7 +118,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -145,7 +141,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -157,7 +153,7 @@ const ProviderController = {
 
         const { error } = validation.validate(req.params)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -167,7 +163,7 @@ const ProviderController = {
                 message: "Individual service deleted successfully",
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -187,7 +183,7 @@ const ProviderController = {
 
         const { error } = bookingValidation.validate(req.body)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -198,22 +194,21 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
     //#region CreateGroundService
     async createGround(req, res, next) {
-        const groundValidation = Joi.object({
-            groundName: Joi.string().required(),
-            groundDescription: Joi.string().required(),
-            groundAddress: Joi.string().required(),
-            groundContact: Joi.string()
+        const venuevalidation = Joi.object({
+            venue_name: Joi.string().required(),
+            venue_description: Joi.string().required(),
+            venue_address: Joi.string().required(),
+            venue_contact: Joi.string()
                 .pattern(/^[0-9]{10}$/)
                 .required(),
-            groundEmail: Joi.string().email().required(),
-            groundType: Joi.string().valid("Open Ground", "Truf", "Stadium").required(),
-            surfaceType: Joi.string()
+            venue_type: Joi.string().valid("Open Ground", "Truf", "Stadium").required(),
+            venue_surfacetype: Joi.string()
                 .valid(
                     "PVC",
                     "Synthetic PVC",
@@ -225,10 +220,44 @@ const ProviderController = {
                     "Natural Grass Turf",
                 )
                 .required(),
-            groundOpenDays: Joi.array().items(Joi.string()).min(1).required(),
-            openTime: Joi.string().required(),
-            closeTime: Joi.string().required(),
-            sportsCategories: Joi.array().items(Joi.string()).min(1).required(),
+            venue_timeslots: Joi.object().keys({
+                Monday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Tuesday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Wednesday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Thursday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Friday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Saturday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+                Sunday: Joi.object({
+                    isOpen: Joi.boolean().required(),
+                    openTime: Joi.string().optional(),
+                    closeTime: Joi.string().optional(),
+                }),
+            }).required(),
+            venue_sport: Joi.string().required(),
             paymentMethods: Joi.array()
                 .items(Joi.string().valid("Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"))
                 .min(1)
@@ -236,7 +265,7 @@ const ProviderController = {
             upiId: Joi.string()
                 .pattern(/^[\w.-]+@[\w]+$/)
                 .required(),
-            facilities: Joi.object({
+            venuefacilities: Joi.object({
                 isWaterAvailable: Joi.boolean(),
                 isParkingAvailable: Joi.boolean(),
                 isEquipmentProvided: Joi.boolean(),
@@ -247,19 +276,17 @@ const ProviderController = {
                 isFirstAidAvailable: Joi.boolean(),
                 isWalkingTrackAvailable: Joi.boolean(),
             }),
-            groundImages: Joi.array().items(Joi.string()).min(1).max(5).required(),
-            location: Joi.object({
-                coordinates: Joi.array().items(Joi.number()).length(2).required(),
-                address: Joi.string().required(),
-            }).required(),
-            packageId: Joi.string().required(),
+            venueImages: Joi.array().items(Joi.string()).min(1).max(5).required(),
+            selectLocation: Joi.string().required(),
+            longitude: Joi.number().required(),
+            latitude: Joi.number().required(),
+            packageRef: Joi.string().required(),
         })
 
-        const { error } = groundValidation.validate(req.body)
+        const { error } = venuevalidation.validate(req.body)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
-
         try {
             const result = await ProviderServices.createGround(req.body)
             return res.status(201).json({
@@ -268,11 +295,29 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            throw next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
     //#endregion
-    // Get All Grounds
+
+    //#region getUserRegisteredGround
+    async getUserRegisterService(req, res, next) {
+        try {
+            const result = await ProviderServices.getUserRegisterService();
+            return res.status(201).json({
+                success: true,
+                message: "User Ground Fetched successfully",
+                data: result,
+            })
+        } catch (error) {
+            return CustomErrorHandler.badRequest("Something went Wrong", error);
+        }
+
+    },
+    //#endregion
+
+
+    //#region Get All Grounds
     async getAllGrounds(req, res, next) {
         try {
             const { page = 1, limit = 10, search, sportsCategory, location, radius = 10 } = req.query
@@ -291,11 +336,12 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
+    //#endregion
 
-    // Get Ground by ID
+    //#region Get Ground by ID
     async getGroundById(req, res, next) {
         const validation = Joi.object({
             id: Joi.string().required(),
@@ -303,21 +349,21 @@ const ProviderController = {
 
         const { error } = validation.validate(req.params)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
-            const result = await ProviderServices.getGroundById(req.params.id)
+            const result = await ProviderServices.getGroundById(req.params)
             return res.json({
                 success: true,
                 message: "Ground retrieved successfully",
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
-
+    //#endregion
     // Update Ground
     async updateGround(req, res, next) {
         const validation = Joi.object({
@@ -337,7 +383,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -349,7 +395,7 @@ const ProviderController = {
 
         const { error } = validation.validate(req.params)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -359,7 +405,7 @@ const ProviderController = {
                 message: "Ground deleted successfully",
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -378,7 +424,7 @@ const ProviderController = {
 
         const { error } = bookingValidation.validate(req.body)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -389,12 +435,12 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
     // Get Available Time Slots
-    async getAvailableTimeSlots(req, res, next) {
+    async getAvailablevenue_timeslots(req, res, next) {
         const validation = Joi.object({
             groundId: Joi.string().required(),
             date: Joi.date().min("now").required(),
@@ -402,18 +448,18 @@ const ProviderController = {
 
         const { error } = validation.validate(req.query)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
-            const result = await ProviderServices.getAvailableTimeSlots(req.query.groundId, req.query.date)
+            const result = await ProviderServices.getAvailablevenue_timeslots(req.query.groundId, req.query.date)
             return res.json({
                 success: true,
                 message: "Available time slots retrieved successfully",
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -449,7 +495,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -461,7 +507,7 @@ const ProviderController = {
 
         const { error } = validation.validate(req.params)
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -472,7 +518,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -485,7 +531,7 @@ const ProviderController = {
 
         const { error } = validation.validate({ ...req.params, ...req.body })
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -496,7 +542,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 
@@ -509,7 +555,7 @@ const ProviderController = {
 
         const { error } = validation.validate({ ...req.params, ...req.body })
         if (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
 
         try {
@@ -520,7 +566,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return CustomErrorHandler.validationError("Failed to Validate request:", error);
+            return next(CustomErrorHandler.validationError("Failed to Validate request:", error));
         }
     },
 }

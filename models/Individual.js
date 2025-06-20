@@ -84,17 +84,20 @@ const individualSchema = new mongoose.Schema(
             ref: "User",
             required: true,
         },
-        location: {
-            type: {
-                type: String,
-                enum: ["Point"],
-                default: "Point",
+        locationHistory: {
+            point: {
+                type: {
+                    type: String,
+                    enum: ["Point"],
+                    default: "Point",
+                    required: false,
+                },
+                coordinates: {
+                    type: [Number],
+                    required: true,
+                },
+                selectLocation: String,
             },
-            coordinates: {
-                type: [Number],
-                required: true,
-            },
-            address: String,
         },
         hasActiveSubscription: {
             type: Boolean,
@@ -113,7 +116,7 @@ const individualSchema = new mongoose.Schema(
         // availability: [
         //     {
         //         day: String,
-        //         timeSlots: [
+        //         venue_timeslots: [
         //             {
         //                 startTime: String,
         //                 endTime: String,
@@ -128,5 +131,4 @@ const individualSchema = new mongoose.Schema(
 )
 
 individualSchema.index({ "locationHistory.point": "2dsphere" });
-
 export default mongoose.model("Individual", individualSchema)

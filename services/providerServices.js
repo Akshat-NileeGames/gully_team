@@ -65,7 +65,7 @@ const ProviderServices = {
                 query.$or = [{ name: { $regex: search, $options: "i" } }, { aboutMe: { $regex: search, $options: "i" } }]
             }
             if (sportsCategory) {
-                query.sportsCategories = { $in: [sportsCategory] }
+                query.venue_sport = { $in: [sportsCategory] }
             }
             if (serviceType) {
                 switch (serviceType) {
@@ -255,39 +255,36 @@ const ProviderServices = {
         const end = DateTime.fromFormat(endTime, "HH:mm")
         return end.diff(start, "hours").hours
     },
-    async createGround(data, userId) {
+    async createGround(data) {
         try {
             const userInfo = global.user;
-            const packageInfo = await Package.findById(data.packageId)
+            const packageInfo = await Package.findById(data.packageRef)
             if (!packageInfo) throw CustomErrorHandler.notFound("Package not found");
-            
+
             const user = await User.findById(userInfo.userId);
             if (!user) throw CustomErrorHandler.notFound("User not found");
-            const timeSlots = this.generateTimeSlots(data.openTime, data.closeTime)
             const ground = new Ground({
-                groundName: data.groundName,
-                groundDescription: data.groundDescription,
-                groundAddress: data.groundAddress,
-                groundContact: data.groundContact,
-                groundEmail: data.groundEmail,
-                groundType: data.groundType,
-                surfaceType: data.surfaceType,
-                groundOpenDays: data.groundOpenDays,
-                openTime: data.openTime,
-                closeTime: data.closeTime,
-                sportsCategories: data.sportsCategories,
+                venue_name: data.venue_name,
+                venue_description: data.venue_description,
+                venue_address: data.venue_address,
+                venue_contact: data.venue_contact,
+                venue_type: data.venue_type,
+                venue_surfacetype: data.venue_surfacetype,
+                venue_sport: data.venue_sport,
                 paymentMethods: data.paymentMethods,
                 upiId: data.upiId,
-                facilities: data.facilities,
-                groundImages: data.groundImages,
-                timeSlots: timeSlots,
-                location: {
-                    type: "Point",
-                    coordinates: data.location.coordinates,
-                    address: data.location.address
+                venuefacilities: data.venuefacilities,
+                venueImages: data.venueImages,
+                venue_timeslots: data.venue_timeslots,
+                locationHistory: {
+                    point: {
+                        type: "Point",
+                        coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
+                        selectLocation: data.selectLocation,
+                    },
                 },
                 userId: userInfo.userId,
-                packageId: data.packageId,
+                packageRef: data.packageRef,
                 isSubscriptionPurchased: true,
                 subscriptionExpiry: DateTime.now().plus({ days: packageInfo.duration }).toJSDate()
             })
@@ -299,6 +296,28 @@ const ProviderServices = {
         }
     },
 
+    async getUserRegisterService() {
+        try {
+            const userInfo = global.user;
+            const user = await User.findById(userInfo.userId);
+            if (!user) throw CustomErrorHandler.notFound("User not found");
+            const ground = await Ground.find({
+                userId: userInfo.userId
+            }).populate('packageRef');
+            const service = await Individual.find({
+                userId: userInfo.userId
+            }).populate('packageRef');
+            return {
+                ground: ground,
+                service: service
+            };
+        } catch (error) {
+            return CustomErrorHandler.badRequest(error);
+        }
+    },
+
+
+
     async getAllGrounds(filters) {
         try {
             const { page, limit, search, sportsCategory, location, radius } = filters
@@ -307,15 +326,15 @@ const ProviderServices = {
             // Search filter
             if (search) {
                 query.$or = [
-                    { groundName: { $regex: search, $options: "i" } },
-                    { groundDescription: { $regex: search, $options: "i" } },
-                    { groundAddress: { $regex: search, $options: "i" } },
+                    { venue_name: { $regex: search, $options: "i" } },
+                    { venue_description: { $regex: search, $options: "i" } },
+                    { venue_address: { $regex: search, $options: "i" } },
                 ]
             }
 
             // Sports category filter
             if (sportsCategory) {
-                query.sportsCategories = { $in: [sportsCategory] }
+                query.venue_sport = { $in: [sportsCategory] }
             }
 
             // Location-based filter
@@ -355,9 +374,9 @@ const ProviderServices = {
         }
     },
 
-    async getGroundById(groundId) {
+    async getGroundById(data) {
         try {
-            const ground = await Ground.findById(groundId).populate("userId", "name email phone").populate("packageId")
+            const ground = await Ground.findById(data.id).populate("packageRef")
 
             if (!ground) {
                 throw CustomErrorHandler.notFound("Ground not found")
@@ -380,7 +399,7 @@ const ProviderServices = {
             if (updateData.openTime || updateData.closeTime) {
                 const openTime = updateData.openTime || ground.openTime
                 const closeTime = updateData.closeTime || ground.closeTime
-                updateData.timeSlots = this.generateTimeSlots(openTime, closeTime)
+                updateData.venue_timeslots = this.generatevenue_timeslots(openTime, closeTime)
             }
 
             const updatedGround = await Ground.findByIdAndUpdate(groundId, updateData, {
@@ -468,7 +487,7 @@ const ProviderServices = {
         }
     },
 
-    async getAvailableTimeSlots(groundId, date) {
+    async getAvailablevenue_timeslots(groundId, date) {
         try {
             const ground = await Ground.findById(groundId)
             if (!ground) {
@@ -484,7 +503,7 @@ const ProviderServices = {
             })
 
             // Filter out booked time slots
-            const availableSlots = ground.timeSlots.filter((slot) => {
+            const availableSlots = ground.venue_timeslots.filter((slot) => {
                 return !existingBookings.some(
                     (booking) => booking.timeSlot.startTime === slot.startTime && booking.timeSlot.endTime === slot.endTime,
                 )
@@ -497,7 +516,7 @@ const ProviderServices = {
     },
 
     // Helper methods
-    generateTimeSlots(openTime, closeTime) {
+    generatevenue_timeslots(openTime, closeTime) {
         const slots = []
         const start = DateTime.fromFormat(openTime, "HH:mm")
         const end = DateTime.fromFormat(closeTime, "HH:mm")
