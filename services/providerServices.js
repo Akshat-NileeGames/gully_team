@@ -273,6 +273,7 @@ const ProviderServices = {
                 venue_sport: data.venue_sport,
                 paymentMethods: data.paymentMethods,
                 upiId: data.upiId,
+                perHourCharge: data.perHourCharge,
                 venuefacilities: data.venuefacilities,
                 venueImages: data.venueImages,
                 venue_timeslots: data.venue_timeslots,
@@ -296,7 +297,21 @@ const ProviderServices = {
         }
     },
 
-    async getUserRegisterService() {
+    async getUserIndividualRegisteredGround() {
+        try {
+            const userInfo = global.user;
+            const user = await User.findById(userInfo.userId);
+            if (!user) throw CustomErrorHandler.notFound("User not found");
+            const individual = await Individual.find({
+                userId: userInfo.userId
+            }).populate('packageRef');
+            return individual;
+        } catch (error) {
+            print(error);
+            throw CustomErrorHandler.badRequest(error);
+        }
+    },
+    async getUserGroundRegisteredGround() {
         try {
             const userInfo = global.user;
             const user = await User.findById(userInfo.userId);
@@ -304,15 +319,10 @@ const ProviderServices = {
             const ground = await Ground.find({
                 userId: userInfo.userId
             }).populate('packageRef');
-            const service = await Individual.find({
-                userId: userInfo.userId
-            }).populate('packageRef');
-            return {
-                ground: ground,
-                service: service
-            };
+            return ground;
         } catch (error) {
-            return CustomErrorHandler.badRequest(error);
+            print(error);
+            throw CustomErrorHandler.badRequest(error);
         }
     },
 

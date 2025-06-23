@@ -59,12 +59,12 @@ const ProviderController = {
 
         const { error } = individualValidation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.validationError(`Failed to Validate request:${error}`, ));
+            return next(CustomErrorHandler.validationError(`Failed to Validate request:${error}`,));
         }
 
         try {
             const result = await ProviderServices.createIndividual(req.body)
-            return res.status(201).json({
+            return res.status(200).json({
                 success: true,
                 message: "Individual service created successfully",
                 data: result,
@@ -188,7 +188,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.bookIndividual(req.body, req.user.id)
-            return res.status(201).json({
+            return res.status(200).json({
                 success: true,
                 message: "Individual service booked successfully",
                 data: result,
@@ -258,6 +258,7 @@ const ProviderController = {
                 }),
             }).required(),
             venue_sport: Joi.string().required(),
+            perHourCharge: Joi.Number().required(),
             paymentMethods: Joi.array()
                 .items(Joi.string().valid("Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"))
                 .min(1)
@@ -289,7 +290,7 @@ const ProviderController = {
         }
         try {
             const result = await ProviderServices.createGround(req.body)
-            return res.status(201).json({
+            return res.status(200).json({
                 success: true,
                 message: "Ground created successfully",
                 data: result,
@@ -300,17 +301,35 @@ const ProviderController = {
     },
     //#endregion
 
-    //#region getUserRegisteredGround
-    async getUserRegisterService(req, res, next) {
+    //#region getUserIndividualRegisteredGround
+    async getUserIndividualRegisteredGround(req, res, next) {
         try {
-            const result = await ProviderServices.getUserRegisterService();
-            return res.status(201).json({
+            const result = await ProviderServices.getUserIndividualRegisteredGround();
+            return res.status(200).json({
                 success: true,
-                message: "User Ground Fetched successfully",
-                data: result,
+                message: "User Individual Data Fetched successfully",
+                data: { individual: result },
             })
         } catch (error) {
-            return CustomErrorHandler.badRequest("Something went Wrong", error);
+            print(error);
+            throw CustomErrorHandler.badRequest("Something went Wrong", error);
+        }
+
+    },
+    //#endregion
+
+    //#region getUserGroundRegisteredGround
+    async getUserGroundRegisteredGround(req, res, next) {
+        try {
+            const result = await ProviderServices.getUserGroundRegisteredGround();
+            return res.status(200).json({
+                success: true,
+                message: "User Ground Fetched successfully",
+                data: { ground: result },
+            })
+        } catch (error) {
+            print(error);
+            throw CustomErrorHandler.badRequest("Something went Wrong", error);
         }
 
     },
@@ -429,7 +448,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.bookGround(req.body, req.user.id)
-            return res.status(201).json({
+            return res.status(200).json({
                 success: true,
                 message: "Ground booked successfully",
                 data: result,

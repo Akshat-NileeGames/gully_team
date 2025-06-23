@@ -6,7 +6,8 @@ import validateUser from "../middlewares/validateUser.js";
 //#region Individual Api Route
 router.post("/createIndividualService", validateUser, ProviderController.createIndividual);
 
-router.get("/getUserRegisterService", validateUser, ProviderController.getUserRegisterService);
+router.get("/getUserIndividualRegisteredGround", validateUser, ProviderController.getUserIndividualRegisteredGround);
+router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround);
 router.get("/", ProviderController.getAllIndividuals);
 router.get("/:id", ProviderController.getIndividualById);
 router.put("/:id", validateUser, ProviderController.updateIndividual);

@@ -87,6 +87,10 @@ const groundSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    perHourCharge: {
+        type: Number,
+        required: true
+    },
     paymentMethods: [{
         type: String,
         enum: ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Bank Transfer']
