@@ -1,42 +1,34 @@
-import express from "express";
-const router = express.Router();;
-import { ProviderController } from "../controllers/index.js";
-import validateUser from "../middlewares/validateUser.js";
+import express from "express"
+const router = express.Router()
+import { ProviderController } from "../controllers/index.js"
+import validateUser from "../middlewares/validateUser.js"
 
-//#region Individual Api Route
-router.post("/createIndividualService", validateUser, ProviderController.createIndividual);
+// ==================== GROUND ROUTES ====================
+router.post("/createGroundService", validateUser, ProviderController.createGround)
+router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround)
+router.get("/getGroundById/:id", ProviderController.getGroundById)
+router.get("/getAllGrounds", ProviderController.getAllGrounds)
 
-router.get("/getUserIndividualRegisteredGround", validateUser, ProviderController.getUserIndividualRegisteredGround);
-router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround);
-router.get("/", ProviderController.getAllIndividuals);
-router.get("/:id", ProviderController.getIndividualById);
-router.put("/:id", validateUser, ProviderController.updateIndividual);
-router.delete("/:id", validateUser, ProviderController.deleteIndividual);;
+// ==================== GROUND BOOKING ROUTES ====================
+router.post("/bookGround", validateUser, ProviderController.bookGround)
+router.post("/checkMultipleDateAvailability", ProviderController.checkMultipleDateAvailability)
+router.get("/availableSlots", ProviderController.getAvailableSlots)
+router.get("/bookedSlots", ProviderController.getBookedSlots)
+router.get("/groundBookings", validateUser, ProviderController.getGroundBookings)
 
+// ==================== INDIVIDUAL ROUTES ====================
+router.post("/createIndividualService", validateUser, ProviderController.createIndividual)
+router.get("/getUserIndividualRegisteredGround", validateUser, ProviderController.getUserIndividualRegisteredGround)
+router.get("/getIndividualById/:id", ProviderController.getIndividualById)
+router.get("/getAllIndividuals", ProviderController.getAllIndividuals)
 
+// ==================== INDIVIDUAL BOOKING ROUTES ====================
+router.post("/bookIndividual", validateUser, ProviderController.bookIndividual)
+router.get("/individualAvailableSlots", ProviderController.getIndividualAvailableSlots)
+router.get("/individualBookings", validateUser, ProviderController.getIndividualBookings)
 
+// ==================== COMMON BOOKING ROUTES ====================
+router.get("/getUserBookings", validateUser, ProviderController.getUserBookings)
+router.put("/cancelBooking/:bookingId", validateUser, ProviderController.cancelBooking)
 
-//#region Ground Api Route 
-router.post("/createGroundService", validateUser, ProviderController.createGround);
-router.get("/getGroundById/:id", ProviderController.getGroundById);
-
-
-// router.get("/", validateUser, ProviderController.getUserBookings);
-// router.get("/:id", validateUser, ProviderController.getBookingById);
-// router.put("/:id/cancel", validateUser, ProviderController.cancelBooking);
-// router.put("/:id/payment-status", validateUser, ProviderController.updatePaymentStatus);
-// router.post("/", validateUser, ProviderController.createGround);
-// router.get("/", ProviderController.getAllGrounds);
-
-// router.put("/:id", validateUser, ProviderController.updateGround);
-// router.delete("/:id", validateUser, ProviderController.deleteGround);
-
-// // Booking routes
-// router.post("/book", validateUser, ProviderController.bookGround);
-// router.get("/available-slots", ProviderController.getAvailablevenue_timeslots);
-
-
-// // Booking routes
-// router.post("/book", validateUser, ProviderController.bookIndividual);
-
-export default router;
+export default router
