@@ -2,103 +2,89 @@ import mongoose from "mongoose"
 
 const bookingSchema = new mongoose.Schema(
   {
-    bookingType: {
+    venueType: {
       type: String,
-      enum: ["ground", "individual"],
+      enum: ["Open Ground", "Turf", "Stadium"],
       required: true,
     },
-    serviceId: {
+    venueId: {
       type: mongoose.Schema.Types.ObjectId,
+      ref: "Ground",
       required: true,
-      refPath: "bookingType",
     },
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-    // For ground bookings - specify which sport
     sport: {
       type: String,
-      required: function () {
-        return this.bookingType === "ground"
-      },
-    },
-    bookingDate: {
-      type: Date,
       required: true,
     },
-    // Support for multiple date bookings (week/month bookings)
-    bookingDates: [
-      {
-        date: Date,
-        timeSlots: [
-          {
-            startTime: String,
-            endTime: String,
-          },
-        ],
-      },
-    ],
-    timeSlot: {
-      startTime: {
-        type: String,
-        required: function () {
-          return !this.bookingDates || this.bookingDates.length === 0
-        },
-      },
-      endTime: {
-        type: String,
-        required: function () {
-          return !this.bookingDates || this.bookingDates.length === 0
-        },
-      },
+    bookingPattern: {
+      type: String,
+      enum: ["single", "multiple_slots", "full_day", "week_booking"],
+      default: "single",
     },
-    // Multiple time slots for single day
-    timeSlots: [
+    singleSlot: {
+      startTime: { type: String },
+      endTime: { type: String },
+    },
+    multipleSlots: [
       {
         startTime: String,
         endTime: String,
       },
     ],
-    duration: {
-      type: Number, // in hours
+    scheduledDates: [
+      {
+        date: { type: Date, required: true },
+        timeSlots: [
+          {
+            startTime: { type: String, required: true },
+            endTime: { type: String, required: true },
+          },
+        ],
+      },
+    ],
+    durationInHours: {
+      type: Number,
       required: true,
     },
     totalAmount: {
       type: Number,
       required: true,
     },
-    bookingStatus: {
+    paymentMethod: {
       type: String,
-      enum: ["pending", "confirmed", "cancelled", "completed"],
-      default: "pending",
+      enum: ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"],
+      required: true,
     },
     paymentStatus: {
       type: String,
       enum: ["pending", "completed", "failed", "refunded"],
       default: "pending",
     },
-    paymentMethod: {
+    bookingStatus: {
       type: String,
-      enum: ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"],
+      enum: ["pending", "confirmed", "cancelled", "completed"],
+      default: "pending",
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
     },
-    specialRequests: String,
-    cancellationReason: String,
-    refundAmount: Number,
-    // Booking type: single, multiple_slots, full_day, week_booking
-    bookingPattern: {
+    specialRequests: {
       type: String,
-      enum: ["single", "multiple_slots", "full_day", "week_booking"],
-      default: "single",
+    },
+    cancellationReason: {
+      type: String,
+    },
+    refundAmount: {
+      type: Number,
     },
   },
   { timestamps: true },
 )
 
-// Compound index for efficient queries
-bookingSchema.index({ serviceId: 1, bookingDate: 1, sport: 1 })
+bookingSchema.index({ venueId: 1, "scheduledDates.date": 1, sport: 1 })
 bookingSchema.index({ userId: 1, bookingStatus: 1 })
-bookingSchema.index({ bookingDate: 1, bookingStatus: 1 })
+bookingSchema.index({ "scheduledDates.date": 1, bookingStatus: 1 })
 
 export default mongoose.model("Booking", bookingSchema)

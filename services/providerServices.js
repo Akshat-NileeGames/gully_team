@@ -156,136 +156,88 @@ const ProviderServices = {
   async bookGround(bookingData, userId) {
     try {
       const {
-        groundId,
+        venueId,
+        venueType,
         sport,
-        bookingDate,
-        bookingDates,
-        timeSlot,
-        timeSlots,
+        scheduledDates,
         paymentMethod,
         specialRequests,
         bookingPattern,
-      } = bookingData
+      } = bookingData;
 
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid venue ID format");
       }
 
-      const ground = await Ground.findById(groundId)
+      const ground = await Ground.findById(venueId);
       if (!ground) {
-        throw CustomErrorHandler.notFound("Ground not found")
+        throw CustomErrorHandler.notFound("Venue not found");
       }
 
       if (!ground.venue_sports.includes(sport)) {
-        throw CustomErrorHandler.badRequest(`Ground does not support ${sport}`)
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
       }
 
-      let totalAmount = 0
-      let duration = 0
-
-      // Handle different booking patterns
-      if (bookingPattern === "week_booking" && bookingDates) {
-        for (const dateSlot of bookingDates) {
-          const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
-          const dayTiming = ground.venue_timeslots[bookingDay]
-
-          if (!dayTiming || !dayTiming.isOpen) {
-            throw CustomErrorHandler.badRequest(`Ground is closed on ${bookingDay}`)
-          }
-
-          for (const slot of dateSlot.timeSlots) {
-            const isAvailable = await this.checkGroundSlotAvailability(groundId, sport, dateSlot.date, slot)
-            if (!isAvailable) {
-              throw CustomErrorHandler.badRequest(
-                `Time slot ${slot.startTime}-${slot.endTime} is not available on ${dateSlot.date}`,
-              )
-            }
-            duration += this.calculateDuration(slot.startTime, slot.endTime)
-          }
-        }
-
-        const sportPrice = this.getSportPrice(ground, sport)
-        totalAmount = duration * sportPrice
-      } else if (bookingPattern === "multiple_slots" && timeSlots) {
-        const bookingDay = DateTime.fromJSDate(new Date(bookingDate)).toFormat("cccc")
-        const dayTiming = ground.venue_timeslots[bookingDay]
+      let totalDuration = 0;
+      for (const dateSlot of scheduledDates) {
+        const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc");
+        const dayTiming = ground.venue_timeslots[bookingDay];
 
         if (!dayTiming || !dayTiming.isOpen) {
-          throw CustomErrorHandler.badRequest("Ground is closed on this day")
+          throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`);
         }
 
-        for (const slot of timeSlots) {
-          const isAvailable = await this.checkGroundSlotAvailability(groundId, sport, bookingDate, slot)
+        for (const slot of dateSlot.timeSlots) {
+          const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, dateSlot.date, slot);
           if (!isAvailable) {
-            throw CustomErrorHandler.badRequest(`Time slot ${slot.startTime}-${slot.endTime} is not available`)
+            throw CustomErrorHandler.badRequest(
+              `Slot ${slot.startTime} - ${slot.endTime} is unavailable on ${dateSlot.date}`
+            );
           }
-          duration += this.calculateDuration(slot.startTime, slot.endTime)
+          totalDuration += this.calculateDuration(slot.startTime, slot.endTime);
         }
-
-        const sportPrice = this.getSportPrice(ground, sport)
-        totalAmount = duration * sportPrice
-      } else {
-        const bookingDay = DateTime.fromJSDate(new Date(bookingDate)).toFormat("cccc")
-        const dayTiming = ground.venue_timeslots[bookingDay]
-
-        if (!dayTiming || !dayTiming.isOpen) {
-          throw CustomErrorHandler.badRequest("Ground is closed on this day")
-        }
-
-        const isAvailable = await this.checkGroundSlotAvailability(groundId, sport, bookingDate, timeSlot)
-        if (!isAvailable) {
-          throw CustomErrorHandler.badRequest("Time slot is not available")
-        }
-
-        duration = this.calculateDuration(timeSlot.startTime, timeSlot.endTime)
-        const sportPrice = this.getSportPrice(ground, sport)
-        totalAmount = duration * sportPrice
       }
+
+      const pricePerHour = this.getSportPrice(ground, sport);
+      const totalAmount = totalDuration * pricePerHour;
 
       const booking = new Booking({
-        bookingType: "ground",
-        serviceId: groundId,
+        venueType,
+        venueId,
         userId,
         sport,
-        bookingDate: bookingDate ? new Date(bookingDate) : null,
-        bookingDates,
-        timeSlot,
-        timeSlots,
-        duration,
+        scheduledDates,
+        durationInHours: totalDuration,
         totalAmount,
         paymentMethod,
         specialRequests,
         bookingPattern: bookingPattern || "single",
-      })
+      });
 
-      await booking.save()
-      await Ground.findByIdAndUpdate(groundId, { $inc: { totalBookings: 1 } })
+      await booking.save();
+      await Ground.findByIdAndUpdate(venueId, { $inc: { totalBookings: 1 } });
 
-      return await booking.populate("serviceId userId")
+      return await booking.populate("venueId userId");
     } catch (error) {
-      console.log("Failed to book ground:", error)
-      throw error
+      console.log("Failed to book venue:", error);
+      throw error;
     }
   },
 
-  async getAvailableSlots(groundId, sport, date) {
+  async getAvailableSlots({ groundId, sport, date }) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      const venue = await Ground.findById(groundId);
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found");
       }
 
-      const ground = await Ground.findById(groundId)
-      if (!ground) {
-        throw CustomErrorHandler.notFound("Ground not found")
+      if (!venue.venue_sports.map(s => s.toLowerCase()).includes(sport.toLowerCase())) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
       }
 
-      if (!ground.venue_sports.includes(sport)) {
-        throw CustomErrorHandler.badRequest(`Ground does not support ${sport}`)
-      }
-
-      const bookingDay = DateTime.fromJSDate(new Date(date)).toFormat("cccc")
-      const dayTiming = ground.venue_timeslots[bookingDay]
-
+      // Check if venue is open
+      const bookingDay = DateTime.fromJSDate(new Date(date)).toFormat("cccc");
+      const dayTiming = venue.venue_timeslots[bookingDay];
       if (!dayTiming || !dayTiming.isOpen) {
         return {
           availableSlots: [],
@@ -293,33 +245,43 @@ const ProviderServices = {
           totalSlots: 0,
           sport,
           date,
-          pricing: this.getSportPrice(ground, sport),
-          message: "Ground is closed on this day",
-        }
+          pricing: this.getSportPrice(venue, sport),
+          message: `Venue is closed on ${bookingDay}`,
+        };
       }
 
-      const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime)
+      // Generate all potential slots
+      const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime);
+
+      // Fetch existing bookings for that date
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
 
       const existingBookings = await Booking.find({
-        serviceId: groundId,
-        sport,
-        bookingDate: new Date(date),
-        bookingStatus: { $in: ["confirmed", "pending"] },
-      })
+        venueId: groundId,
+        sport: new RegExp(`^${sport}$`, 'i'),
+        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
+        "scheduledDates.date": { $gte: start, $lte: end },
+      });
 
-      const bookedSlots = new Set()
-      existingBookings.forEach((booking) => {
-        if (booking.timeSlot) {
-          bookedSlots.add(`${booking.timeSlot.startTime}-${booking.timeSlot.endTime}`)
-        }
-        if (booking.timeSlots) {
-          booking.timeSlots.forEach((slot) => {
-            bookedSlots.add(`${slot.startTime}-${slot.endTime}`)
-          })
-        }
-      })
+      // Flatten booked slots
+      const bookedSlots = new Set();
+      existingBookings.forEach(bk => {
+        bk.scheduledDates.forEach(ds => {
+          const dsDate = new Date(ds.date);
+          if (dsDate >= start && dsDate <= end) {
+            ds.timeSlots.forEach(slot => {
+              bookedSlots.add(`${slot.startTime}-${slot.endTime}`);
+            });
+          }
+        });
+      });
 
-      const availableSlots = allSlots.filter((slot) => !bookedSlots.has(`${slot.startTime}-${slot.endTime}`))
+      const availableSlots = allSlots.filter(slot => {
+        return !bookedSlots.has(`${slot.startTime}-${slot.endTime}`);
+      });
 
       return {
         availableSlots,
@@ -327,92 +289,114 @@ const ProviderServices = {
         totalSlots: allSlots.length,
         sport,
         date,
-        pricing: this.getSportPrice(ground, sport),
-      }
+        pricing: this.getSportPrice(venue, sport),
+      };
     } catch (error) {
-      console.log("Failed to get available slots:", error)
-      throw error
+      console.log("Failed to get available slots:", error);
+      throw error;
     }
   },
 
-  async getBookedSlots(groundId, sport, date) {
+  async getBookedSlots(data) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
-      }
+      const { groundId, sport, date } = data;
+      const isGroundExist = await Ground.findById(groundId);
+      if (!isGroundExist) return CustomErrorHandler.notFound("Venue Not Found");
+
+      const queryDate = new Date(date);
+      const startOfDay = new Date(queryDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(queryDate);
+      endOfDay.setHours(23, 59, 59, 999);
 
       const bookings = await Booking.find({
-        serviceId: groundId,
-        sport,
-        bookingDate: new Date(date),
-        bookingStatus: { $in: ["confirmed", "pending"] },
-      }).populate("userId", "name email")
+        venueId: groundId,
+        sport: new RegExp(`^${sport}$`, 'i'),
+        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
+        $or: [
+          { bookingDate: { $gte: startOfDay, $lte: endOfDay } },
+          { "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay } },
+        ],
+      });
 
-      const bookedSlots = []
+      const bookedSlots = [];
+
       bookings.forEach((booking) => {
-        if (booking.timeSlot) {
-          bookedSlots.push({
-            startTime: booking.timeSlot.startTime,
-            endTime: booking.timeSlot.endTime,
-            bookingId: booking._id,
-            userId: booking.userId,
-            status: booking.bookingStatus,
-          })
+        if (booking.scheduledDates && booking.scheduledDates.length) {
+          booking.scheduledDates.forEach((dateEntry) => {
+            const entryDate = new Date(dateEntry.date);
+            if (entryDate >= startOfDay && entryDate <= endOfDay && dateEntry.timeSlots && dateEntry.timeSlots.length) {
+              dateEntry.timeSlots.forEach((slot) => {
+                bookedSlots.push({
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+                  bookingId: booking._id,
+                  userId: booking.userId,
+                  status: booking.bookingStatus,
+                });
+              });
+            }
+          });
         }
-        if (booking.timeSlots) {
-          booking.timeSlots.forEach((slot) => {
-            bookedSlots.push({
-              startTime: slot.startTime,
-              endTime: slot.endTime,
-              bookingId: booking._id,
-              userId: booking.userId,
-              status: booking.bookingStatus,
-            })
-          })
-        }
-      })
+      });
 
       return {
         bookedSlots,
         sport,
-        date,
+        date: queryDate,
         totalBookings: bookings.length,
-      }
+      };
     } catch (error) {
-      console.log("Failed to get booked slots:", error)
-      throw error
+      console.log("Failed to get booked slots:", error);
+      throw error;
     }
   },
-
   async getGroundBookings(filters) {
     try {
-      const { groundId, startDate, endDate, sport, status, page, limit } = filters
+      const {
+        groundId,
+        startDate,
+        endDate,
+        sport,
+        status,
+        page = 1,
+        limit = 10,
+      } = filters;
 
       if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+        throw CustomErrorHandler.badRequest("Invalid ground ID format");
       }
 
-      const query = { serviceId: groundId, bookingType: "ground" }
+      const matchQuery = {
+        venueId: groundId,
+      };
 
-      if (sport) query.sport = sport
-      if (status) query.bookingStatus = status
+      if (sport) {
+        matchQuery.sport = new RegExp(`^${sport}$`, 'i'); // Case-insensitive match
+      }
+
+      if (status) {
+        matchQuery.bookingStatus = status;
+      }
 
       if (startDate || endDate) {
-        query.bookingDate = {}
-        if (startDate) query.bookingDate.$gte = new Date(startDate)
-        if (endDate) query.bookingDate.$lte = new Date(endDate)
+        const dateFilter = {};
+        if (startDate) dateFilter.$gte = new Date(startDate);
+        if (endDate) dateFilter.$lte = new Date(endDate);
+        matchQuery["scheduledDates.date"] = dateFilter;
       }
 
-      const skip = (page - 1) * limit
-      const bookings = await Booking.find(query)
+      const skip = (page - 1) * limit;
+
+      const bookings = await Booking.find(matchQuery)
         .populate("userId", "name email phone")
-        .populate("serviceId", "venue_name venue_address")
-        .skip(skip)
-        .limit(limit)
+        .populate("venueId", "venue_name venue_address")
         .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
 
-      const total = await Booking.countDocuments(query)
-
+      const total = await Booking.countDocuments(matchQuery);
+      console.log(bookings);
       return {
         bookings,
         pagination: {
@@ -421,10 +405,10 @@ const ProviderServices = {
           totalItems: total,
           itemsPerPage: limit,
         },
-      }
+      };
     } catch (error) {
-      console.log("Failed to get ground bookings:", error)
-      throw error
+      console.error("Failed to get ground bookings:", error);
+      throw error;
     }
   },
 
@@ -904,8 +888,17 @@ const ProviderServices = {
   },
 
   calculateDuration(startTime, endTime) {
-    const start = DateTime.fromFormat(startTime, "h:mm a")
-    const end = DateTime.fromFormat(endTime, "h:mm a")
+    let start = DateTime.fromFormat(startTime, "h:mm a")
+    let end = DateTime.fromFormat(endTime, "h:mm a")
+
+    // fallback if first parse fails
+    if (!start.isValid) start = DateTime.fromFormat(startTime, "hh:mm a")
+    if (!end.isValid) end = DateTime.fromFormat(endTime, "hh:mm a")
+
+    if (!start.isValid || !end.isValid) {
+      throw new Error(`Invalid time format: ${startTime} - ${endTime}`)
+    }
+
     return end.diff(start, "hours").hours
   },
 
@@ -913,28 +906,28 @@ const ProviderServices = {
     const sportPricing = ground.sportPricing.find((sp) => sp.sport === sport)
     return sportPricing ? sportPricing.perHourCharge : ground.perHourCharge
   },
-   async GetServiceType() {
-        try {
-            const categories = await Category.find(
-                { categoryFor: "service_type" },
-                {
-                    createdAt: 0,
-                    updatedAt: 0,
-                    __v: 0
-                }
-            );
-            console.log(categories);
-            if (categories) {
-                return categories[0].categoryItem;
-            } else {
-                console.log("Found nothing");
-                return [];
-            }
-        } catch (error) {
-            console.error("Error in getting service type:", error);
-            return [];
+  async GetServiceType() {
+    try {
+      const categories = await Category.find(
+        { categoryFor: "service_type" },
+        {
+          createdAt: 0,
+          updatedAt: 0,
+          __v: 0
         }
-    },
+      );
+      console.log(categories);
+      if (categories) {
+        return categories[0].categoryItem;
+      } else {
+        console.log("Found nothing");
+        return [];
+      }
+    } catch (error) {
+      console.error("Error in getting service type:", error);
+      return [];
+    }
+  },
 }
 
 export default ProviderServices
