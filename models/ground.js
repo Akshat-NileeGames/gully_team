@@ -101,7 +101,7 @@ const groundSchema = new mongoose.Schema(
         required: true,
       },
     ],
-    
+
     sportPricing: [
       {
         sport: {

@@ -2,11 +2,6 @@ import mongoose from "mongoose"
 
 const bookingSchema = new mongoose.Schema(
   {
-    venueType: {
-      type: String,
-      enum: ["Open Ground", "Turf", "Stadium"],
-      required: true,
-    },
     venueId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Ground",
@@ -18,26 +13,25 @@ const bookingSchema = new mongoose.Schema(
     },
     bookingPattern: {
       type: String,
-      enum: ["single", "multiple_slots", "full_day", "week_booking"],
-      default: "single",
+      enum: ["single_slots", "multiple_slots", "full_day_booking", "week_booking"],
+      default: "single_slots",
     },
-    singleSlot: {
-      startTime: { type: String },
-      endTime: { type: String },
-    },
-    multipleSlots: [
-      {
-        startTime: String,
-        endTime: String,
-      },
-    ],
     scheduledDates: [
       {
-        date: { type: Date, required: true },
+        date: {
+          type: Date,
+          required: true
+        },
         timeSlots: [
           {
-            startTime: { type: String, required: true },
-            endTime: { type: String, required: true },
+            startTime: {
+              type: String,
+              required: true
+            },
+            endTime: {
+              type: String,
+              required: true
+            },
           },
         ],
       },
@@ -50,14 +44,9 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    paymentMethod: {
-      type: String,
-      enum: ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"],
-      required: true,
-    },
     paymentStatus: {
       type: String,
-      enum: ["pending", "completed", "failed", "refunded"],
+      enum: ["pending", "successful", "failed", "refunded"],
       default: "pending",
     },
     bookingStatus: {
@@ -70,14 +59,12 @@ const bookingSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    specialRequests: {
-      type: String,
-    },
     cancellationReason: {
       type: String,
     },
     refundAmount: {
       type: Number,
+      default: 0
     },
   },
   { timestamps: true },

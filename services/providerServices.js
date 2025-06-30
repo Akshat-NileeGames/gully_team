@@ -1,10 +1,8 @@
 import { Ground, Booking, User, Package, Individual } from "../models/index.js"
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
-
+import mongoose from "mongoose"
 const ProviderServices = {
-  // ==================== GROUND SERVICES ====================
-
   async createGround(data) {
     try {
       const userInfo = global.user
@@ -151,34 +149,25 @@ const ProviderServices = {
     }
   },
 
-  // ==================== GROUND BOOKING SERVICES ====================
 
-  async bookGround(bookingData, userId) {
+  async bookVenue(bookingData) {
     try {
       const {
         venueId,
-        venueType,
         sport,
-        scheduledDates,
-        paymentMethod,
-        specialRequests,
         bookingPattern,
+        scheduledDates,
+        durationInHours,
+        totalamount,
+        paymentStatus,
+        bookingStatus,
       } = bookingData;
-
-      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid venue ID format");
-      }
-
+      const userInfo = global.user
       const ground = await Ground.findById(venueId);
-      if (!ground) {
-        throw CustomErrorHandler.notFound("Venue not found");
-      }
+      if (!ground) throw CustomErrorHandler.notFound("Venue not found ");
 
-      if (!ground.venue_sports.includes(sport)) {
-        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
-      }
+      if (!ground.venue_sports.includes(sport)) throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
 
-      let totalDuration = 0;
       for (const dateSlot of scheduledDates) {
         const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc");
         const dayTiming = ground.venue_timeslots[bookingDay];
@@ -194,24 +183,18 @@ const ProviderServices = {
               `Slot ${slot.startTime} - ${slot.endTime} is unavailable on ${dateSlot.date}`
             );
           }
-          totalDuration += this.calculateDuration(slot.startTime, slot.endTime);
         }
       }
-
-      const pricePerHour = this.getSportPrice(ground, sport);
-      const totalAmount = totalDuration * pricePerHour;
-
       const booking = new Booking({
-        venueType,
         venueId,
-        userId,
         sport,
+        bookingPattern: bookingPattern || "single_slots",
         scheduledDates,
-        durationInHours: totalDuration,
-        totalAmount,
-        paymentMethod,
-        specialRequests,
-        bookingPattern: bookingPattern || "single",
+        durationInHours: durationInHours,
+        totalAmount: totalamount,
+        paymentStatus: paymentStatus || "Pending",
+        bookingStatus: bookingStatus || "Pending",
+        userId: userInfo.userId,
       });
 
       await booking.save();
@@ -223,6 +206,544 @@ const ProviderServices = {
       throw error;
     }
   },
+  // ==================== LEVENSHTEIN DISTANCE ALGORITHM ====================
+  levenshteinDistance(str1, str2) {
+    const matrix = []
+    const len1 = str1.length
+    const len2 = str2.length
+
+    if (len1 === 0) return len2
+    if (len2 === 0) return len1
+
+    // Initialize matrix
+    for (let i = 0; i <= len1; i++) {
+      matrix[i] = [i]
+    }
+    for (let j = 0; j <= len2; j++) {
+      matrix[0][j] = j
+    }
+
+    // Fill matrix
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        const cost = str1[i - 1] === str2[j - 1] ? 0 : 1
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1, // deletion
+          matrix[i][j - 1] + 1, // insertion
+          matrix[i - 1][j - 1] + cost, // substitution
+        )
+      }
+    }
+
+    return matrix[len1][len2]
+  },
+
+  // ==================== FUZZY SEARCH HELPER ====================
+  fuzzySearch(query, text, threshold = 3) {
+    const queryLower = query.toLowerCase()
+    const textLower = text.toLowerCase()
+
+    // Exact match
+    if (textLower.includes(queryLower)) return true
+
+    // Fuzzy match using Levenshtein distance
+    const words = textLower.split(" ")
+    for (const word of words) {
+      if (this.levenshteinDistance(queryLower, word) <= threshold) {
+        return true
+      }
+    }
+
+    return false
+  },
+
+  async getNearbyVenues(filters) {
+    try {
+      const { latitude, longitude, page } = filters
+      const limit = 10;
+      const MAX_DISTANCE_METERS = 15 * 1000;
+      const skip = (page - 1) * limit
+      const userLocation = {
+        type: "Point",
+        coordinates: [longitude, latitude]
+      };
+      //TODO:Need to remove these comment below
+      console.log("The current location:", userLocation);
+      // Find shops with expired subscriptions within the defined radius
+      const expiredGround = await Ground.find({
+        "locationHistory.point": {
+          $near: {
+            $geometry: userLocation,
+            $maxDistance: MAX_DISTANCE_METERS
+          }
+        },
+        subscriptionExpiry: { $lt: new Date() },
+        isSubscriptionPurchased: true
+      }).select('_id');
+
+      if (expiredGround.length > 0) {
+        const expiredGroundIds = expiredGround.map(ground => ground._id);
+        await Ground.updateMany(
+          { _id: { $in: expiredGroundIds } },
+          { $set: { isSubscriptionPurchased: false } }
+        );
+      }
+      const nearbyVenue = await Ground.aggregate([
+        {
+          $geoNear: {
+            near: userLocation,
+            distanceField: "distance",
+            spherical: true,
+            maxDistance: MAX_DISTANCE_METERS
+          }
+        },
+        {
+          $addFields: {
+            distanceInKm: { $divide: ["$distance", 1000] }
+          }
+        },
+        {
+          $match: {
+            distanceInKm: { $lte: 15 },
+            isSubscriptionPurchased: true
+          }
+        },
+        {
+          $lookup: {
+            from: "packages",
+            localField: "packageRef",
+            foreignField: "_id",
+            as: "packageRef"
+          },
+        },
+
+        {
+          $unwind: {
+            path: "$packageRef",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        { $skip: skip },
+        { $limit: limit }
+
+      ]);
+      return nearbyVenue;
+    } catch (error) {
+      console.log(`Failed to get nearby venues:${error}`)
+      throw error
+    }
+  },
+
+  async getNearbyIndividuals(filters) {
+    try {
+      const { latitude, longitude, page } = filters
+      const limit = 10;
+      const MAX_DISTANCE_METERS = 100 * 1000;
+      const skip = (page - 1) * limit
+      const userLocation = {
+        type: "Point",
+        coordinates: [longitude, latitude]
+      };
+      const expiredindividualPackage = await Individual.find({
+        "locationHistory.point": {
+          $near: {
+            $geometry: userLocation,
+            $maxDistance: MAX_DISTANCE_METERS
+          }
+        },
+        subscriptionExpiry: { $lt: new Date() },
+        hasActiveSubscription: true
+      }).select('_id');
+
+      if (expiredindividualPackage.length > 0) {
+        const expiredindividualPackageIds = expiredindividualPackage.map(ground => ground._id);
+        await Individual.updateMany(
+          { _id: { $in: expiredindividualPackageIds } },
+          { $set: { hasActiveSubscription: false } }
+        );
+      }
+      const nearbyIndividual = await Individual.aggregate([
+        {
+          $geoNear: {
+            near: userLocation,
+            distanceField: "distance",
+            spherical: true,
+            maxDistance: MAX_DISTANCE_METERS
+          }
+        },
+        {
+          $addFields: {
+            distanceInKm: { $divide: ["$distance", 1000] }
+          }
+        },
+        {
+          $match: {
+            distanceInKm: { $lte: 100 },
+            isSubscriptionPurchased: true
+          }
+        },
+        {
+          $lookup: {
+            from: "packages",
+            localField: "packageRef",
+            foreignField: "_id",
+            as: "packageRef"
+          },
+        },
+
+        {
+          $unwind: {
+            path: "$packageRef",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        { $skip: skip },
+        { $limit: limit }
+
+      ]);
+      console.log(nearbyIndividual);
+      return nearbyIndividual;
+    } catch (error) {
+      console.log("Failed to get nearby individuals:", error)
+      throw error
+    }
+  },
+
+  // ==================== SEARCH VENUES ====================
+  async searchVenues(filters) {
+    try {
+      const { query, latitude, longitude, page, limit, radius, sport, venueType, priceRange } = filters
+
+      const searchQuery = {
+        isActive: true,
+        isSubscriptionPurchased: true,
+      }
+
+      // Location-based search if coordinates provided
+      if (latitude && longitude) {
+        searchQuery["locationHistory.point"] = {
+          $near: {
+            $geometry: {
+              type: "Point",
+              coordinates: [longitude, latitude],
+            },
+            $maxDistance: radius * 1000,
+          },
+        }
+      }
+
+      // Apply additional filters
+      if (sport) {
+        searchQuery.venue_sports = { $in: [sport] }
+      }
+
+      if (venueType) {
+        searchQuery.venue_type = venueType
+      }
+
+      if (priceRange) {
+        if (priceRange.min !== undefined || priceRange.max !== undefined) {
+          searchQuery.perHourCharge = {}
+          if (priceRange.min !== undefined) searchQuery.perHourCharge.$gte = priceRange.min
+          if (priceRange.max !== undefined) searchQuery.perHourCharge.$lte = priceRange.max
+        }
+      }
+
+      const skip = (page - 1) * limit
+      let venues = await Ground.find(searchQuery)
+        .populate("userId", "name email")
+        .populate("packageRef")
+        .skip(skip)
+        .limit(limit)
+
+      // Apply fuzzy search filtering
+      venues = venues.filter((venue) => {
+        return (
+          this.fuzzySearch(query, venue.venue_name) ||
+          this.fuzzySearch(query, venue.venue_description) ||
+          this.fuzzySearch(query, venue.venue_address) ||
+          venue.venue_sports.some((sport) => this.fuzzySearch(query, sport))
+        )
+      })
+
+      // Calculate distance if coordinates provided
+      if (latitude && longitude) {
+        venues = venues.map((venue) => {
+          const venueCoords = venue.locationHistory.point.coordinates
+          const distance = this.calculateDistance(latitude, longitude, venueCoords[1], venueCoords[0])
+          return {
+            ...venue.toObject(),
+            distance: Number.parseFloat(distance.toFixed(2)),
+          }
+        })
+      }
+
+      return {
+        venues,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(venues.length / limit),
+          totalItems: venues.length,
+          itemsPerPage: limit,
+        },
+        searchQuery: query,
+        searchRadius: radius,
+      }
+    } catch (error) {
+      console.log("Failed to search venues:", error)
+      throw error
+    }
+  },
+
+  // ==================== SEARCH INDIVIDUALS ====================
+  async searchIndividuals(filters) {
+    try {
+      const { query, latitude, longitude, page, limit, radius, sport, serviceType, experienceRange, ageGroup } = filters
+
+      const searchQuery = {
+        hasActiveSubscription: true,
+      }
+
+      // Location-based search if coordinates provided
+      if (latitude && longitude) {
+        searchQuery["locationHistory.point"] = {
+          $near: {
+            $geometry: {
+              type: "Point",
+              coordinates: [longitude, latitude],
+            },
+            $maxDistance: radius * 1000,
+          },
+        }
+      }
+
+      // Apply additional filters
+      if (sport) {
+        searchQuery.sportsCategories = { $in: [sport] }
+      }
+
+      if (serviceType) {
+        switch (serviceType) {
+          case "one_on_one":
+            searchQuery["serviceOptions.providesOneOnOne"] = true
+            break
+          case "team_service":
+            searchQuery["serviceOptions.providesTeamService"] = true
+            break
+          case "online_service":
+            searchQuery["serviceOptions.providesOnlineService"] = true
+            break
+        }
+      }
+
+      if (experienceRange) {
+        if (experienceRange.min !== undefined || experienceRange.max !== undefined) {
+          searchQuery.yearOfExperience = {}
+          if (experienceRange.min !== undefined) searchQuery.yearOfExperience.$gte = experienceRange.min
+          if (experienceRange.max !== undefined) searchQuery.yearOfExperience.$lte = experienceRange.max
+        }
+      }
+
+      if (ageGroup) {
+        searchQuery.supportedAgeGroups = { $in: [ageGroup] }
+      }
+
+      const skip = (page - 1) * limit
+      let individuals = await Individual.find(searchQuery)
+        .populate("userId", "name email")
+        .populate("packageRef")
+        .skip(skip)
+        .limit(limit)
+
+      // Apply fuzzy search filtering
+      individuals = individuals.filter((individual) => {
+        return (
+          this.fuzzySearch(query, individual.fullName) ||
+          this.fuzzySearch(query, individual.bio) ||
+          individual.sportsCategories.some((sport) => this.fuzzySearch(query, sport)) ||
+          individual.selectedServiceTypes.some((service) => this.fuzzySearch(query, service))
+        )
+      })
+
+      // Calculate distance if coordinates provided
+      if (latitude && longitude) {
+        individuals = individuals.map((individual) => {
+          const individualCoords = individual.locationHistory.point.coordinates
+          const distance = this.calculateDistance(latitude, longitude, individualCoords[1], individualCoords[0])
+          return {
+            ...individual.toObject(),
+            distance: Number.parseFloat(distance.toFixed(2)),
+          }
+        })
+      }
+
+      return {
+        individuals,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(individuals.length / limit),
+          totalItems: individuals.length,
+          itemsPerPage: limit,
+        },
+        searchQuery: query,
+        searchRadius: radius,
+      }
+    } catch (error) {
+      console.log("Failed to search individuals:", error)
+      throw error
+    }
+  },
+
+  // ==================== COMBINED SEARCH ====================
+  async combinedSearch(filters) {
+    try {
+      const { query, latitude, longitude, page, limit, radius } = filters
+
+      // Search venues
+      const venueResults = await this.searchVenues({
+        query,
+        latitude,
+        longitude,
+        page: 1,
+        limit: Math.ceil(limit / 2),
+        radius,
+      })
+
+      // Search individuals
+      const individualResults = await this.searchIndividuals({
+        query,
+        latitude,
+        longitude,
+        page: 1,
+        limit: Math.ceil(limit / 2),
+        radius,
+      })
+
+      return {
+        venues: venueResults.venues,
+        individuals: individualResults.individuals,
+        totalVenues: venueResults.pagination.totalItems,
+        totalIndividuals: individualResults.pagination.totalItems,
+        searchQuery: query,
+        searchRadius: radius,
+      }
+    } catch (error) {
+      console.log("Failed to perform combined search:", error)
+      throw error
+    }
+  },
+
+  // ==================== GET INDIVIDUAL PROFILE ====================
+  async getIndividualProfile(individualId) {
+    try {
+      if (!individualId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid individual ID format")
+      }
+
+      const individual = await Individual.findById(individualId).populate("userId", "name email").populate("packageRef")
+
+      if (!individual) {
+        throw CustomErrorHandler.notFound("Individual not found")
+      }
+
+      return individual
+    } catch (error) {
+      console.log("Failed to get individual profile:", error)
+      throw error
+    }
+  },
+
+  // ==================== CALCULATE DISTANCE ====================
+  calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371 // Radius of the Earth in kilometers
+    const dLat = this.deg2rad(lat2 - lat1)
+    const dLon = this.deg2rad(lon2 - lon1)
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    const distance = R * c // Distance in kilometers
+    return distance
+  },
+
+  deg2rad(deg) {
+    return deg * (Math.PI / 180)
+  },
+  async GetNearByVenue(data) {
+    const { latitude, longitude, page } = data;
+    const MAX_DISTANCE_METERS = 15 * 1000;
+    const limit = 10;
+    const skip = (page - 1) * limit
+    const userLocation = {
+      type: "Point",
+      coordinates: [longitude, latitude]
+    };
+
+    //TODO:Need to remove these comment below
+    // Find Ground with expired subscriptions within the defined radius
+    const expiredGround = await Ground.find({
+      "locationHistory.point": {
+        $near: {
+          $geometry: userLocation,
+          $maxDistance: MAX_DISTANCE_METERS
+        }
+      },
+      subscriptionExpiry: { $lt: new Date() },
+      isSubscriptionPurchased: true
+    }).select('_id');
+
+    // Update the subscription status of expired shops
+    if (expiredGround.length > 0) {
+      const expiredGroundIds = expiredGround.map(ground => ground._id);
+      await Ground.updateMany(
+        { _id: { $in: expiredGroundIds } },
+        { $set: { isSubscriptionPurchased: false } }
+      );
+    }
+    console.log("The current location:", userLocation);
+    const ground = await Ground.aggregate([
+      {
+        $geoNear: {
+          near: userLocation,
+          distanceField: "distance",
+          spherical: true,
+          maxDistance: MAX_DISTANCE_METERS
+        }
+      }
+      ,
+      {
+        $addFields: {
+          distanceInKm: { $divide: ["$distance", 1000] }
+        }
+      },
+      {
+        $match: {
+          distanceInKm: { $lte: 15 },
+          isSubscriptionPurchased: true
+        }
+      },
+      {
+        $lookup: {
+          from: "packages",
+          localField: "packageRef",
+          foreignField: "_id",
+          as: "packageRef"
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$packageRef",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+    ]);
+    console.log(ground);
+    return ground;
+  },
+
+
+
 
   async getAvailableSlots({ groundId, sport, date }) {
     try {
@@ -351,52 +872,48 @@ const ProviderServices = {
       throw error;
     }
   },
-  async getGroundBookings(filters) {
+  async getGroundBookings(data) {
     try {
-      const {
-        groundId,
-        startDate,
-        endDate,
-        sport,
-        status,
-        page = 1,
-        limit = 10,
-      } = filters;
-
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format");
-      }
+      const { groundId, startDate, endDate, sport, status, paymentStatus, page = 1, limit = 10 } = data
 
       const matchQuery = {
         venueId: groundId,
-      };
+      }
 
       if (sport) {
-        matchQuery.sport = new RegExp(`^${sport}$`, 'i'); // Case-insensitive match
+        matchQuery.sport = new RegExp(`^${sport}$`, "i")
       }
 
       if (status) {
-        matchQuery.bookingStatus = status;
+        matchQuery.bookingStatus = status
+      }
+
+      if (paymentStatus) {
+        matchQuery.paymentStatus = paymentStatus
       }
 
       if (startDate || endDate) {
-        const dateFilter = {};
-        if (startDate) dateFilter.$gte = new Date(startDate);
-        if (endDate) dateFilter.$lte = new Date(endDate);
-        matchQuery["scheduledDates.date"] = dateFilter;
+        const dateFilter = {}
+        if (startDate) dateFilter.$gte = new Date(startDate)
+        if (endDate) dateFilter.$lte = new Date(endDate)
+        matchQuery["scheduledDates.date"] = dateFilter
       }
 
-      const skip = (page - 1) * limit;
+      const skip = (page - 1) * limit
+      const total = await Booking.countDocuments(matchQuery)
 
       const bookings = await Booking.find(matchQuery)
-        .populate("userId", "name email phone")
-        .populate("venueId", "venue_name venue_address")
+        .populate({
+          path: "venueId",
+          populate: {
+            path: "packageRef",
+          },
+        })
+        // .populate("userId", "name email phone")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit);
+        .limit(limit)
 
-      const total = await Booking.countDocuments(matchQuery);
-      console.log(bookings);
       return {
         bookings,
         pagination: {
@@ -405,13 +922,12 @@ const ProviderServices = {
           totalItems: total,
           itemsPerPage: limit,
         },
-      };
+      }
     } catch (error) {
-      console.error("Failed to get ground bookings:", error);
-      throw error;
+      console.error("Failed to get ground bookings:", error)
+      throw error
     }
   },
-
   async checkMultipleDateAvailability(data) {
     try {
       const { groundId, sport, startDate, endDate, timeSlots } = data
@@ -481,7 +997,201 @@ const ProviderServices = {
     }
   },
 
-  // ==================== INDIVIDUAL SERVICES ====================
+
+  async getDashboardAnalytics(groundId) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const today = new Date()
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59)
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59)
+
+      // Today's bookings
+      const todayBookings = await Booking.countDocuments({
+        venueId: groundId,
+        "scheduledDates.date": { $gte: startOfToday, $lte: endOfToday },
+      })
+
+      // Today's revenue
+      const todayRevenueResult = await Booking.aggregate([
+        {
+          $match: {
+            venueId: mongoose.Types.ObjectId(groundId),
+            "scheduledDates.date": { $gte: startOfToday, $lte: endOfToday },
+            paymentStatus: "successful",
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: "$totalAmount" }
+          }
+        }
+      ])
+
+      const todayRevenue = todayRevenueResult.length > 0 ? todayRevenueResult[0].totalRevenue : 0
+
+      // Monthly revenue
+      const monthlyRevenueResult = await Booking.aggregate([
+        {
+          $match: {
+            venueId: mongoose.Types.ObjectId(groundId),
+            "scheduledDates.date": { $gte: startOfMonth, $lte: endOfMonth },
+            paymentStatus: "successful",
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: "$totalAmount" }
+          }
+        }
+      ])
+
+      const monthlyRevenue = monthlyRevenueResult.length > 0 ? monthlyRevenueResult[0].totalRevenue : 0
+
+      // Booking status distribution
+      const statusStats = await Booking.aggregate([
+        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $group: { _id: "$bookingStatus", count: { $sum: 1 } } }
+      ])
+
+      // Payment status distribution
+      const paymentStats = await Booking.aggregate([
+        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $group: { _id: "$paymentStatus", count: { $sum: 1 } } }
+      ])
+
+      // Sport-wise bookings
+      const sportStats = await Booking.aggregate([
+        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $group: { _id: "$sport", count: { $sum: 1 }, revenue: { $sum: "$totalAmount" } } }
+      ])
+
+      return {
+        todayBookings,
+        todayRevenue,
+        monthlyRevenue,
+        statusStats: statusStats.reduce((acc, stat) => {
+          acc[stat._id] = stat.count
+          return acc
+        }, {}),
+        paymentStats: paymentStats.reduce((acc, stat) => {
+          acc[stat._id] = stat.count
+          return acc
+        }, {}),
+        sportStats: sportStats.reduce((acc, stat) => {
+          acc[stat._id] = { count: stat.count, revenue: stat.revenue }
+          return acc
+        }, {}),
+      }
+    } catch (error) {
+      console.log("Failed to get dashboard analytics:", error)
+      throw error
+    }
+  },
+
+  async getRevenueAnalytics(groundId, period = "month") {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const today = new Date()
+      let startDate, groupBy
+
+      switch (period) {
+        case "week":
+          startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+          groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+          break
+        case "month":
+          startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+          groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+          break
+        case "quarter":
+          startDate = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1)
+          groupBy = { $dateToString: { format: "%Y-%m", date: "$createdAt" } }
+          break
+        case "year":
+          startDate = new Date(today.getFullYear(), 0, 1)
+          groupBy = { $dateToString: { format: "%Y-%m", date: "$createdAt" } }
+          break
+        default:
+          startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+          groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+      }
+
+      const revenueData = await Booking.aggregate([
+        {
+          $match: {
+            venueId: mongoose.Types.ObjectId(groundId),
+            createdAt: { $gte: startDate },
+            paymentStatus: "successful",
+          }
+        },
+        {
+          $group: {
+            _id: groupBy,
+            revenue: { $sum: "$totalAmount" },
+            bookings: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+
+      return {
+        period,
+        data: revenueData,
+        totalRevenue: revenueData.reduce((sum, item) => sum + item.revenue, 0),
+        totalBookings: revenueData.reduce((sum, item) => sum + item.bookings, 0),
+      }
+    } catch (error) {
+      console.log("Failed to get revenue analytics:", error)
+      throw error
+    }
+  },
+
+  async getSportsAnalytics(groundId) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const sportAnalytics = await Booking.aggregate([
+        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        {
+          $group: {
+            _id: "$sport",
+            totalBookings: { $sum: 1 },
+            totalRevenue: { $sum: "$totalAmount" },
+            avgBookingValue: { $avg: "$totalAmount" },
+            confirmedBookings: {
+              $sum: { $cond: [{ $eq: ["$bookingStatus", "confirmed"] }, 1, 0] }
+            },
+            cancelledBookings: {
+              $sum: { $cond: [{ $eq: ["$bookingStatus", "cancelled"] }, 1, 0] }
+            },
+          }
+        },
+        { $sort: { totalRevenue: -1 } }
+      ])
+
+      return {
+        sports: sportAnalytics,
+        totalSports: sportAnalytics.length,
+      }
+    } catch (error) {
+      console.log("Failed to get sports analytics:", error)
+      throw error
+    }
+  },
+
 
   async createIndividual(data) {
     try {
@@ -605,7 +1315,6 @@ const ProviderServices = {
     }
   },
 
-  // ==================== INDIVIDUAL BOOKING SERVICES ====================
 
   async bookIndividual(bookingData, userId) {
     try {
@@ -768,33 +1477,39 @@ const ProviderServices = {
     }
   },
 
-  // ==================== COMMON BOOKING SERVICES ====================
 
-  async getUserBookings(filters, userId) {
+  async getUserBookings(data) {
     try {
-      const { bookingType, status, page, limit } = filters
-      const query = { userId }
+      const { page = 1 } = data;
+      const userInfo = global.user;
+      const limit = 10
+      const skip = (page - 1) * limit;
 
-      if (bookingType) query.bookingType = bookingType
-      if (status) query.bookingStatus = status
 
-      const skip = (page - 1) * limit
-      const bookings = await Booking.find(query).populate("serviceId").skip(skip).limit(limit).sort({ createdAt: -1 })
+      //       const query = {
+      //  userId: userInfo.userId
+      //       };
+      // if (status) {
+      //   query.bookingStatus = status;
+      // }
 
-      const total = await Booking.countDocuments(query)
+      const bookings = await Booking.find({
+        userId: userInfo.userId
+      })
+        .populate({
+          path: "venueId",
+          populate: {
+            path: "packageRef",
+          }
+        })
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
 
-      return {
-        bookings,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-        },
-      }
+      return bookings;
     } catch (error) {
-      console.log("Failed to get user bookings:", error)
-      throw error
+      console.error("Failed to get user bookings:", error);
+      throw error;
     }
   },
 
@@ -827,32 +1542,28 @@ const ProviderServices = {
       throw error
     }
   },
+  async checkGroundSlotAvailability(venueId, sport, date, timeSlot) {
+    const { startTime, endTime } = timeSlot;
 
-  // ==================== HELPER METHODS ====================
-
-  async checkGroundSlotAvailability(groundId, sport, date, timeSlot) {
     const booking = await Booking.findOne({
-      serviceId: groundId,
+      venueId,
       sport,
       bookingDate: new Date(date),
-      $or: [
-        {
-          "timeSlot.startTime": timeSlot.startTime,
-          "timeSlot.endTime": timeSlot.endTime,
-        },
-        {
+      bookingStatus: { $in: ["confirmed"] },
+      scheduledDates: {
+        $elemMatch: {
+          date: new Date(date),
           timeSlots: {
             $elemMatch: {
-              startTime: timeSlot.startTime,
-              endTime: timeSlot.endTime,
-            },
-          },
-        },
-      ],
-      bookingStatus: { $in: ["confirmed", "pending"] },
-    })
+              startTime: { $lt: endTime },
+              endTime: { $gt: startTime }
+            }
+          }
+        }
+      }
+    });
 
-    return !booking
+    return !booking;
   },
 
   async checkIndividualSlotAvailability(individualId, date, timeSlot) {
