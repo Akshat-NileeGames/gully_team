@@ -264,26 +264,26 @@ const ProviderController = {
         }
     },
 
-    // ==================== SEARCH VENUES ====================
     async searchVenues(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
-            latitude: Joi.number().min(-90).max(90).optional(),
-            longitude: Joi.number().min(-180).max(180).optional(),
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
             page: Joi.number().min(1).default(1),
-            limit: Joi.number().min(1).max(50).default(10),
-            radius: Joi.number().min(1).max(100).default(25), // in kilometers
-            sport: Joi.string().optional(),
+            radius: Joi.number().default(15),
+            sport: Joi.string().allow('').optional(),
             venueType: Joi.string().valid("Open Ground", "Turf", "Stadium").optional(),
             priceRange: Joi.object({
                 min: Joi.number().min(0).optional(),
                 max: Joi.number().min(0).optional(),
             }).optional(),
         })
-
         const { error } = validation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+            return next(
+                CustomErrorHandler.badRequest(error
+                ),
+            )
         }
 
         try {
@@ -302,12 +302,12 @@ const ProviderController = {
     async searchIndividuals(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
-            latitude: Joi.number().min(-90).max(90).optional(),
-            longitude: Joi.number().min(-180).max(180).optional(),
+            latitude: Joi.number().required(), // Made required
+            longitude: Joi.number().required(), // Made required
             page: Joi.number().min(1).default(1),
             limit: Joi.number().min(1).max(50).default(10),
-            radius: Joi.number().min(1).max(100).default(25), // in kilometers
-            sport: Joi.string().optional(),
+            radius: Joi.number().min(1).max(15).default(15), // Max 15km
+            sport: Joi.string().allow('').optional(),
             serviceType: Joi.string().valid("one_on_one", "team_service", "online_service").optional(),
             experienceRange: Joi.object({
                 min: Joi.number().min(0).optional(),
@@ -318,7 +318,12 @@ const ProviderController = {
 
         const { error } = validation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+            return next(
+                CustomErrorHandler.badRequest(
+                    `Location coordinates are required for search individual. Please enable location services.:${error}`
+
+                ),
+            )
         }
 
         try {
@@ -337,20 +342,26 @@ const ProviderController = {
     async combinedSearch(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
-            latitude: Joi.number().min(-90).max(90).optional(),
-            longitude: Joi.number().min(-180).max(180).optional(),
+            latitude: Joi.number().min(-90).max(90).required(), // Made required
+            longitude: Joi.number().min(-180).max(180).required(), // Made required
             page: Joi.number().min(1).default(1),
             limit: Joi.number().min(1).max(50).default(10),
-            radius: Joi.number().min(1).max(100).default(25), // in kilometers
+            radius: Joi.number().min(1).max(15).default(15), // Max 15km
         })
 
         const { error } = validation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+            return next(
+                CustomErrorHandler.badRequest(
+                    "Location coordinates are required for search. Please enable location services.",
+                    error,
+                ),
+            )
         }
+        console.log(req.body);
 
         try {
-            const result = await ProviderServices.combinedSearch(req.body)
+            const result = await ProviderServices.combinedSearch(req.body);
             return res.json({
                 success: true,
                 message: "Combined search completed successfully",
@@ -587,6 +598,7 @@ const ProviderController = {
                 .pattern(/^[0-9]{10}$/)
                 .required(),
             email: Joi.string().email().required(),
+            panNumber: Joi.string().required(),
             yearOfExperience: Joi.number().min(0).required(),
             sportsCategories: Joi.array().items(Joi.string()).min(1).required(),
             certifications: Joi.array().items(Joi.string()).optional(),
@@ -597,58 +609,16 @@ const ProviderController = {
                 providesTeamService: Joi.boolean().default(false),
                 providesOnlineService: Joi.boolean().default(false),
             }).required(),
-            availability: Joi.object({
-                Monday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-                Tuesday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-                Wednesday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-                Thursday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-                Friday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-                Saturday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-                Sunday: Joi.object({
-                    isAvailable: Joi.boolean().required(),
-                    startTime: Joi.string().optional(),
-                    endTime: Joi.string().optional(),
-                }),
-            }).required(),
-            location: Joi.object({
-                address: Joi.string().required(),
-                city: Joi.string().required(),
-                state: Joi.string().required(),
-                coordinates: Joi.object({
-                    latitude: Joi.number().required(),
-                    longitude: Joi.number().required(),
-                }).required(),
-            }).required(),
+            availability: Joi.array().required(),
+            selectLocation: Joi.string().required(),
+            longitude: Joi.number().required(),
+            latitude: Joi.number().required(),
             packageRef: Joi.string().required(),
         })
 
         const { error } = individualValidation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to Validate request: ${error}`))
         }
 
         try {
