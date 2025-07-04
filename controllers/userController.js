@@ -314,7 +314,7 @@ const userController = {
     }
   },
 
-  
+
 
 
   async verifyOTP(req, res, next) {
@@ -349,6 +349,24 @@ const userController = {
         success: true,
         message: "User Retrieved Suessfully",
         data: result,
+      });
+    } catch (err) {
+      console.log(" Error in  getProfile");
+      return next(err);
+    }
+  },
+  async getUser(req, res, next) {
+    const user = Joi.object({ userId: Joi.string().required() });
+    const { error } = user.validate(req.params);
+    if (error) {
+      return next(error);
+    }
+    try {
+      const result = await userServices.getUser(req.params);
+      return res.status(200).json({
+        success: true,
+        message: "User Retrieved Suessfully",
+        data: { user: result },
       });
     } catch (err) {
       console.log(" Error in  getProfile");

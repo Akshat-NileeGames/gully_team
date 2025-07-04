@@ -8,6 +8,7 @@ import validateUser from "../middlewares/validateUser.js"
 router.post("/createProfile",validateUser, userController.createProfile);
 
 router.get("/getProfile",validateUser, userController.getProfile);
+router.get("/getUserById/:userId",validateUser, userController.getUser);
 
 router.delete("/deleteProfile",validateUser, userController.deleteProfile);
 

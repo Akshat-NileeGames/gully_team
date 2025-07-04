@@ -5,7 +5,7 @@ import Joi from "joi"
 const ProviderController = {
 
     //#region Create Ground
-    async createGround(req, res, next) {
+    async createVenue(req, res, next) {
         const venueValidation = Joi.object({
             venue_name: Joi.string().required(),
             venue_description: Joi.string().required(),
@@ -98,16 +98,17 @@ const ProviderController = {
             selectLocation: Joi.string().required(),
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),
+            // subscriptionExpiry: Joi.date().iso().required(),
             packageRef: Joi.string().required(),
         })
 
         const { error } = venueValidation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to Validate request:${error}`))
         }
 
         try {
-            const result = await ProviderServices.createGround(req.body)
+            const result = await ProviderServices.createVenue(req.body)
             return res.status(200).json({
                 success: true,
                 message: "Ground created successfully",
@@ -298,15 +299,13 @@ const ProviderController = {
         }
     },
 
-    // ==================== SEARCH INDIVIDUALS ====================
     async searchIndividuals(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
-            latitude: Joi.number().required(), // Made required
-            longitude: Joi.number().required(), // Made required
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
             page: Joi.number().min(1).default(1),
-            limit: Joi.number().min(1).max(50).default(10),
-            radius: Joi.number().min(1).max(15).default(15), // Max 15km
+            radius: Joi.number().min(1).max(15).default(15),
             sport: Joi.string().allow('').optional(),
             serviceType: Joi.string().valid("one_on_one", "team_service", "online_service").optional(),
             experienceRange: Joi.object({
@@ -338,7 +337,6 @@ const ProviderController = {
         }
     },
 
-    // ==================== COMBINED SEARCH ====================
     async combinedSearch(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
@@ -358,7 +356,6 @@ const ProviderController = {
                 ),
             )
         }
-        console.log(req.body);
 
         try {
             const result = await ProviderServices.combinedSearch(req.body);
@@ -372,7 +369,6 @@ const ProviderController = {
         }
     },
 
-    // ==================== GET INDIVIDUAL PROFILE ====================
     async getIndividualProfile(req, res, next) {
         const validation = Joi.object({
             id: Joi.string().required(),
@@ -480,7 +476,82 @@ const ProviderController = {
         }
     },
     //#endregion 
+    //#region Get Today's Bookings
+    async getTodayBookings(req, res, next) {
+        const validation = Joi.object({
+            groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+        });
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to Validate request:${error}`))
+        }
 
+        try {
+            const result = await ProviderServices.getTodayBookings(req.body)
+            return res.json({
+                success: true,
+                message: "Today's bookings retrieved successfully",
+                data: { todaysBookingDetails: result },
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get today's bookings:", error))
+        }
+    },
+    //#endregion
+
+    //#region Get Upcoming Bookings
+    async getUpcomingBookings(req, res, next) {
+        const validation = Joi.object({
+            groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+            page: Joi.number().min(1).default(1),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+        }
+
+        try {
+            const result = await ProviderServices.getUpcomingBookings(req.body
+            )
+            return res.json({
+                success: true,
+                message: "Upcoming bookings retrieved successfully",
+                data: { upcomingBookings: result },
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get upcoming bookings:", error))
+        }
+    },
+    //#endregion
+
+    //#region Get Past Bookings
+    async getPastBooking(req, res, next) {
+        const validation = Joi.object({
+            groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+            page: Joi.number().min(1).default(1),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+        }
+
+        try {
+            const result = await ProviderServices.getPastBooking(req.body)
+            return res.json({
+                success: true,
+                message: "Past bookings retrieved successfully",
+                data: { PastBookings: result },
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get completed bookings:", error))
+        }
+    },
+    //#endregion
     //#region checkMultipleDateAvailability
     async checkMultipleDateAvailability(req, res, next) {
         const validation = Joi.object({

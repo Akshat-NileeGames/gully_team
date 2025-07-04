@@ -326,6 +326,25 @@ const userServices = {
     }
     return userData;
   },
+  async getUser(data) {
+    const userInfo = data.userId;
+    //Find the User
+    let userData = await User.findOne({ _id: userInfo }, {
+      fullName: 1,
+      email: 1,
+      phoneNumber: 1,
+      isNewUser: 1,
+      profilePhoto: 1,
+      isOrganizer: 1,
+    });
+
+    if (!userData) {
+      // Handle the case where the user is not found
+      throw CustomErrorHandler.notFound("User Not Found");
+    }
+    console.log(userData);
+    return userData;
+  },
 
   async updateLocation(data) {
     const { latitude, longitude, placeName } = data;

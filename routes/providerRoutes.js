@@ -3,6 +3,10 @@ const router = express.Router()
 import { ProviderController } from "../controllers/index.js"
 import validateUser from "../middlewares/validateUser.js"
 
+
+
+router.post("/createVenue", validateUser, ProviderController.createVenue)
+
 // ==================== GROUND ROUTES ====================
 router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround)
 // router.post("/getNearbyVenue", validateUser, ProviderController.GetNearByVenue)
@@ -15,7 +19,9 @@ router.post("/checkMultipleDateAvailability", ProviderController.checkMultipleDa
 router.post("/availableSlots", ProviderController.getAvailableSlots)
 router.post("/getbookedSlots", ProviderController.getBookedSlots)
 router.post("/groundBookings", validateUser, ProviderController.getGroundBookings)
-
+router.post("/bookings/today", validateUser, ProviderController.getTodayBookings)
+router.post("/bookings/upcoming", validateUser, ProviderController.getUpcomingBookings)
+router.post("/bookings/past", validateUser, ProviderController.getPastBooking)
 // ==================== ANALYTICS ROUTES ====================
 router.get("/analytics/dashboard/:groundId", validateUser, ProviderController.getDashboardAnalytics)
 router.get("/analytics/revenue/:groundId", validateUser, ProviderController.getRevenueAnalytics)
