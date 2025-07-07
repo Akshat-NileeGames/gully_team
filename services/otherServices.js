@@ -2495,6 +2495,8 @@ const otherServices = {
       razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
       amount: result.amount / 100,
+      amountPaid: 0,
+      amountDue: result.amount / 100,
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
       totalAmountWithGST: result.amount / 100,
@@ -3331,7 +3333,7 @@ const otherServices = {
     const gstRate = 18 / 100
     const gstAmount = (result.amount / 100) * gstRate
     const amountBeforeGST = result.amount / 100 - gstAmount
-
+    console.log(data.ordertype);
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
@@ -3339,6 +3341,8 @@ const otherServices = {
       razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
       amount: result.amount / 100,
+      amountPaid: 0,
+      amountDue: result.amount / 100,
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
       totalAmountWithGST: result.amount / 100,
@@ -3347,7 +3351,7 @@ const otherServices = {
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
-      ordertype: "Individual",
+      ordertype: data.ordertype,
     })
 
     await orderHistory.save()
@@ -3368,7 +3372,7 @@ const otherServices = {
 
     setTimeout(async () => {
       console.log("Sending email after 10 seconds...")
-      await this.sendpaymentMail(
+      await this.sendIndividualpaymentMail(
         "individual-subscription",
         user,
         individual,

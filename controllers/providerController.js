@@ -216,6 +216,7 @@ const ProviderController = {
     },
     //#endregion
 
+    //#region getnearbyVenu
     async getNearbyVenues(req, res, next) {
         const validation = Joi.object({
             latitude: Joi.number().required(),
@@ -240,7 +241,9 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to get nearby venues:", error))
         }
     },
+    //#endregion
 
+    //#region GetNearbyIndividuals
     async getNearbyIndividuals(req, res, next) {
         const validation = Joi.object({
             latitude: Joi.number().required(),
@@ -264,7 +267,8 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to get nearby individuals:", error))
         }
     },
-
+    //#endregion 
+    //#region Search venue
     async searchVenues(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
@@ -281,12 +285,8 @@ const ProviderController = {
         })
         const { error } = validation.validate(req.body)
         if (error) {
-            return next(
-                CustomErrorHandler.badRequest(error
-                ),
-            )
+            return next(CustomErrorHandler.badRequest(error))
         }
-
         try {
             const result = await ProviderServices.searchVenues(req.body)
             return res.json({
@@ -298,7 +298,8 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to search venues:", error))
         }
     },
-
+    //#endregion 
+    //#region searchIndividual
     async searchIndividuals(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
@@ -336,7 +337,8 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to search individuals:", error))
         }
     },
-
+    //#endregion 
+    //#region combinedSearch
     async combinedSearch(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
@@ -368,7 +370,8 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to perform combined search:", error))
         }
     },
-
+    //#endregion 
+    //#region getIndividualProfile
     async getIndividualProfile(req, res, next) {
         const validation = Joi.object({
             id: Joi.string().required(),
@@ -390,10 +393,7 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to get individual profile:", error))
         }
     },
-
-
-
-
+    //#endregion 
     //#region Get Available Slots
     async getAvailableSlots(req, res, next) {
         const validation = Joi.object({
@@ -663,24 +663,60 @@ const ProviderController = {
     //#region CreateIndividual
     async createIndividual(req, res, next) {
         const individualValidation = Joi.object({
+            profileImageUrl: Joi.string().optional(),
             fullName: Joi.string().required(),
             bio: Joi.string().required(),
             phoneNumber: Joi.string()
                 .pattern(/^[0-9]{10}$/)
                 .required(),
             email: Joi.string().email().required(),
-            panNumber: Joi.string().required(),
+            panNumber: Joi.string()
+                .pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
+                .required(),
             yearOfExperience: Joi.number().min(0).required(),
             sportsCategories: Joi.array().items(Joi.string()).min(1).required(),
-            certifications: Joi.array().items(Joi.string()).optional(),
-            profileImageUrl: Joi.string().optional(),
-            hourlyRate: Joi.number().min(0).required(),
+            selectedServiceTypes: Joi.array().items(Joi.string()).min(1).required(),
+            serviceImageUrls: Joi.array().items(Joi.string()).min(1).required(),
             serviceOptions: Joi.object({
                 providesOneOnOne: Joi.boolean().default(false),
                 providesTeamService: Joi.boolean().default(false),
                 providesOnlineService: Joi.boolean().default(false),
             }).required(),
-            availability: Joi.array().required(),
+            availableDays: Joi.array().items(Joi.string()).required(),
+            supportedAgeGroups: Joi.array().items(Joi.string()).min(1).required(),
+            education: Joi.array()
+                .items(
+                    Joi.object({
+                        degree: Joi.string().required(),
+                        field: Joi.string().required(),
+                        institution: Joi.string().required(),
+                        startDate: Joi.string().required(),
+                        endDate: Joi.string().optional().allow(null),
+                        isCurrently: Joi.boolean().default(false),
+                    }),
+                )
+                .optional(),
+            experience: Joi.array()
+                .items(
+                    Joi.object({
+                        title: Joi.string().required(),
+                        organization: Joi.string().required(),
+                        startDate: Joi.string().required(),
+                        endDate: Joi.string().optional().allow(null),
+                        isCurrently: Joi.boolean().default(false),
+                        description: Joi.string().optional(),
+                    }),
+                )
+                .optional(),
+            certificates: Joi.array()
+                .items(
+                    Joi.object({
+                        name: Joi.string().required(),
+                        issuedBy: Joi.string().required(),
+                        issueDate: Joi.string().required(),
+                    }),
+                )
+                .optional(),
             selectLocation: Joi.string().required(),
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),
@@ -689,7 +725,9 @@ const ProviderController = {
 
         const { error } = individualValidation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to Validate request: ${error}`))
+            return next(
+                CustomErrorHandler.badRequest(`Failed to Validate request: ${error.details.map((e) => e.message).join(", ")}`),
+            )
         }
 
         try {
@@ -697,13 +735,14 @@ const ProviderController = {
             return res.status(200).json({
                 success: true,
                 message: "Individual service created successfully",
-                data: result,
+                data: { individual: result },
             })
         } catch (error) {
             return next(CustomErrorHandler.badRequest("Failed to create individual service:", error))
         }
     },
     //#endregion
+
 
     //#region GetAllIndividual
     async getAllIndividuals(req, res, next) {
@@ -917,6 +956,7 @@ const ProviderController = {
     //#region GetServicetype
     async GetServiceType(req, res, next) {
         try {
+            console.log("These api is called");
             const result = await ProviderServices.GetServiceType()
             return res.json({
                 success: true,

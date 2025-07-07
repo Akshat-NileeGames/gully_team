@@ -9,55 +9,64 @@ const orderHistorySchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
-    // autopopulate: {
-    //   select: "phoneNumber email fullName ", // Specify the fields you want to autopopulate
-    // },
+    autopopulate: {
+      select: "phoneNumber email fullName ", // Specify the fields you want to autopopulate
+    },
   },
 
   tournamentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Tournament",
-
+    autopopulate: {
+      select: "tournamentName tournamentStartDateTime tournamentEndDateTime ", // Specify the fields you want to autopopulate
+    },
   },
   bannerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "PromotionalBanner",
     required: false,
   },
-  shopId: {
+  venueId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Shop",
+    ref: "Ground",
     required: false,
   },
-  PackageId: {
+  individualId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Package",
+    ref: "Individual",
+    required: false,
+  },
+  bookingId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Booking",
     required: false,
   },
 
+  razorpay_paymentId: {
+    type: String,
+    required: true,
+  },
   ordertype: {
     type: String,
     required: true,
-    enum: ['tournament', 'banner', 'Sponsor', 'Shop']
+    enum: ['tournament', 'banner', 'sponser', 'individual', 'venue', 'booking']
   },
-
   amountWithoutCoupon: { type: Number, required: false },
   coupon: { type: String, required: false },
   couponId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "CouponHistory",
   },
-  receipt: { type: String, required: true }, // Receipt ID of the order
-  status: { type: String, enum: ["Pending", "Successful", "Failed"], default: "Pending" },
+
+  amount: { type: Number, required: true }, // Total amount of the order
+  amountPaid: { type: Number, required: true }, // Amount already paid
+  amountDue: { type: Number, required: true }, // Amount yet to be paid
   currency: { type: String, required: true }, // Currency of the order
-  amountbeforegst: { type: Number, required: true }, // Total amount of the order
-  gstAmount: { type: Number, required: false, default: 0 },
-  totalAmountWithGST: { type: Number, required: false, default: 0 },
+  receipt: { type: String, required: true }, // Receipt ID of the order
   // status: { type: String, required: true ,default:"Pending"}, // Status of the order (nikhil)
+  status: { type: String, enum: ["Pending", "Successful", "Failed"], default: "Pending" },
   createdAt: { type: Date, default: Date.now }, // Timestamp of order creation
-}, {
-  timestamps: true,
-},);
+});
 
 // Create model for order history
 

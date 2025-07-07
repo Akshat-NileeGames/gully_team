@@ -22,20 +22,29 @@ const paymentSchema = new mongoose.Schema(
       ref: "PromotionalBanner",
       required: false,
     },
-    shopId: {
+    venueId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Shop",
+      ref: "Ground",
       required: false,
     },
-    PackageId: {
+    individualId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Package",
+      ref: "Individual",
+      required: false,
+    },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Booking",
       required: false,
     },
     paymentfor: {
       type: String,
       required: false,
-      enum: ['tournament', 'banner', 'Sponsor']
+      enum: ['tournament', 'banner', 'sponser', 'individual', 'venue', 'booking']
+    },
+    razorpay_paymentId: {
+      type: String,
+      required: true,
     },
     amountPaid: {
       type: Number,

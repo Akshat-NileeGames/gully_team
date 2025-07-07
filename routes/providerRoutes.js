@@ -28,7 +28,7 @@ router.get("/analytics/revenue/:groundId", validateUser, ProviderController.getR
 router.get("/analytics/sports/:groundId", validateUser, ProviderController.getSportsAnalytics)
 // ==================== INDIVIDUAL ROUTES ====================
 router.post("/createIndividualService", validateUser, ProviderController.createIndividual)
-router.get("/getUserIndividualRegisteredGround", validateUser, ProviderController.getUserIndividualRegisteredGround)
+router.get("/getUserIndividualRegisteredService", validateUser, ProviderController.getUserIndividualRegisteredGround)
 router.get("/getIndividualById/:id", ProviderController.getIndividualById)
 router.get("/getAllIndividuals", ProviderController.getAllIndividuals)
 

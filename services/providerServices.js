@@ -1,7 +1,8 @@
-import { Ground, Booking, User, Package, Individual } from "../models/index.js"
+import { Ground, Booking, User, Package, Individual, Category } from "../models/index.js"
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
 import mongoose from "mongoose"
+
 const ProviderServices = {
   async createVenue(data) {
     try {
@@ -1762,6 +1763,7 @@ const ProviderServices = {
   },
 
 
+
   async createIndividual(data) {
     try {
       const userInfo = global.user
@@ -1770,19 +1772,50 @@ const ProviderServices = {
 
       const user = await User.findById(userInfo.userId)
       if (!user) throw CustomErrorHandler.notFound("User not found")
+      const processedEducation = (data.education || []).map((edu) => ({
+        degree: edu.degree,
+        field: edu.field,
+        institution: edu.institution,
+        startDate: edu.startDate,
+        endDate: edu.endDate || null,
+        isCurrently: edu.isCurrently || false,
+      }))
+
+      // Process experience data
+      const processedExperience = (data.experience || []).map((exp) => ({
+        title: exp.title,
+        organization: exp.organization,
+        startDate: exp.startDate,
+        endDate: exp.endDate || null,
+        isCurrently: exp.isCurrently || false,
+        description: exp.description || "",
+      }))
+
+      // Process certificates data
+      const processedCertificates = (data.certificates || []).map((cert) => ({
+        name: cert.name,
+        issuedBy: cert.issuedBy,
+        issueDate: cert.issueDate,
+      }))
 
       const individual = new Individual({
+        profileImageUrl: data.profileImageUrl || "",
         fullName: data.fullName,
         bio: data.bio,
         phoneNumber: data.phoneNumber,
         email: data.email,
+        panNumber: data.panNumber,
         yearOfExperience: data.yearOfExperience,
         sportsCategories: data.sportsCategories,
-        certifications: data.certifications || [],
-        profileImageUrl: data.profileImageUrl || "",
-        hourlyRate: data.hourlyRate,
+        selectedServiceTypes: data.selectedServiceTypes,
+        serviceImageUrls: data.serviceImageUrls,
         serviceOptions: data.serviceOptions,
-        availability: data.availability,
+        availableDays: data.availableDays,
+        supportedAgeGroups: data.supportedAgeGroups,
+        education: processedEducation,
+        experience: processedExperience,
+        certificates: processedCertificates,
+        userId: userInfo.userId,
         locationHistory: {
           point: {
             type: "Point",
@@ -1790,14 +1823,13 @@ const ProviderServices = {
             selectLocation: data.selectLocation,
           },
         },
-        userId: userInfo.userId,
-        packageRef: data.packageRef,
         hasActiveSubscription: true,
+        packageRef: data.packageRef,
         subscriptionExpiry: DateTime.now().plus({ days: packageInfo.duration }).toJSDate(),
       })
 
       await individual.save()
-      return individual
+      return individual;
     } catch (error) {
       console.log("Failed to create individual:", error)
       throw error
@@ -2077,6 +2109,7 @@ const ProviderServices = {
             path: "packageRef",
           }
         })
+        .populate('userId')
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 });
