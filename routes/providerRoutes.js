@@ -26,6 +26,13 @@ router.post("/bookings/past", validateUser, ProviderController.getPastBooking)
 router.get("/analytics/dashboard/:groundId", validateUser, ProviderController.getDashboardAnalytics)
 router.get("/analytics/revenue/:groundId", validateUser, ProviderController.getRevenueAnalytics)
 router.get("/analytics/sports/:groundId", validateUser, ProviderController.getSportsAnalytics)
+
+router.get("/dashboard/:groundId", validateUser, ProviderController.getDashboardAnalytics)
+router.get("/revenue/:groundId", validateUser, ProviderController.getRevenueAnalytics)
+router.get("/sports/:groundId", validateUser, ProviderController.getSportsAnalytics)
+router.get("/time-slots/:groundId", validateUser, ProviderController.getTimeSlotAnalytics)
+router.get("/bookings/:groundId", validateUser, ProviderController.getBookingAnalytics)
+router.get("/performance/:groundId", validateUser, ProviderController.getPerformanceAnalytics)
 // ==================== INDIVIDUAL ROUTES ====================
 router.post("/createIndividualService", validateUser, ProviderController.createIndividual)
 router.get("/getUserIndividualRegisteredService", validateUser, ProviderController.getUserIndividualRegisteredGround)

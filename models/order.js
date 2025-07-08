@@ -41,6 +41,16 @@ const orderHistorySchema = new mongoose.Schema({
     ref: "Booking",
     required: false,
   },
+  shopId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Shop",
+    required: false,
+  },
+  PackageId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Package",
+    required: false,
+  },
 
   razorpay_paymentId: {
     type: String,

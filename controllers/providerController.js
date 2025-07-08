@@ -591,40 +591,58 @@ const ProviderController = {
     async getDashboardAnalytics(req, res, next) {
         const validation = Joi.object({
             groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+            period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
+            startDate: Joi.date().optional(),
+            endDate: Joi.date().optional(),
         })
 
-        const { error } = validation.validate(req.params)
+        const { error } = validation.validate({ ...req.params, ...req.query })
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
         }
 
         try {
-            const result = await ProviderServices.getDashboardAnalytics(req.params.groundId)
+            const result = await ProviderServices.getDashboardAnalytics({
+                groundId: req.params.groundId,
+                sport: req.query.sport,
+                period: req.query.period,
+                startDate: req.query.startDate,
+                endDate: req.query.endDate,
+            })
+
             return res.json({
                 success: true,
                 message: "Dashboard analytics retrieved successfully",
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to get dashboard analytics:", error))
+            return next(CustomErrorHandler.serverError("Failed to get dashboard analytics:", error))
+            throw error;
         }
     },
-    //#endregion 
 
-    //#region getRevenueAnalytics
     async getRevenueAnalytics(req, res, next) {
         const validation = Joi.object({
             groundId: Joi.string().required(),
-            period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
+            period: Joi.string().valid("week", "month", "quarter", "year").default("year"),
+            sport: Joi.string().optional(),
+            comparison: Joi.boolean().default(false),
         })
 
         const { error } = validation.validate({ ...req.params, ...req.query })
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
         }
 
         try {
-            const result = await ProviderServices.getRevenueAnalytics(req.params.groundId, req.query.period)
+            const result = await ProviderServices.getRevenueAnalytics({
+                groundId: req.params.groundId,
+                period: req.query.period,
+                sport: req.query.sport,
+                comparison: req.query.comparison === "true",
+            })
+
             return res.json({
                 success: true,
                 message: "Revenue analytics retrieved successfully",
@@ -634,21 +652,24 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to get revenue analytics:", error))
         }
     },
-    //#endregion
 
-    //#region getSportsAnalytics
     async getSportsAnalytics(req, res, next) {
         const validation = Joi.object({
             groundId: Joi.string().required(),
+            period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
         })
 
-        const { error } = validation.validate(req.params)
+        const { error } = validation.validate({ ...req.params, ...req.query })
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
         }
 
         try {
-            const result = await ProviderServices.getSportsAnalytics(req.params.groundId)
+            const result = await ProviderServices.getSportsAnalytics({
+                groundId: req.params.groundId,
+                period: req.query.period,
+            })
+
             return res.json({
                 success: true,
                 message: "Sports analytics retrieved successfully",
@@ -658,7 +679,91 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to get sports analytics:", error))
         }
     },
-    //#endregion
+
+    async getTimeSlotAnalytics(req, res, next) {
+        const validation = Joi.object({
+            groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+            period: Joi.string().valid("week", "month", "quarter").default("month"),
+        })
+
+        const { error } = validation.validate({ ...req.params, ...req.query })
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+        }
+
+        try {
+            const result = await ProviderServices.getTimeSlotAnalytics({
+                groundId: req.params.groundId,
+                sport: req.query.sport,
+                period: req.query.period,
+            })
+
+            return res.json({
+                success: true,
+                message: "Time slot analytics retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get time slot analytics:", error))
+        }
+    },
+
+    async getBookingAnalytics(req, res, next) {
+        const validation = Joi.object({
+            groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+            period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
+        })
+
+        const { error } = validation.validate({ ...req.params, ...req.query })
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+        }
+
+        try {
+            const result = await ProviderServices.getBookingAnalytics({
+                groundId: req.params.groundId,
+                sport: req.query.sport,
+                period: req.query.period,
+            })
+
+            return res.json({
+                success: true,
+                message: "Booking analytics retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get booking analytics:", error))
+        }
+    },
+
+    async getPerformanceAnalytics(req, res, next) {
+        const validation = Joi.object({
+            groundId: Joi.string().required(),
+            sport: Joi.string().optional(),
+        })
+
+        const { error } = validation.validate({ ...req.params, ...req.query })
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+        }
+
+        try {
+            const result = await ProviderServices.getPerformanceAnalytics({
+                groundId: req.params.groundId,
+                sport: req.query.sport,
+            })
+
+            return res.json({
+                success: true,
+                message: "Performance analytics retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get performance analytics:", error))
+        }
+    },
 
     //#region CreateIndividual
     async createIndividual(req, res, next) {

@@ -1570,10 +1570,6 @@ const ProviderServices = {
 
   async getDashboardAnalytics(groundId) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
-      }
-
       const today = new Date()
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
       const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59)
@@ -2247,6 +2243,820 @@ const ProviderServices = {
       return [];
     }
   },
+
+  //#region  New Changes API
+  async getDashboardAnalytics({ groundId, sport, period = "month", startDate, endDate }) {
+    try {
+
+      const ground = await Ground.findById(groundId)
+      if (!ground) {
+        throw CustomErrorHandler.notFound("Ground not found")
+      }
+
+      const dateRange = this.getDateRange(period, startDate, endDate)
+      const matchQuery = {
+        venueId: mongoose.Types.ObjectId(groundId),
+        createdAt: { $gte: dateRange.start, $lte: dateRange.end },
+      }
+
+      if (sport && sport !== 'all') {
+        matchQuery.sport = new RegExp(`^${sport}$`, "i")
+      }
+
+      // Key Performance Indicators
+      const [
+        totalBookings,
+        totalRevenue,
+        avgBookingValue,
+        bookingTrends,
+        revenueByStatus,
+        topTimeSlots,
+        sportPerformance
+      ] = await Promise.all([
+        // Total bookings
+        Booking.countDocuments(matchQuery),
+
+        // Total revenue
+        Booking.aggregate([
+          { $match: { ...matchQuery, paymentStatus: "successful" } },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]).then(result => result[0]?.total || 0),
+
+        // Average booking value
+        Booking.aggregate([
+          { $match: matchQuery },
+          { $group: { _id: null, avg: { $avg: "$totalAmount" } } }
+        ]).then(result => result[0]?.avg || 0),
+
+        // Booking trends (daily for last 30 days)
+        Booking.aggregate([
+          { $match: matchQuery },
+          {
+            $group: {
+              _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+              bookings: { $sum: 1 },
+              revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
+            }
+          },
+          { $sort: { _id: 1 } }
+        ]),
+
+        // Revenue by payment status
+        Booking.aggregate([
+          { $match: matchQuery },
+          {
+            $group: {
+              _id: "$paymentStatus",
+              count: { $sum: 1 },
+              amount: { $sum: "$totalAmount" }
+            }
+          }
+        ]),
+
+        // Top time slots
+        this.getPopularTimeSlots(groundId, sport, dateRange),
+
+        // Sport performance
+        Booking.aggregate([
+          { $match: { venueId: mongoose.Types.ObjectId(groundId), createdAt: { $gte: dateRange.start, $lte: dateRange.end } } },
+          {
+            $group: {
+              _id: "$sport",
+              bookings: { $sum: 1 },
+              revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } },
+              avgValue: { $avg: "$totalAmount" }
+            }
+          },
+          { $sort: { revenue: -1 } }
+        ])
+      ])
+
+      // Calculate growth rates
+      const previousPeriod = this.getPreviousDateRange(period, dateRange)
+      const previousStats = await Promise.all([
+        Booking.countDocuments({
+          venueId: mongoose.Types.ObjectId(groundId),
+          createdAt: { $gte: previousPeriod.start, $lte: previousPeriod.end },
+          ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
+        }),
+        Booking.aggregate([
+          {
+            $match: {
+              venueId: mongoose.Types.ObjectId(groundId),
+              createdAt: { $gte: previousPeriod.start, $lte: previousPeriod.end },
+              paymentStatus: "successful",
+              ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]).then(result => result[0]?.total || 0)
+      ])
+
+      const bookingGrowth = previousStats[0] > 0 ? ((totalBookings - previousStats[0]) / previousStats[0]) * 100 : 0
+      const revenueGrowth = previousStats[1] > 0 ? ((totalRevenue - previousStats[1]) / previousStats[1]) * 100 : 0
+
+      return {
+        overview: {
+          totalBookings,
+          totalRevenue,
+          avgBookingValue: Math.round(avgBookingValue),
+          bookingGrowth: Math.round(bookingGrowth * 100) / 100,
+          revenueGrowth: Math.round(revenueGrowth * 100) / 100,
+        },
+        trends: {
+          bookingTrends,
+          revenueByStatus,
+        },
+        insights: {
+          topTimeSlots,
+          sportPerformance,
+        },
+        period,
+        dateRange: {
+          start: dateRange.start,
+          end: dateRange.end,
+        },
+        filters: {
+          sport: sport || 'all',
+        }
+      }
+    } catch (error) {
+      console.log("Failed to get dashboard analytics:", error)
+      throw error
+    }
+  },
+
+  async getRevenueAnalytics({ groundId, period = "month", sport, comparison = false }) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const dateRange = this.getDateRange(period)
+      const matchQuery = {
+        venueId: mongoose.Types.ObjectId(groundId),
+        createdAt: { $gte: dateRange.start, $lte: dateRange.end },
+        paymentStatus: "successful"
+      }
+
+      if (sport && sport !== 'all') {
+        matchQuery.sport = new RegExp(`^${sport}$`, "i")
+      }
+
+      let groupBy
+      switch (period) {
+        case "week":
+          groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+          break
+        case "month":
+          groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+          break
+        case "quarter":
+        case "year":
+          groupBy = { $dateToString: { format: "%Y-%m", date: "$createdAt" } }
+          break
+        default:
+          groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+      }
+
+      const revenueData = await Booking.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: groupBy,
+            revenue: { $sum: "$totalAmount" },
+            bookings: { $sum: 1 },
+            avgBookingValue: { $avg: "$totalAmount" }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+
+      // Revenue by sport breakdown
+      const sportRevenue = await Booking.aggregate([
+        {
+          $match: {
+            venueId: mongoose.Types.ObjectId(groundId),
+            createdAt: { $gte: dateRange.start, $lte: dateRange.end },
+            paymentStatus: "successful"
+          }
+        },
+        {
+          $group: {
+            _id: "$sport",
+            revenue: { $sum: "$totalAmount" },
+            bookings: { $sum: 1 },
+            percentage: { $sum: "$totalAmount" }
+          }
+        },
+        { $sort: { revenue: -1 } }
+      ])
+
+      // Calculate total for percentages
+      const totalRevenue = sportRevenue.reduce((sum, item) => sum + item.revenue, 0)
+      sportRevenue.forEach(item => {
+        item.percentage = totalRevenue > 0 ? (item.revenue / totalRevenue) * 100 : 0
+      })
+
+      let comparisonData = null
+      if (comparison) {
+        const previousPeriod = this.getPreviousDateRange(period, dateRange)
+        comparisonData = await Booking.aggregate([
+          {
+            $match: {
+              venueId: mongoose.Types.ObjectId(groundId),
+              createdAt: { $gte: previousPeriod.start, $lte: previousPeriod.end },
+              paymentStatus: "successful",
+              ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
+            }
+          },
+          {
+            $group: {
+              _id: groupBy,
+              revenue: { $sum: "$totalAmount" },
+              bookings: { $sum: 1 }
+            }
+          },
+          { $sort: { _id: 1 } }
+        ])
+      }
+
+      return {
+        period,
+        data: revenueData,
+        sportBreakdown: sportRevenue,
+        comparison: comparisonData,
+        summary: {
+          totalRevenue: revenueData.reduce((sum, item) => sum + item.revenue, 0),
+          totalBookings: revenueData.reduce((sum, item) => sum + item.bookings, 0),
+          avgBookingValue: revenueData.length > 0
+            ? revenueData.reduce((sum, item) => sum + item.avgBookingValue, 0) / revenueData.length
+            : 0,
+          peakRevenueDay: revenueData.reduce((max, item) => item.revenue > max.revenue ? item : max, { revenue: 0 })
+        }
+      }
+    } catch (error) {
+      console.log("Failed to get revenue analytics:", error)
+      throw error
+    }
+  },
+
+  async getSportsAnalytics({ groundId, period = "month" }) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const dateRange = this.getDateRange(period)
+
+      const sportsData = await Booking.aggregate([
+        {
+          $match: {
+            venueId: mongoose.Types.ObjectId(groundId),
+            createdAt: { $gte: dateRange.start, $lte: dateRange.end }
+          }
+        },
+        {
+          $group: {
+            _id: "$sport",
+            totalBookings: { $sum: 1 },
+            totalRevenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } },
+            avgBookingValue: { $avg: "$totalAmount" },
+            confirmedBookings: { $sum: { $cond: [{ $eq: ["$bookingStatus", "confirmed"] }, 1, 0] } },
+            cancelledBookings: { $sum: { $cond: [{ $eq: ["$bookingStatus", "cancelled"] }, 1, 0] } },
+            pendingBookings: { $sum: { $cond: [{ $eq: ["$bookingStatus", "pending"] }, 1, 0] } },
+            completedBookings: { $sum: { $cond: [{ $eq: ["$bookingStatus", "completed"] }, 1, 0] } },
+          }
+        },
+        { $sort: { totalRevenue: -1 } }
+      ])
+
+      // Calculate performance metrics
+      const totalBookings = sportsData.reduce((sum, sport) => sum + sport.totalBookings, 0)
+      const totalRevenue = sportsData.reduce((sum, sport) => sum + sport.totalRevenue, 0)
+
+      const enhancedSportsData = sportsData.map(sport => ({
+        ...sport,
+        bookingShare: totalBookings > 0 ? (sport.totalBookings / totalBookings) * 100 : 0,
+        revenueShare: totalRevenue > 0 ? (sport.totalRevenue / totalRevenue) * 100 : 0,
+        conversionRate: sport.totalBookings > 0 ? (sport.confirmedBookings / sport.totalBookings) * 100 : 0,
+        cancellationRate: sport.totalBookings > 0 ? (sport.cancelledBookings / sport.totalBookings) * 100 : 0,
+      }))
+
+      // Sport trends over time
+      const sportTrends = await Booking.aggregate([
+        {
+          $match: {
+            venueId: mongoose.Types.ObjectId(groundId),
+            createdAt: { $gte: dateRange.start, $lte: dateRange.end }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              sport: "$sport",
+              date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+            },
+            bookings: { $sum: 1 },
+            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
+          }
+        },
+        { $sort: { "_id.date": 1, "_id.sport": 1 } }
+      ])
+
+      return {
+        sports: enhancedSportsData,
+        trends: sportTrends,
+        summary: {
+          totalSports: sportsData.length,
+          mostPopularSport: sportsData[0]?._id || null,
+          highestRevenueSport: sportsData.reduce((max, sport) =>
+            sport.totalRevenue > max.totalRevenue ? sport : max, { totalRevenue: 0 }
+          ),
+          avgBookingsPerSport: sportsData.length > 0 ? totalBookings / sportsData.length : 0,
+        },
+        period,
+        dateRange
+      }
+    } catch (error) {
+      console.log("Failed to get sports analytics:", error)
+      throw error
+    }
+  },
+
+  async getTimeSlotAnalytics({ groundId, sport, period = "month" }) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const dateRange = this.getDateRange(period)
+      const matchQuery = {
+        venueId: mongoose.Types.ObjectId(groundId),
+        createdAt: { $gte: dateRange.start, $lte: dateRange.end }
+      }
+
+      if (sport && sport !== 'all') {
+        matchQuery.sport = new RegExp(`^${sport}$`, "i")
+      }
+
+      // Get time slot popularity
+      const timeSlotData = await Booking.aggregate([
+        { $match: matchQuery },
+        { $unwind: "$scheduledDates" },
+        { $unwind: "$scheduledDates.timeSlots" },
+        {
+          $group: {
+            _id: {
+              startTime: "$scheduledDates.timeSlots.startTime",
+              endTime: "$scheduledDates.timeSlots.endTime"
+            },
+            bookings: { $sum: 1 },
+            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } },
+            sports: { $addToSet: "$sport" }
+          }
+        },
+        {
+          $project: {
+            timeSlot: { $concat: ["$_id.startTime", " - ", "$_id.endTime"] },
+            bookings: 1,
+            revenue: 1,
+            sports: 1,
+            avgRevenuePerBooking: { $divide: ["$revenue", "$bookings"] }
+          }
+        },
+        { $sort: { bookings: -1 } }
+      ])
+
+      // Peak hours analysis
+      const hourlyData = await Booking.aggregate([
+        { $match: matchQuery },
+        { $unwind: "$scheduledDates" },
+        { $unwind: "$scheduledDates.timeSlots" },
+        {
+          $addFields: {
+            hour: {
+              $toInt: {
+                $substr: ["$scheduledDates.timeSlots.startTime", 0, 2]
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: "$hour",
+            bookings: { $sum: 1 },
+            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+
+      // Day of week analysis
+      const dayOfWeekData = await Booking.aggregate([
+        { $match: matchQuery },
+        { $unwind: "$scheduledDates" },
+        {
+          $group: {
+            _id: { $dayOfWeek: "$scheduledDates.date" },
+            bookings: { $sum: 1 },
+            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
+          }
+        },
+        {
+          $project: {
+            dayName: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ["$_id", 1] }, then: "Sunday" },
+                  { case: { $eq: ["$_id", 2] }, then: "Monday" },
+                  { case: { $eq: ["$_id", 3] }, then: "Tuesday" },
+                  { case: { $eq: ["$_id", 4] }, then: "Wednesday" },
+                  { case: { $eq: ["$_id", 5] }, then: "Thursday" },
+                  { case: { $eq: ["$_id", 6] }, then: "Friday" },
+                  { case: { $eq: ["$_id", 7] }, then: "Saturday" }
+                ],
+                default: "Unknown"
+              }
+            },
+            bookings: 1,
+            revenue: 1
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+
+      return {
+        timeSlots: timeSlotData,
+        hourlyAnalysis: hourlyData,
+        dayOfWeekAnalysis: dayOfWeekData,
+        insights: {
+          peakTimeSlot: timeSlotData[0] || null,
+          peakHour: hourlyData.reduce((max, hour) => hour.bookings > max.bookings ? hour : max, { bookings: 0 }),
+          peakDay: dayOfWeekData.reduce((max, day) => day.bookings > max.bookings ? day : max, { bookings: 0 }),
+          totalUniqueTimeSlots: timeSlotData.length,
+        },
+        period,
+        filters: { sport: sport || 'all' }
+      }
+    } catch (error) {
+      console.log("Failed to get time slot analytics:", error)
+      throw error
+    }
+  },
+
+  async getBookingAnalytics({ groundId, sport, period = "month" }) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const dateRange = this.getDateRange(period)
+      const matchQuery = {
+        venueId: mongoose.Types.ObjectId(groundId),
+        createdAt: { $gte: dateRange.start, $lte: dateRange.end }
+      }
+
+      if (sport && sport !== 'all') {
+        matchQuery.sport = new RegExp(`^${sport}$`, "i")
+      }
+
+      // Booking status distribution
+      const statusDistribution = await Booking.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: "$bookingStatus",
+            count: { $sum: 1 },
+            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
+          }
+        }
+      ])
+
+      // Payment status distribution
+      const paymentDistribution = await Booking.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: "$paymentStatus",
+            count: { $sum: 1 },
+            amount: { $sum: "$totalAmount" }
+          }
+        }
+      ])
+
+      // Booking patterns
+      const bookingPatterns = await Booking.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: "$bookingPattern",
+            count: { $sum: 1 },
+            avgDuration: { $avg: "$durationInHours" },
+            avgAmount: { $avg: "$totalAmount" }
+          }
+        }
+      ])
+
+      // Customer retention (repeat bookings)
+      const customerRetention = await Booking.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: "$userId",
+            bookingCount: { $sum: 1 },
+            totalSpent: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } },
+            firstBooking: { $min: "$createdAt" },
+            lastBooking: { $max: "$createdAt" }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalCustomers: { $sum: 1 },
+            repeatCustomers: { $sum: { $cond: [{ $gt: ["$bookingCount", 1] }, 1, 0] } },
+            avgBookingsPerCustomer: { $avg: "$bookingCount" },
+            avgSpentPerCustomer: { $avg: "$totalSpent" }
+          }
+        }
+      ])
+
+      const retention = customerRetention[0] || {
+        totalCustomers: 0,
+        repeatCustomers: 0,
+        avgBookingsPerCustomer: 0,
+        avgSpentPerCustomer: 0
+      }
+
+      return {
+        statusDistribution,
+        paymentDistribution,
+        bookingPatterns,
+        customerInsights: {
+          ...retention,
+          retentionRate: retention.totalCustomers > 0 ? (retention.repeatCustomers / retention.totalCustomers) * 100 : 0
+        },
+        period,
+        filters: { sport: sport || 'all' }
+      }
+    } catch (error) {
+      console.log("Failed to get booking analytics:", error)
+      throw error
+    }
+  },
+
+  async getPerformanceAnalytics({ groundId, sport }) {
+    try {
+      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      }
+
+      const ground = await Ground.findById(groundId)
+      if (!ground) {
+        throw CustomErrorHandler.notFound("Ground not found")
+      }
+
+      const matchQuery = { venueId: mongoose.Types.ObjectId(groundId) }
+      if (sport && sport !== 'all') {
+        matchQuery.sport = new RegExp(`^${sport}$`, "i")
+      }
+
+      // Overall performance metrics
+      const [
+        totalBookings,
+        totalRevenue,
+        avgRating,
+        utilizationRate,
+        monthlyGrowth
+      ] = await Promise.all([
+        Booking.countDocuments(matchQuery),
+
+        Booking.aggregate([
+          { $match: { ...matchQuery, paymentStatus: "successful" } },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]).then(result => result[0]?.total || 0),
+
+        // Mock rating - you might have a separate ratings collection
+        Promise.resolve(4.2),
+
+        // Calculate utilization rate
+        this.calculateUtilizationRate(groundId, sport),
+
+        // Monthly growth
+        this.calculateMonthlyGrowth(groundId, sport)
+      ])
+
+      // Performance benchmarks
+      const benchmarks = {
+        bookingTarget: 100, // Monthly target
+        revenueTarget: 50000, // Monthly target
+        utilizationTarget: 70, // Percentage
+        ratingTarget: 4.0
+      }
+
+      const performance = {
+        bookingPerformance: totalBookings / benchmarks.bookingTarget * 100,
+        revenuePerformance: totalRevenue / benchmarks.revenueTarget * 100,
+        utilizationPerformance: utilizationRate / benchmarks.utilizationTarget * 100,
+        ratingPerformance: avgRating / benchmarks.ratingTarget * 100
+      }
+
+      return {
+        metrics: {
+          totalBookings,
+          totalRevenue,
+          avgRating,
+          utilizationRate,
+          monthlyGrowth
+        },
+        benchmarks,
+        performance,
+        overallScore: Object.values(performance).reduce((sum, score) => sum + score, 0) / 4,
+        recommendations: this.generateRecommendations(performance, utilizationRate, monthlyGrowth)
+      }
+    } catch (error) {
+      console.log("Failed to get performance analytics:", error)
+      throw error
+    }
+  },
+
+  // Helper methods
+  getDateRange(period, startDate, endDate) {
+    const now = new Date()
+
+    if (startDate && endDate) {
+      return {
+        start: new Date(startDate),
+        end: new Date(endDate)
+      }
+    }
+
+    switch (period) {
+      case "week":
+        return {
+          start: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+          end: now
+        }
+      case "month":
+        return {
+          start: new Date(now.getFullYear(), now.getMonth(), 1),
+          end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+        }
+      case "quarter":
+        const quarterStart = Math.floor(now.getMonth() / 3) * 3
+        return {
+          start: new Date(now.getFullYear(), quarterStart, 1),
+          end: new Date(now.getFullYear(), quarterStart + 3, 0, 23, 59, 59)
+        }
+      case "year":
+        return {
+          start: new Date(now.getFullYear(), 0, 1),
+          end: new Date(now.getFullYear(), 11, 31, 23, 59, 59)
+        }
+      default:
+        return {
+          start: new Date(now.getFullYear(), now.getMonth(), 1),
+          end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+        }
+    }
+  },
+
+  getPreviousDateRange(period, currentRange) {
+    const duration = currentRange.end.getTime() - currentRange.start.getTime()
+    return {
+      start: new Date(currentRange.start.getTime() - duration),
+      end: new Date(currentRange.end.getTime() - duration)
+    }
+  },
+
+  async getPopularTimeSlots(groundId, sport, dateRange) {
+    const matchQuery = {
+      venueId: mongoose.Types.ObjectId(groundId),
+      createdAt: { $gte: dateRange.start, $lte: dateRange.end }
+    }
+
+    if (sport && sport !== 'all') {
+      matchQuery.sport = new RegExp(`^${sport}$`, "i")
+    }
+
+    return await Booking.aggregate([
+      { $match: matchQuery },
+      { $unwind: "$scheduledDates" },
+      { $unwind: "$scheduledDates.timeSlots" },
+      {
+        $group: {
+          _id: {
+            startTime: "$scheduledDates.timeSlots.startTime",
+            endTime: "$scheduledDates.timeSlots.endTime"
+          },
+          bookings: { $sum: 1 },
+          revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
+        }
+      },
+      {
+        $project: {
+          timeSlot: { $concat: ["$_id.startTime", "-", "$_id.endTime"] },
+          bookings: 1,
+          revenue: 1
+        }
+      },
+      { $sort: { bookings: -1 } },
+      { $limit: 10 }
+    ])
+  },
+
+  async calculateUtilizationRate(groundId, sport) {
+    // This is a simplified calculation
+    // You might want to implement more sophisticated logic based on your business rules
+    const totalSlots = 12 // Assuming 12 hours of operation per day
+    const daysInMonth = 30
+    const totalAvailableSlots = totalSlots * daysInMonth
+
+    const bookedSlots = await Booking.aggregate([
+      {
+        $match: {
+          venueId: mongoose.Types.ObjectId(groundId),
+          createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+          ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
+        }
+      },
+      { $unwind: "$scheduledDates" },
+      { $unwind: "$scheduledDates.timeSlots" },
+      { $count: "totalBookedSlots" }
+    ])
+
+    const bookedSlotsCount = bookedSlots[0]?.totalBookedSlots || 0
+    return Math.round((bookedSlotsCount / totalAvailableSlots) * 100)
+  },
+
+  async calculateMonthlyGrowth(groundId, sport) {
+    const currentMonth = new Date()
+    const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+    const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+
+    const [currentBookings, previousBookings] = await Promise.all([
+      Booking.countDocuments({
+        venueId: mongoose.Types.ObjectId(groundId),
+        createdAt: { $gte: currentMonthStart },
+        ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
+      }),
+      Booking.countDocuments({
+        venueId: mongoose.Types.ObjectId(groundId),
+        createdAt: {
+          $gte: previousMonth,
+          $lt: currentMonthStart
+        },
+        ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
+      })
+    ])
+
+    if (previousBookings === 0) return currentBookings > 0 ? 100 : 0
+    return Math.round(((currentBookings - previousBookings) / previousBookings) * 100)
+  },
+
+  generateRecommendations(performance, utilizationRate, monthlyGrowth) {
+    const recommendations = []
+
+    if (performance.bookingPerformance < 80) {
+      recommendations.push({
+        type: "booking",
+        priority: "high",
+        message: "Consider promotional campaigns to increase bookings",
+        action: "Create discount offers for off-peak hours"
+      })
+    }
+
+    if (utilizationRate < 50) {
+      recommendations.push({
+        type: "utilization",
+        priority: "medium",
+        message: "Low utilization rate detected",
+        action: "Optimize pricing strategy and improve marketing"
+      })
+    }
+
+    if (monthlyGrowth < 0) {
+      recommendations.push({
+        type: "growth",
+        priority: "high",
+        message: "Negative growth trend",
+        action: "Review customer feedback and improve service quality"
+      })
+    }
+
+    if (performance.revenuePerformance < 70) {
+      recommendations.push({
+        type: "revenue",
+        priority: "medium",
+        message: "Revenue below target",
+        action: "Consider premium services or dynamic pricing"
+      })
+    }
+
+    return recommendations
+  }
+
+
 }
 
 export default ProviderServices
