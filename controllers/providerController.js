@@ -226,7 +226,7 @@ const ProviderController = {
 
         const { error } = validation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to validate request:${error}`,))
         }
 
         try {
@@ -1070,6 +1070,348 @@ const ProviderController = {
             })
         } catch (error) {
             console.log("Unable to fetch service type:", error)
+        }
+    },
+
+
+
+
+    // Enhanced nearby venues with filters
+    async getNearbyVenuesWithFilters(req, res, next) {
+        const validation = Joi.object({
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
+            page: Joi.number().min(1).default(1),
+            radius: Joi.number().min(1).max(100).default(25),
+            sport: Joi.string().default("all"),
+            venueType: Joi.string().valid("all", "Open Ground", "Turf", "Stadium").default("all"),
+            surfaceTypes: Joi.array()
+                .items(
+                    Joi.string().valid(
+                        "PVC",
+                        "Synthetic PVC",
+                        "8 Layered Acrylic Surface",
+                        "Wooden",
+                        "Natural Grass Lane",
+                        "Artificial Grass Lane",
+                        "Hard Court",
+                        "Natural Grass Turf",
+                    ),
+                )
+                .default([]),
+            // facilities: Joi.array.items({
+            //     isWaterAvailable: Joi.boolean().optional(),
+            //     isParkingAvailable: Joi.boolean().optional(),
+            //     isEquipmentProvided: Joi.boolean().optional(),
+            //     isWashroomAvailable: Joi.boolean().optional(),
+            //     isChangingRoomAvailable: Joi.boolean().optional(),
+            //     isFloodlightAvailable: Joi.boolean().optional(),
+            //     isSeatingLoungeAvailable: Joi.boolean().optional(),
+            //     isFirstAidAvailable: Joi.boolean().optional(),
+            //     isWalkingTrackAvailable: Joi.boolean().optional(),
+            // }).default({}),
+            priceRange: Joi.object({
+                min: Joi.number().min(0).optional(),
+                max: Joi.number().min(0).optional(),
+            }).default({}),
+        })
+        console.log(req.body);
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Validation failed:${error}`))
+        }
+
+        try {
+            const result = await ProviderServices.getNearbyVenuesWithFilters(req.body)
+            return res.json({
+                success: true,
+                message: "Nearby venues with filters retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get nearby venues:", error))
+        }
+    },
+
+    // Enhanced nearby individuals with filters
+    async getNearbyIndividualsWithFilters(req, res, next) {
+        const validation = Joi.object({
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
+            page: Joi.number().min(1).default(1),
+            radius: Joi.number().min(1).max(100).default(25),
+            sports: Joi.array().items(Joi.string()).default([]),
+            serviceType: Joi.string().valid("all", "one_on_one", "team_service", "online_service").default("all"),
+            ageGroup: Joi.string().default("all"),
+            experienceRange: Joi.object({
+                min: Joi.number().min(0).optional(),
+                max: Joi.number().min(0).optional(),
+            }).default({}),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Validation failed:", error))
+        }
+
+        try {
+            const result = await ProviderServices.getNearbyIndividualsWithFilters(req.body)
+            return res.json({
+                success: true,
+                message: "Nearby individuals with filters retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get nearby individuals:", error))
+        }
+    },
+
+    // ==================== ENHANCED SEARCH ENDPOINTS ====================
+
+    // Enhanced venue search with filters
+    async searchVenuesWithFilters(req, res, next) {
+        const validation = Joi.object({
+            query: Joi.string().min(1).required(),
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
+            page: Joi.number().min(1).default(1),
+            radius: Joi.number().min(1).max(100).default(25),
+            sport: Joi.string().default("all"),
+            venueType: Joi.string().valid("all", "Open Ground", "Turf", "Stadium").default("all"),
+            surfaceTypes: Joi.array()
+                .items(
+                    Joi.string().valid(
+                        "PVC",
+                        "Synthetic PVC",
+                        "8 Layered Acrylic Surface",
+                        "Wooden",
+                        "Natural Grass Lane",
+                        "Artificial Grass Lane",
+                        "Hard Court",
+                        "Natural Grass Turf",
+                    ),
+                )
+                .default([]),
+            facilities: Joi.object({
+                isWaterAvailable: Joi.boolean().optional(),
+                isParkingAvailable: Joi.boolean().optional(),
+                isEquipmentProvided: Joi.boolean().optional(),
+                isWashroomAvailable: Joi.boolean().optional(),
+                isChangingRoomAvailable: Joi.boolean().optional(),
+                isFloodlightAvailable: Joi.boolean().optional(),
+                isSeatingLoungeAvailable: Joi.boolean().optional(),
+                isFirstAidAvailable: Joi.boolean().optional(),
+                isWalkingTrackAvailable: Joi.boolean().optional(),
+            }).default({}),
+            priceRange: Joi.object({
+                min: Joi.number().min(0).optional(),
+                max: Joi.number().min(0).optional(),
+            }).default({}),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Validation failed:", error))
+        }
+
+        try {
+            const result = await ProviderServices.searchVenuesWithFilters(req.body)
+            return res.json({
+                success: true,
+                message: "Venue search with filters completed successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to search venues:", error))
+        }
+    },
+
+    // Enhanced individual search with filters
+    async searchIndividualsWithFilters(req, res, next) {
+        const validation = Joi.object({
+            query: Joi.string().min(1).required(),
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
+            page: Joi.number().min(1).default(1),
+            radius: Joi.number().min(1).max(100).default(25),
+            sports: Joi.array().items(Joi.string()).default([]),
+            serviceType: Joi.string().valid("all", "one_on_one", "team_service", "online_service").default("all"),
+            ageGroup: Joi.string().default("all"),
+            experienceRange: Joi.object({
+                min: Joi.number().min(0).optional(),
+                max: Joi.number().min(0).optional(),
+            }).default({}),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Validation failed:", error))
+        }
+
+        try {
+            const result = await ProviderServices.searchIndividualsWithFilters(req.body)
+            return res.json({
+                success: true,
+                message: "Individual search with filters completed successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to search individuals:", error))
+        }
+    },
+
+    // ==================== COMBINED SEARCH ====================
+
+    // Combined search with filters
+    async combinedSearchWithFilters(req, res, next) {
+        const validation = Joi.object({
+            query: Joi.string().min(1).required(),
+            latitude: Joi.number().required(),
+            longitude: Joi.number().required(),
+            page: Joi.number().min(1).default(1),
+            radius: Joi.number().min(1).max(100).default(25),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Validation failed:", error))
+        }
+
+        try {
+            const result = await ProviderServices.combinedSearchWithFilters(req.body)
+            return res.json({
+                success: true,
+                message: "Combined search completed successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to perform combined search:", error))
+        }
+    },
+
+    // ==================== LEGACY COMPATIBILITY ====================
+
+    // Backward compatible nearby venues (uses enhanced filtering internally)
+    async getNearbyVenue(req, res, next) {
+        try {
+            // Transform legacy request to new format
+            const enhancedRequest = {
+                latitude: req.body.latitude,
+                longitude: req.body.longitude,
+                page: req.body.page || 1,
+                radius: req.body.radius || 25,
+                sport: req.body.sport || "all",
+                venueType: req.body.venueType || "all",
+                surfaceTypes: req.body.surfaceTypes || [],
+                facilities: req.body.facilities || {},
+                priceRange: req.body.priceRange || {},
+            }
+
+            const result = await ProviderServices.getNearbyVenuesWithFilters(enhancedRequest)
+
+            return res.json({
+                success: true,
+                message: "Nearby venues retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get nearby venues:", error))
+        }
+    },
+
+    // Backward compatible nearby individuals
+    async getNearbyindividuals(req, res, next) {
+        try {
+            const enhancedRequest = {
+                latitude: req.body.latitude,
+                longitude: req.body.longitude,
+                page: req.body.page || 1,
+                radius: req.body.radius || 25,
+                sports: req.body.sports || [],
+                serviceType: req.body.serviceType || "all",
+                ageGroup: req.body.ageGroup || "all",
+                experienceRange: req.body.experienceRange || {},
+            }
+
+            const result = await ProviderServices.getNearbyIndividualsWithFilters(enhancedRequest)
+
+            return res.json({
+                success: true,
+                message: "Nearby individuals retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to get nearby individuals:", error))
+        }
+    },
+
+    // Backward compatible venue search
+    async venues(req, res, next) {
+        try {
+            const enhancedRequest = {
+                query: req.body.query,
+                latitude: req.body.latitude,
+                longitude: req.body.longitude,
+                page: req.body.page || 1,
+                radius: req.body.radius || 25,
+                sport: req.body.sport || "all",
+                venueType: req.body.venueType || "all",
+                surfaceTypes: req.body.surfaceTypes || [],
+                facilities: req.body.facilities || {},
+                priceRange: req.body.priceRange || {},
+            }
+
+            const result = await ProviderServices.searchVenuesWithFilters(enhancedRequest)
+
+            return res.json({
+                success: true,
+                message: "Venue search completed successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to search venues:", error))
+        }
+    },
+
+    // Backward compatible individual search
+    async individuals(req, res, next) {
+        try {
+            const enhancedRequest = {
+                query: req.body.query,
+                latitude: req.body.latitude,
+                longitude: req.body.longitude,
+                page: req.body.page || 1,
+                radius: req.body.radius || 25,
+                sports: req.body.sports || [],
+                serviceType: req.body.serviceType || "all",
+                ageGroup: req.body.ageGroup || "all",
+                experienceRange: req.body.experienceRange || {},
+            }
+
+            const result = await ProviderServices.searchIndividualsWithFilters(enhancedRequest)
+
+            return res.json({
+                success: true,
+                message: "Individual search completed successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to search individuals:", error))
+        }
+    },
+
+    // Combined search (legacy)
+    async combined(req, res, next) {
+        try {
+            const result = await ProviderServices.combinedSearchWithFilters(req.body)
+
+            return res.json({
+                success: true,
+                message: "Combined search completed successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to perform combined search:", error))
         }
     },
 }

@@ -52,14 +52,29 @@ router.put("/cancelBooking/:bookingId", validateUser, ProviderController.cancelB
 
 
 // ==================== NEARBY ROUTES ====================
-router.post("/getNearbyVenue", validateUser, ProviderController.getNearbyVenues)
-router.post("/getNearbyindividuals", validateUser, ProviderController.getNearbyIndividuals)
+// router.post("/getNearbyVenue", validateUser, ProviderController.getNearbyVenues)
+// router.post("/getNearbyindividuals", validateUser, ProviderController.getNearbyIndividuals)
 
 // ==================== SEARCH ROUTES ====================
 router.post("/venues", ProviderController.searchVenues)
 router.post("/individuals", ProviderController.searchIndividuals)
-router.post("/combined", ProviderController.combinedSearch)
+router.post("/combinedSearch", ProviderController.combinedSearch)
 
 // ==================== INDIVIDUAL PROFILE ====================
 router.get("/individual/:id", ProviderController.getIndividualProfile)
+
+
+// Enhanced nearby routes with advanced filters
+router.post("/getNearbyVenues", validateUser, ProviderController.getNearbyVenuesWithFilters)
+router.post("/getNearbyindividuals", validateUser, ProviderController.getNearbyIndividualsWithFilters,
+)
+
+// Enhanced search routes with advanced filters
+router.post("/searchVenues", ProviderController.searchVenuesWithFilters)
+router.post("/searchIndividuals", ProviderController.searchIndividualsWithFilters)
+
+// Combined search with filters
+// router.post("/combinedSearch", ProviderController.combinedSearchWithFilters)
+
+
 export default router

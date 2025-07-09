@@ -3054,9 +3054,853 @@ const ProviderServices = {
     }
 
     return recommendations
-  }
+  },
 
+  //#region new filter changes
 
+  async getNearbyVenuesWithFilters(filters) {
+    try {
+      const {
+        latitude,
+        longitude,
+        page = 1,
+        radius = 25,
+        sport = 'all',
+        venueType = 'all',
+        surfaceTypes = [],
+        facilities = {},
+        priceRange = {}
+      } = filters
+
+      const limit = 10;
+      const MAX_DISTANCE_METERS = Math.min(radius * 1000, 100000); // Max 100km
+      const skip = (page - 1) * limit;
+      const userLocation = {
+        type: "Point",
+        coordinates: [longitude, latitude]
+      };
+
+      // Handle expired subscriptions first
+      const expiredGround = await Ground.find({
+        "locationHistory.point": {
+          $near: {
+            $geometry: userLocation,
+            $maxDistance: MAX_DISTANCE_METERS
+          }
+        },
+        subscriptionExpiry: { $lt: new Date() },
+        isSubscriptionPurchased: true
+      }).select('_id');
+
+      if (expiredGround.length > 0) {
+        const expiredGroundIds = expiredGround.map(ground => ground._id);
+        await Ground.updateMany(
+          { _id: { $in: expiredGroundIds } },
+          { $set: { isSubscriptionPurchased: false } }
+        );
+      }
+
+      // Build aggregation pipeline
+      const pipeline = [
+        {
+          $geoNear: {
+            near: userLocation,
+            distanceField: "distance",
+            spherical: true,
+            maxDistance: MAX_DISTANCE_METERS,
+            query: {
+              isActive: true,
+              isSubscriptionPurchased: true,
+            }
+          }
+        },
+        {
+          $addFields: {
+            distanceInKm: { $divide: ["$distance", 1000] },
+            lowestPrice: {
+              $min: {
+                $map: {
+                  input: "$sportPricing",
+                  as: "pricing",
+                  in: "$$pricing.perHourCharge"
+                }
+              }
+            }
+          }
+        },
+        {
+          $match: {
+            $and: [
+              { distanceInKm: { $lte: radius } },
+              // Sport filter
+              ...(sport !== 'all' ? [{ venue_sports: sport }] : []),
+              // Venue type filter
+              ...(venueType !== 'all' ? [{ venue_type: venueType }] : []),
+              // Surface types filter (multi-select)
+              ...(surfaceTypes.length > 0 ? [{ venue_surfacetype: { $in: surfaceTypes } }] : []),
+              // Price range filter
+              ...(priceRange.min !== undefined ? [{
+                $or: [
+                  { perHourCharge: { $gte: priceRange.min } },
+                  { lowestPrice: { $gte: priceRange.min } }
+                ]
+              }] : []),
+              ...(priceRange.max !== undefined ? [{
+                $or: [
+                  { perHourCharge: { $lte: priceRange.max } },
+                  { lowestPrice: { $lte: priceRange.max } }
+                ]
+              }] : []),
+              // Facilities filter
+              ...this.buildFacilitiesFilter(facilities),
+            ]
+          }
+        },
+        {
+          $lookup: {
+            from: "packages",
+            localField: "packageRef",
+            foreignField: "_id",
+            as: "packageRef"
+          }
+        },
+        {
+          $unwind: {
+            path: "$packageRef",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        // Add popularity score for better sorting
+        {
+          $addFields: {
+            popularityScore: {
+              $add: [
+                // Distance score (closer = higher score)
+                { $subtract: [50, { $multiply: ["$distanceInKm", 2] }] },
+                // Booking count score
+                { $min: [30, { $multiply: [{ $ifNull: ["$totalBookings", 0] }, 0.1] }] },
+                // Active subscription bonus
+                { $cond: ["$isSubscriptionPurchased", 15, 0] },
+                // Facilities count bonus
+                { $multiply: [this.countActiveFacilities(), 1] },
+                // Sports variety bonus
+                { $multiply: [{ $size: { $ifNull: ["$venue_sports", []] } }, 0.5] }
+              ]
+            }
+          }
+        },
+        // Sort by popularity and distance
+        {
+          $sort: {
+            popularityScore: -1,
+            distanceInKm: 1,
+            totalBookings: -1
+          }
+        },
+        { $skip: skip },
+        { $limit: limit }
+      ];
+
+      const venues = await Ground.aggregate(pipeline);
+
+      // Get total count for pagination
+      const countPipeline = [...pipeline.slice(0, -2), { $count: "total" }];
+      const countResult = await Ground.aggregate(countPipeline);
+      const total = countResult[0]?.total || 0;
+
+      return {
+        venues,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit,
+          hasMore: page < Math.ceil(total / limit),
+        },
+        appliedFilters: {
+          sport,
+          venueType,
+          surfaceTypes,
+          facilities,
+          priceRange,
+          radius,
+        },
+        userLocation: { latitude, longitude },
+      };
+    } catch (error) {
+      console.log(`Failed to get nearby venues with filters: ${error}`);
+      throw error;
+    }
+  },
+
+  // ==================== ENHANCED NEARBY INDIVIDUALS ====================
+  async getNearbyIndividualsWithFilters(filters) {
+    try {
+      const {
+        latitude,
+        longitude,
+        page = 1,
+        radius = 25,
+        sports = [],
+        serviceType = 'all',
+        ageGroup = 'all',
+        experienceRange = {}
+      } = filters
+
+      const limit = 10;
+      const MAX_DISTANCE_METERS = Math.min(radius * 1000, 100000);
+      const skip = (page - 1) * limit;
+      const userLocation = {
+        type: "Point",
+        coordinates: [longitude, latitude]
+      };
+
+      // Handle expired subscriptions
+      const expiredIndividuals = await Individual.find({
+        "locationHistory.point": {
+          $near: {
+            $geometry: userLocation,
+            $maxDistance: MAX_DISTANCE_METERS
+          }
+        },
+        subscriptionExpiry: { $lt: new Date() },
+        hasActiveSubscription: true
+      }).select('_id');
+
+      if (expiredIndividuals.length > 0) {
+        const expiredIndividualIds = expiredIndividuals.map(individual => individual._id);
+        await Individual.updateMany(
+          { _id: { $in: expiredIndividualIds } },
+          { $set: { hasActiveSubscription: false } }
+        );
+      }
+
+      const pipeline = [
+        {
+          $geoNear: {
+            near: userLocation,
+            distanceField: "distance",
+            spherical: true,
+            maxDistance: MAX_DISTANCE_METERS,
+            query: {
+              hasActiveSubscription: true,
+            }
+          }
+        },
+        {
+          $addFields: {
+            distanceInKm: { $divide: ["$distance", 1000] }
+          }
+        },
+        {
+          $match: {
+            $and: [
+              { distanceInKm: { $lte: radius } },
+              // Sports filter (multi-select)
+              ...(sports.length > 0 ? [{ sportsCategories: { $in: sports } }] : []),
+              // Service type filter
+              ...this.buildServiceTypeFilter(serviceType),
+              // Age group filter
+              ...(ageGroup !== 'all' ? [{ supportedAgeGroups: ageGroup }] : []),
+              // Experience range filter
+              ...(experienceRange.min !== undefined ? [{ yearOfExperience: { $gte: experienceRange.min } }] : []),
+              ...(experienceRange.max !== undefined ? [{ yearOfExperience: { $lte: experienceRange.max } }] : []),
+            ]
+          }
+        },
+        {
+          $lookup: {
+            from: "packages",
+            localField: "packageRef",
+            foreignField: "_id",
+            as: "packageRef"
+          }
+        },
+        {
+          $unwind: {
+            path: "$packageRef",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        // Add popularity score
+        {
+          $addFields: {
+            popularityScore: {
+              $add: [
+                // Distance score
+                { $subtract: [40, { $multiply: ["$distanceInKm", 1.5] }] },
+                // Experience score
+                { $min: [25, { $multiply: [{ $ifNull: ["$yearOfExperience", 0] }, 1] }] },
+                // Active subscription bonus
+                { $cond: ["$hasActiveSubscription", 15, 0] },
+                // Service variety bonus
+                {
+                  $add: [
+                    { $cond: [{ $ifNull: ["$serviceOptions.providesOneOnOne", false] }, 5, 0] },
+                    { $cond: [{ $ifNull: ["$serviceOptions.providesTeamService", false] }, 5, 0] },
+                    { $cond: [{ $ifNull: ["$serviceOptions.providesOnlineService", false] }, 3, 0] },
+                  ]
+                },
+                // Sports variety bonus
+                { $multiply: [{ $size: { $ifNull: ["$sportsCategories", []] } }, 1] }
+              ]
+            }
+          }
+        },
+        {
+          $sort: {
+            popularityScore: -1,
+            yearOfExperience: -1,
+            distanceInKm: 1
+          }
+        },
+        { $skip: skip },
+        { $limit: limit }
+      ];
+
+      const individuals = await Individual.aggregate(pipeline);
+
+      // Get total count
+      const countPipeline = [...pipeline.slice(0, -2), { $count: "total" }];
+      const countResult = await Individual.aggregate(countPipeline);
+      const total = countResult[0]?.total || 0;
+
+      return {
+        individuals,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit,
+          hasMore: page < Math.ceil(total / limit),
+        },
+        appliedFilters: {
+          sports,
+          serviceType,
+          ageGroup,
+          experienceRange,
+          radius,
+        },
+        userLocation: { latitude, longitude },
+      };
+    } catch (error) {
+      console.log("Failed to get nearby individuals with filters:", error);
+      throw error;
+    }
+  },
+
+  // ==================== ENHANCED VENUE SEARCH ====================
+  async searchVenuesWithFilters(filters) {
+    try {
+      const {
+        query,
+        latitude,
+        longitude,
+        page = 1,
+        radius = 25,
+        sport = 'all',
+        venueType = 'all',
+        surfaceTypes = [],
+        facilities = {},
+        priceRange = {}
+      } = filters
+
+      const MAX_DISTANCE_METERS = Math.min(radius * 1000, 100000);
+      const limit = 10;
+      const skip = (page - 1) * limit;
+      const userLocation = {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      };
+
+      // Build search regex for better performance
+      const searchRegex = new RegExp(query.split(' ').join('|'), 'i');
+
+      const pipeline = [
+        {
+          $geoNear: {
+            near: userLocation,
+            distanceField: "distance",
+            spherical: true,
+            maxDistance: MAX_DISTANCE_METERS,
+            query: {
+              isActive: true,
+              isSubscriptionPurchased: true,
+            },
+          },
+        },
+        {
+          $addFields: {
+            distanceInKm: { $divide: ["$distance", 1000] },
+            lowestPrice: {
+              $min: {
+                $map: {
+                  input: "$sportPricing",
+                  as: "pricing",
+                  in: "$$pricing.perHourCharge"
+                }
+              }
+            },
+            // Create searchable text field
+            searchableText: {
+              $concat: [
+                { $ifNull: ["$venue_name", ""] },
+                " ",
+                { $ifNull: ["$venue_description", ""] },
+                " ",
+                { $ifNull: ["$venue_address", ""] },
+                " ",
+                {
+                  $reduce: {
+                    input: { $ifNull: ["$venue_sports", []] },
+                    initialValue: "",
+                    in: { $concat: ["$$value", " ", "$$this"] },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {
+          $match: {
+            $and: [
+              { distanceInKm: { $lte: radius } },
+              // Text search filter
+              {
+                $or: [
+                  { venue_name: { $regex: searchRegex } },
+                  { venue_description: { $regex: searchRegex } },
+                  { venue_address: { $regex: searchRegex } },
+                  { venue_sports: { $in: [searchRegex] } },
+                  { searchableText: { $regex: searchRegex } },
+                ],
+              },
+              // Additional filters
+              ...(sport !== 'all' ? [{ venue_sports: sport }] : []),
+              ...(venueType !== 'all' ? [{ venue_type: venueType }] : []),
+              ...(surfaceTypes.length > 0 ? [{ venue_surfacetype: { $in: surfaceTypes } }] : []),
+              ...(priceRange.min !== undefined ? [{
+                $or: [
+                  { perHourCharge: { $gte: priceRange.min } },
+                  { lowestPrice: { $gte: priceRange.min } }
+                ]
+              }] : []),
+              ...(priceRange.max !== undefined ? [{
+                $or: [
+                  { perHourCharge: { $lte: priceRange.max } },
+                  { lowestPrice: { $lte: priceRange.max } }
+                ]
+              }] : []),
+              ...this.buildFacilitiesFilter(facilities),
+            ],
+          },
+        },
+        {
+          $lookup: {
+            from: "packages",
+            localField: "packageRef",
+            foreignField: "_id",
+            as: "packageRef",
+          },
+        },
+        {
+          $unwind: {
+            path: "$packageRef",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        // Add comprehensive search score
+        {
+          $addFields: {
+            searchScore: {
+              $add: [
+                // Text relevance scores
+                {
+                  $cond: [
+                    { $regexMatch: { input: "$venue_name", regex: searchRegex } },
+                    50, 0
+                  ],
+                },
+                {
+                  $cond: [
+                    { $regexMatch: { input: "$venue_description", regex: searchRegex } },
+                    30, 0
+                  ],
+                },
+                {
+                  $cond: [
+                    { $regexMatch: { input: "$venue_address", regex: searchRegex } },
+                    20, 0
+                  ],
+                },
+                // Sports match bonus
+                {
+                  $cond: [
+                    {
+                      $gt: [
+                        { $size: { $setIntersection: ["$venue_sports", [searchRegex]] } },
+                        0
+                      ]
+                    },
+                    25, 0
+                  ],
+                },
+                // Distance score (closer = higher)
+                { $subtract: [40, { $multiply: ["$distanceInKm", 2] }] },
+                // Popularity score
+                { $min: [20, { $multiply: [{ $ifNull: ["$totalBookings", 0] }, 0.1] }] },
+                // Active subscription bonus
+                { $cond: ["$isSubscriptionPurchased", 10, 0] },
+                // Facilities bonus
+                { $multiply: [this.countActiveFacilities(), 1] },
+              ],
+            },
+          },
+        },
+        // Sort by search relevance
+        {
+          $sort: {
+            searchScore: -1,
+            distanceInKm: 1,
+            totalBookings: -1,
+          },
+        },
+        { $skip: skip },
+        { $limit: limit },
+      ];
+
+      const venues = await Ground.aggregate(pipeline);
+
+      // Get total count
+      const countPipeline = [...pipeline.slice(0, -2), { $count: "total" }];
+      const countResult = await Ground.aggregate(countPipeline);
+      const total = countResult[0]?.total || 0;
+
+      return {
+        venues,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit,
+          hasMore: page < Math.ceil(total / limit),
+        },
+        searchQuery: query,
+        searchRadius: radius,
+        userLocation: { latitude, longitude },
+        appliedFilters: {
+          sport,
+          venueType,
+          surfaceTypes,
+          facilities,
+          priceRange,
+        },
+      };
+    } catch (error) {
+      console.log("Failed to search venues with filters:", error);
+      throw error;
+    }
+  },
+
+  // ==================== ENHANCED INDIVIDUAL SEARCH ====================
+  async searchIndividualsWithFilters(filters) {
+    try {
+      const {
+        query,
+        latitude,
+        longitude,
+        page = 1,
+        radius = 25,
+        sports = [],
+        serviceType = 'all',
+        ageGroup = 'all',
+        experienceRange = {}
+      } = filters
+
+      const MAX_DISTANCE_METERS = Math.min(radius * 1000, 100000);
+      const limit = 10;
+      const skip = (page - 1) * limit;
+      const userLocation = {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      };
+
+      const searchRegex = new RegExp(query.split(' ').join('|'), 'i');
+
+      const pipeline = [
+        {
+          $geoNear: {
+            near: userLocation,
+            distanceField: "distance",
+            spherical: true,
+            maxDistance: MAX_DISTANCE_METERS,
+            query: {
+              hasActiveSubscription: true,
+            },
+          },
+        },
+        {
+          $addFields: {
+            distanceInKm: { $divide: ["$distance", 1000] },
+            searchableText: {
+              $concat: [
+                { $ifNull: ["$fullName", ""] },
+                " ",
+                { $ifNull: ["$bio", ""] },
+                " ",
+                {
+                  $reduce: {
+                    input: { $ifNull: ["$sportsCategories", []] },
+                    initialValue: "",
+                    in: { $concat: ["$$value", " ", "$$this"] },
+                  },
+                },
+                " ",
+                {
+                  $reduce: {
+                    input: { $ifNull: ["$supportedAgeGroups", []] },
+                    initialValue: "",
+                    in: { $concat: ["$$value", " ", "$$this"] },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {
+          $match: {
+            $and: [
+              { distanceInKm: { $lte: radius } },
+              // Text search filter
+              {
+                $or: [
+                  { fullName: { $regex: searchRegex } },
+                  { bio: { $regex: searchRegex } },
+                  { sportsCategories: { $in: [searchRegex] } },
+                  { supportedAgeGroups: { $in: [searchRegex] } },
+                  { searchableText: { $regex: searchRegex } },
+                ],
+              },
+              // Additional filters
+              ...(sports.length > 0 ? [{ sportsCategories: { $in: sports } }] : []),
+              ...this.buildServiceTypeFilter(serviceType),
+              ...(ageGroup !== 'all' ? [{ supportedAgeGroups: ageGroup }] : []),
+              ...(experienceRange.min !== undefined ? [{ yearOfExperience: { $gte: experienceRange.min } }] : []),
+              ...(experienceRange.max !== undefined ? [{ yearOfExperience: { $lte: experienceRange.max } }] : []),
+            ],
+          },
+        },
+        {
+          $lookup: {
+            from: "packages",
+            localField: "packageRef",
+            foreignField: "_id",
+            as: "packageRef",
+          },
+        },
+        {
+          $unwind: {
+            path: "$packageRef",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        // Add search score
+        {
+          $addFields: {
+            searchScore: {
+              $add: [
+                // Name match (highest priority)
+                {
+                  $cond: [
+                    { $regexMatch: { input: "$fullName", regex: searchRegex } },
+                    60, 0
+                  ],
+                },
+                // Bio match
+                {
+                  $cond: [
+                    { $regexMatch: { input: "$bio", regex: searchRegex } },
+                    30, 0
+                  ],
+                },
+                // Sports match
+                {
+                  $cond: [
+                    {
+                      $gt: [
+                        { $size: { $setIntersection: ["$sportsCategories", [searchRegex]] } },
+                        0
+                      ]
+                    },
+                    40, 0
+                  ],
+                },
+                // Age group match
+                {
+                  $cond: [
+                    {
+                      $gt: [
+                        { $size: { $setIntersection: ["$supportedAgeGroups", [searchRegex]] } },
+                        0
+                      ]
+                    },
+                    20, 0
+                  ],
+                },
+                // Distance score
+                { $subtract: [30, { $multiply: ["$distanceInKm", 1.5] }] },
+                // Experience score
+                { $min: [20, { $multiply: [{ $ifNull: ["$yearOfExperience", 0] }, 0.8] }] },
+                // Active subscription bonus
+                { $cond: ["$hasActiveSubscription", 10, 0] },
+                // Service variety bonus
+                {
+                  $add: [
+                    { $cond: [{ $ifNull: ["$serviceOptions.providesOneOnOne", false] }, 3, 0] },
+                    { $cond: [{ $ifNull: ["$serviceOptions.providesTeamService", false] }, 3, 0] },
+                    { $cond: [{ $ifNull: ["$serviceOptions.providesOnlineService", false] }, 2, 0] },
+                  ]
+                },
+              ],
+            },
+          },
+        },
+        {
+          $sort: {
+            searchScore: -1,
+            yearOfExperience: -1,
+            distanceInKm: 1,
+          },
+        },
+        { $skip: skip },
+        { $limit: limit },
+      ];
+
+      const individuals = await Individual.aggregate(pipeline);
+
+      // Get total count
+      const countPipeline = [...pipeline.slice(0, -2), { $count: "total" }];
+      const countResult = await Individual.aggregate(countPipeline);
+      const total = countResult[0]?.total || 0;
+
+      return {
+        individuals,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit,
+          hasMore: page < Math.ceil(total / limit),
+        },
+        searchQuery: query,
+        searchRadius: radius,
+        userLocation: { latitude, longitude },
+        appliedFilters: {
+          sports,
+          serviceType,
+          ageGroup,
+          experienceRange,
+        },
+      };
+    } catch (error) {
+      console.log("Failed to search individuals with filters:", error);
+      throw error;
+    }
+  },
+
+  // ==================== HELPER METHODS ====================
+  buildFacilitiesFilter(facilities) {
+    const filters = [];
+    Object.entries(facilities).forEach(([key, value]) => {
+      if (value === true) {
+        filters.push({ [`venuefacilities.${key}`]: true });
+      }
+    });
+    return filters;
+  },
+
+  buildServiceTypeFilter(serviceType) {
+    if (serviceType === 'all') return [];
+
+    switch (serviceType) {
+      case 'one_on_one':
+        return [{ "serviceOptions.providesOneOnOne": true }];
+      case 'team_service':
+        return [{ "serviceOptions.providesTeamService": true }];
+      case 'online_service':
+        return [{ "serviceOptions.providesOnlineService": true }];
+      default:
+        return [];
+    }
+  },
+
+  countActiveFacilities() {
+    return {
+      $add: [
+        { $cond: [{ $ifNull: ["$venuefacilities.isWaterAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isParkingAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isEquipmentProvided", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isWashroomAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isChangingRoomAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isFloodlightAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isSeatingLoungeAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isFirstAidAvailable", false] }, 1, 0] },
+        { $cond: [{ $ifNull: ["$venuefacilities.isWalkingTrackAvailable", false] }, 1, 0] },
+      ]
+    };
+  },
+
+  // ==================== COMBINED SEARCH ====================
+  async combinedSearchWithFilters(filters) {
+    try {
+      const { query, latitude, longitude, page = 1, radius = 25 } = filters;
+
+      // Run both searches in parallel
+      const [venueResults, individualResults] = await Promise.all([
+        this.searchVenuesWithFilters({
+          ...filters,
+          page: 1, // Get first page for combined results
+        }),
+        this.searchIndividualsWithFilters({
+          ...filters,
+          page: 1, // Get first page for combined results
+        })
+      ]);
+
+      // Combine and sort results by search score
+      const combinedResults = [
+        ...venueResults.venues.map(venue => ({ ...venue, type: 'venue' })),
+        ...individualResults.individuals.map(individual => ({ ...individual, type: 'individual' }))
+      ].sort((a, b) => (b.searchScore || 0) - (a.searchScore || 0));
+
+      // Apply pagination to combined results
+      const limit = 10;
+      const skip = (page - 1) * limit;
+      const paginatedResults = combinedResults.slice(skip, skip + limit);
+
+      return {
+        results: paginatedResults,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(combinedResults.length / limit),
+          totalItems: combinedResults.length,
+          itemsPerPage: limit,
+          hasMore: page < Math.ceil(combinedResults.length / limit),
+        },
+        searchQuery: query,
+        searchRadius: radius,
+        userLocation: { latitude, longitude },
+        summary: {
+          totalVenues: venueResults.venues.length,
+          totalIndividuals: individualResults.individuals.length,
+          totalResults: combinedResults.length,
+        },
+      };
+    } catch (error) {
+      console.log("Failed to perform combined search:", error);
+      throw error;
+    }
+  },
 }
 
 export default ProviderServices
