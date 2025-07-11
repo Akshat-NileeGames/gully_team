@@ -75,6 +75,10 @@ router.post("/searchIndividuals", ProviderController.searchIndividualsWithFilter
 
 // Combined search with filters
 // router.post("/combinedSearch", ProviderController.combinedSearchWithFilters)
-
-
+// Add this to your existing router file
+router.post("/initiatePayout", validateUser, ProviderController.initiatePayout)
+router.get("/payout/status/:payoutId", validateUser, ProviderController.getPayoutStatus)
+router.get("/payouts/history", validateUser, ProviderController.getPayoutHistory)
+// Add this route for handling webhooks (should be before other middleware)
+router.post("/webhook/payout", express.raw({ type: 'application/json' }), ProviderController.handlePayoutWebhook)
 export default router

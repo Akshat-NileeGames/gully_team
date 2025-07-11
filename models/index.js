@@ -31,6 +31,7 @@ export { default as ShopVisit } from "./shopVisitSchema.js";
 export { default as Individual } from "./Individual.js";
 export { default as Ground } from "./ground.js";
 export { default as Booking } from "./booking.js";
+export { default as Payout } from "./payout.js";
 
 // export {default as Transaction} from "./transaction.js";
 

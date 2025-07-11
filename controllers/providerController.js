@@ -1414,7 +1414,156 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to perform combined search:", error))
         }
     },
+
+    //#region Payout api
+
+    async   initiatePayout(req, res, next) {
+        const payoutValidation = Joi.object({
+            recipientVpa: Joi.string()
+                .pattern(/^[\w.-]+@[\w]+$/)
+                .required()
+                .messages({
+                    'string.pattern.base': 'Invalid VPA format. Please provide a valid UPI ID.'
+                }),
+            amount: Joi.number()
+                .min(1)
+                .max(200000) // Max 2 lakh per transaction as per RBI guidelines
+                .required()
+                .messages({
+                    'number.min': 'Amount must be at least ₹1',
+                    'number.max': 'Amount cannot exceed ₹2,00,000 per transaction'
+                }),
+            purpose: Joi.string()
+                .valid(
+                    'refund',
+                    'cashback',
+                    'payout',
+                    'salary',
+                    'utility_bill',
+                    'vendor_payments'
+                )
+                .required(),
+            description: Joi.string().max(255).optional(),
+            reference_id: Joi.string().max(40).optional(),
+            groundId: Joi.string().optional(), // For tracking which ground the payout is related to
+            bookingId: Joi.string().optional(), // For refund scenarios
+        })
+
+        const { error } = payoutValidation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Validation failed: ${error.details[0].message}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const payoutData = {
+                ...req.body,
+                userId: userInfo.userId,
+                initiatedBy: userInfo.userId
+            }
+
+            const result = await ProviderServices.initiatePayout(payoutData)
+
+            return res.status(200).json({
+                success: true,
+                message: "Payout initiated successfully",
+                data: result,
+            })
+        } catch (error) {
+            console.error("Payout initiation failed:", error)
+            return next(CustomErrorHandler.badRequest(`Failed to initiate payout: ${error.message}`))
+        }
+    },
+    //#endregion
+
+    //#region Get Payout Status
+    async getPayoutStatus(req, res, next) {
+        const validation = Joi.object({
+            payoutId: Joi.string().required(),
+        })
+
+        const { error } = validation.validate(req.params)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Invalid payout ID"))
+        }
+
+        try {
+            const result = await ProviderServices.getPayoutStatus(req.params.payoutId)
+
+            return res.json({
+                success: true,
+                message: "Payout status retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to get payout status: ${error.message}`))
+        }
+    },
+    //#endregion
+
+    //#region Get Payout History
+    async getPayoutHistory(req, res, next) {
+        const validation = Joi.object({
+            page: Joi.number().min(1).default(1),
+            limit: Joi.number().min(1).max(100).default(10),
+            status: Joi.string().valid('queued', 'pending', 'processed', 'cancelled', 'failed').optional(),
+            groundId: Joi.string().optional(),
+            startDate: Joi.date().optional(),
+            endDate: Joi.date().optional(),
+        })
+
+        const { error } = validation.validate(req.query)
+        if (error) {
+            return next(CustomErrorHandler.badRequest("Invalid query parameters"))
+        }
+
+        try {
+            const userInfo = global.user
+            const filters = {
+                ...req.query,
+                userId: userInfo.userId
+            }
+
+            const result = await ProviderServices.getPayoutHistory(filters)
+
+            return res.json({
+                success: true,
+                message: "Payout history retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to get payout history: ${error.message}`))
+        }
+    },
+    //#endregion
+
+    //#region Handle Payout Webhook
+    async handlePayoutWebhook(req, res, next) {
+        try {
+            const webhookSignature = req.headers['x-razorpay-signature']
+            const webhookBody = JSON.stringify(req.body)
+
+            const result = await ProviderServices.handlePayoutWebhook(webhookBody, webhookSignature)
+
+            return res.status(200).json({
+                success: true,
+                message: "Webhook processed successfully"
+            })
+        } catch (error) {
+            console.error("Webhook processing failed:", error)
+            return res.status(400).json({
+                success: false,
+                message: "Webhook processing failed"
+            })
+        }
+    },
+    //#endregion
+
+
 }
-//#endregion
+
+
+
+
 
 export default ProviderController

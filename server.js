@@ -5,7 +5,7 @@ const app = express();
 import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import errorHandler from "./middlewares/errorHandler.js";
-
+import emailScheduler from "./services/node_corn/node_schedular.js"
 import {
   authRoute,
   matchRoute,
@@ -27,6 +27,7 @@ mongoose.connect(MONGO_DB_URL, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
+emailScheduler.initializeCronJobs();
 const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error:"));
 db.once("open", () => {
@@ -37,6 +38,7 @@ app.use(cors());
 app.use(fileUpload());
 // app.use(bodyParser.json({ limit: "50mb" }));
 app.use(express.json({ limit: "50mb" })); //to read json data
+
 app.use("/api/auth", authRoute);
 app.use("/api/user", userRoute);
 app.use("/api/other", otherRoute);

@@ -23,6 +23,7 @@ class RazorpayHandler {
       });
     });
   }
+  
 
   //DG
   // static async verifyPayment(paymentId) {

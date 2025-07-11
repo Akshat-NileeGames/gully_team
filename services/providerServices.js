@@ -1,8 +1,13 @@
-import { Ground, Booking, User, Package, Individual, Category } from "../models/index.js"
+import { Ground, Booking, User, Package, Individual, Category, Payout } from "../models/index.js"
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
 import mongoose from "mongoose"
-
+import Razorpay from "razorpay"
+import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/index.js";
+var razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET,
+});
 const ProviderServices = {
   async createVenue(data) {
     try {
@@ -3901,6 +3906,476 @@ const ProviderServices = {
       throw error;
     }
   },
+
+
+
+
+
+  //#region Initiate Payout
+  async initiatePayout(payoutData) {
+    try {
+      console.log(razorpay)
+      const {
+        recipientVpa,
+        amount,
+        purpose,
+        description,
+        reference_id,
+        userId,
+        groundId,
+        bookingId
+      } = payoutData
+
+      // Validate user has sufficient balance or permissions
+      await this.validatePayoutEligibility(userId, amount, groundId)
+
+      // Create payout record in database first
+      const payout = new Payout({
+        userId,
+        groundId,
+        bookingId,
+        recipientVpa,
+        amount: Math.round(amount * 100), // Convert to paise
+        purpose,
+        description,
+        reference_id: reference_id || `payout_${Date.now()}`,
+        status: 'queued'
+      })
+
+      await payout.save()
+
+      try {
+        // Create contact in Razorpay
+        const contact = await razorpay.contacts.create({
+          name: `User_${userId}`,
+          email: `user_${userId}@example.com`, // You might want to get actual email
+          contact: "9999999999", // You might want to get actual phone
+          type: "customer",
+          reference_id: `contact_${userId}_${Date.now()}`
+        })
+
+        // Create fund account for VPA
+        const fundAccount = await razorpay.fundAccount.create({
+          contact_id: contact.id,
+          account_type: "vpa",
+          vpa: {
+            address: recipientVpa
+          }
+        })
+
+        // Create payout
+        const razorpayPayout = await razorpay.payouts.create({
+          account_number: process.env.RAZORPAY_ACCOUNT_NUMBER, // Your account number
+          fund_account_id: fundAccount.id,
+          amount: Math.round(amount * 100), // Amount in paise
+          currency: "INR",
+          mode: "UPI",
+          purpose: purpose,
+          queue_if_low_balance: true,
+          reference_id: payout.reference_id,
+          narration: description || `Payout for ${purpose}`,
+        })
+
+        // Update payout record with Razorpay response
+        payout.razorpayPayoutId = razorpayPayout.id
+        payout.status = razorpayPayout.status
+        payout.razorpayResponse = razorpayPayout
+        await payout.save()
+
+        return {
+          payoutId: payout._id,
+          razorpayPayoutId: razorpayPayout.id,
+          status: razorpayPayout.status,
+          amount: amount,
+          recipientVpa: recipientVpa,
+          reference_id: payout.reference_id,
+          estimatedSettlement: this.calculateEstimatedSettlement()
+        }
+
+      } catch (razorpayError) {
+        // Update payout status to failed
+        payout.status = 'failed'
+        payout.failureReason = razorpayError.message
+        payout.razorpayResponse = razorpayError
+        await payout.save()
+
+        throw new Error(`Razorpay payout failed: ${razorpayError.message}`)
+      }
+
+    } catch (error) {
+      console.error("Payout initiation error:", error)
+      throw error
+    }
+  },
+  //#endregion
+
+  //#region Validate Payout Eligibility
+  async validatePayoutEligibility(userId, amount, groundId) {
+    try {
+      // Check if user exists and is active
+      const user = await User.findById(userId)
+      if (!user) {
+        throw CustomErrorHandler.notFound("User not found")
+      }
+
+      // If groundId is provided, validate ground ownership
+      if (groundId) {
+        const ground = await Ground.findOne({ _id: groundId, userId: userId })
+        if (!ground) {
+          throw CustomErrorHandler.badRequest("You don't have permission to initiate payouts for this ground")
+        }
+      }
+
+      // Check daily payout limits (example: max 50k per day)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+
+      const todayPayouts = await Payout.aggregate([
+        {
+          $match: {
+            userId: mongoose.Types.ObjectId(userId),
+            createdAt: { $gte: today, $lt: tomorrow },
+            status: { $in: ['queued', 'pending', 'processed'] }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: "$amount" }
+          }
+        }
+      ])
+
+      const todayTotal = todayPayouts[0]?.totalAmount || 0
+      const dailyLimit = 5000000 // 50k in paise
+
+      if (todayTotal + (amount * 100) > dailyLimit) {
+        throw CustomErrorHandler.badRequest("Daily payout limit exceeded. Maximum ₹50,000 per day allowed.")
+      }
+
+      // Check for minimum balance or other business rules
+      // You can add more validation logic here
+
+      return true
+    } catch (error) {
+      throw error
+    }
+  },
+  //#endregion
+
+  //#region Get Payout Status
+  async getPayoutStatus(payoutId) {
+    try {
+      const payout = await Payout.findById(payoutId)
+        .populate('userId', 'name email')
+        .populate('groundId', 'venue_name')
+        .populate('bookingId')
+
+      if (!payout) {
+        throw CustomErrorHandler.notFound("Payout not found")
+      }
+
+      // If payout has Razorpay ID, fetch latest status from Razorpay
+      if (payout.razorpayPayoutId) {
+        try {
+          const razorpayPayout = await razorpay.payouts.fetch(payout.razorpayPayoutId)
+
+          // Update local status if different
+          if (razorpayPayout.status !== payout.status) {
+            payout.status = razorpayPayout.status
+            payout.razorpayResponse = razorpayPayout
+
+            if (razorpayPayout.status === 'processed') {
+              payout.processedAt = new Date()
+            }
+
+            await payout.save()
+          }
+        } catch (razorpayError) {
+          console.error("Error fetching payout from Razorpay:", razorpayError)
+          // Continue with local data if Razorpay API fails
+        }
+      }
+
+      return {
+        payoutId: payout._id,
+        razorpayPayoutId: payout.razorpayPayoutId,
+        status: payout.status,
+        amount: payout.amount / 100, // Convert back to rupees
+        recipientVpa: payout.recipientVpa,
+        purpose: payout.purpose,
+        description: payout.description,
+        reference_id: payout.reference_id,
+        createdAt: payout.createdAt,
+        processedAt: payout.processedAt,
+        failureReason: payout.failureReason,
+        retryCount: payout.retryCount,
+        ground: payout.groundId,
+        booking: payout.bookingId
+      }
+    } catch (error) {
+      console.error("Error getting payout status:", error)
+      throw error
+    }
+  },
+  //#endregion
+
+  //#region Get Payout History
+  async getPayoutHistory(filters) {
+    try {
+      const {
+        userId,
+        page = 1,
+        limit = 10,
+        status,
+        groundId,
+        startDate,
+        endDate
+      } = filters
+
+      const query = { userId: mongoose.Types.ObjectId(userId) }
+
+      if (status) {
+        query.status = status
+      }
+
+      if (groundId) {
+        query.groundId = mongoose.Types.ObjectId(groundId)
+      }
+
+      if (startDate || endDate) {
+        query.createdAt = {}
+        if (startDate) query.createdAt.$gte = new Date(startDate)
+        if (endDate) query.createdAt.$lte = new Date(endDate)
+      }
+
+      const skip = (page - 1) * limit
+
+      const [payouts, total] = await Promise.all([
+        Payout.find(query)
+          .populate('groundId', 'venue_name')
+          .populate('bookingId', 'totalAmount sport')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Payout.countDocuments(query)
+      ])
+
+      // Calculate summary statistics
+      const summary = await Payout.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: "$amount" },
+            totalPayouts: { $sum: 1 },
+            successfulPayouts: {
+              $sum: { $cond: [{ $eq: ["$status", "processed"] }, 1, 0] }
+            },
+            failedPayouts: {
+              $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] }
+            },
+            pendingPayouts: {
+              $sum: { $cond: [{ $in: ["$status", ["queued", "pending"]] }, 1, 0] }
+            }
+          }
+        }
+      ])
+
+      const stats = summary[0] || {
+        totalAmount: 0,
+        totalPayouts: 0,
+        successfulPayouts: 0,
+        failedPayouts: 0,
+        pendingPayouts: 0
+      }
+
+      return {
+        payouts: payouts.map(payout => ({
+          ...payout,
+          amount: payout.amount / 100 // Convert to rupees
+        })),
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit,
+          hasMore: page < Math.ceil(total / limit),
+        },
+        summary: {
+          ...stats,
+          totalAmount: stats.totalAmount / 100, // Convert to rupees
+          successRate: stats.totalPayouts > 0 ?
+            Math.round((stats.successfulPayouts / stats.totalPayouts) * 100) : 0
+        }
+      }
+    } catch (error) {
+      console.error("Error getting payout history:", error)
+      throw error
+    }
+  },
+  //#endregion
+
+  //#region Handle Payout Webhook
+  async handlePayoutWebhook(webhookBody, webhookSignature) {
+    try {
+      // Verify webhook signature
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+        .update(webhookBody)
+        .digest('hex')
+
+      if (expectedSignature !== webhookSignature) {
+        throw new Error('Invalid webhook signature')
+      }
+
+      const webhookData = JSON.parse(webhookBody)
+      const { event, payload } = webhookData
+
+      if (event === 'payout.processed' || event === 'payout.failed' || event === 'payout.cancelled') {
+        const razorpayPayoutId = payload.payout.entity.id
+
+        const payout = await Payout.findOne({ razorpayPayoutId })
+        if (!payout) {
+          console.warn(`Payout not found for Razorpay ID: ${razorpayPayoutId}`)
+          return
+        }
+
+        // Update payout status
+        payout.status = payload.payout.entity.status
+        payout.webhookData = webhookData
+        payout.razorpayResponse = payload.payout.entity
+
+        if (payload.payout.entity.status === 'processed') {
+          payout.processedAt = new Date()
+        } else if (payload.payout.entity.status === 'failed') {
+          payout.failureReason = payload.payout.entity.failure_reason || 'Unknown error'
+        }
+
+        await payout.save()
+
+        // You can add additional business logic here
+        // For example, send notifications, update booking status, etc.
+        await this.handlePayoutStatusChange(payout)
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error("Webhook handling error:", error)
+      throw error
+    }
+  },
+  //#endregion
+
+  //#region Handle Payout Status Change
+  async handlePayoutStatusChange(payout) {
+    try {
+      // Add your business logic here based on payout status change
+      // For example:
+
+      if (payout.status === 'processed' && payout.bookingId) {
+        // If this was a refund, update booking status
+        await Booking.findByIdAndUpdate(payout.bookingId, {
+          refundStatus: 'completed',
+          refundProcessedAt: new Date()
+        })
+      }
+
+      if (payout.status === 'failed' && payout.retryCount < payout.maxRetries) {
+        // Schedule retry for failed payouts
+        setTimeout(async () => {
+          await this.retryFailedPayout(payout._id)
+        }, 30000) // Retry after 30 seconds
+      }
+
+      // Send notifications to user
+      // await this.sendPayoutNotification(payout)
+
+    } catch (error) {
+      console.error("Error handling payout status change:", error)
+    }
+  },
+  //#endregion
+
+  //#region Retry Failed Payout
+  async retryFailedPayout(payoutId) {
+    try {
+      const payout = await Payout.findById(payoutId)
+      if (!payout || payout.status !== 'failed' || payout.retryCount >= payout.maxRetries) {
+        return
+      }
+
+      payout.retryCount += 1
+      payout.status = 'queued'
+      await payout.save()
+
+      // Retry the payout with Razorpay
+      const retryData = {
+        recipientVpa: payout.recipientVpa,
+        amount: payout.amount / 100,
+        purpose: payout.purpose,
+        description: payout.description,
+        reference_id: `${payout.reference_id}_retry_${payout.retryCount}`,
+        userId: payout.userId,
+        groundId: payout.groundId,
+        bookingId: payout.bookingId
+      }
+
+      await this.initiatePayout(retryData)
+    } catch (error) {
+      console.error("Error retrying payout:", error)
+    }
+  },
+  //#endregion
+
+  //#region Helper Methods
+  calculateEstimatedSettlement() {
+    // UPI payouts are usually instant, but can take up to 30 minutes
+    const now = new Date()
+    const estimated = new Date(now.getTime() + 30 * 60 * 1000) // Add 30 minutes
+    return estimated
+  },
+
+  async getPayoutAnalytics(userId, period = 'month') {
+    try {
+      const dateRange = this.getDateRange(period)
+
+      const analytics = await Payout.aggregate([
+        {
+          $match: {
+            userId: mongoose.Types.ObjectId(userId),
+            createdAt: { $gte: dateRange.start, $lte: dateRange.end }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalPayouts: { $sum: 1 },
+            totalAmount: { $sum: "$amount" },
+            successfulPayouts: {
+              $sum: { $cond: [{ $eq: ["$status", "processed"] }, 1, 0] }
+            },
+            failedPayouts: {
+              $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] }
+            },
+            avgAmount: { $avg: "$amount" },
+            purposeBreakdown: {
+              $push: "$purpose"
+            }
+          }
+        }
+      ])
+
+      return analytics[0] || {}
+    } catch (error) {
+      console.error("Error getting payout analytics:", error)
+      throw error
+    }
+  }
+  //#endregion
 }
 
 export default ProviderServices

@@ -4088,427 +4088,427 @@ const otherServices = {
 
 
   //#region Reminder Mail for venue
-  //    async sendExpirationReminder(venue, user, packageDetails, expirationDate, daysUntilExpiration) {
-  //     const transporter = nodemailer.createTransporter({
-  //       host: "smtp.gmail.com",
-  //       port: 587,
-  //       secure: false,
-  //       requireTLS: true,
-  //       auth: {
-  //         user: "gullyteam33@gmail.com",
-  //         pass: "iaur qnaj ocsq jyvq",
-  //       },
-  //     })
+  async sendVenueExpirationReminder(venue, user, packageDetails, expirationDate, daysUntilExpiration) {
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      auth: {
+        user: "gullyteam33@gmail.com",
+        pass: "iaur qnaj ocsq jyvq",
+      },
+    })
 
-  //     // Format expiration date
-  //     const formattedExpirationDate = new Date(expirationDate).toLocaleDateString("en-US", {
-  //       year: "numeric",
-  //       month: "long",
-  //       day: "numeric",
-  //     })
+    // Format expiration date
+    const formattedExpirationDate = new Date(expirationDate).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
 
-  //     // Determine urgency level and styling
-  //     let urgencyLevel, headerColor, urgencyMessage, urgencyBadgeColor
+    // Determine urgency level and styling
+    let urgencyLevel, headerColor, urgencyMessage, urgencyBadgeColor
 
-  //     if (daysUntilExpiration <= 3) {
-  //       urgencyLevel = "critical"
-  //       headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)"
-  //       urgencyBadgeColor = "#fee2e2"
-  //       urgencyMessage = `
-  //         <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-  //           <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⚠️ Critical: Package Expires in ${daysUntilExpiration} day${daysUntilExpiration === 1 ? "" : "s"}!</p>
-  //           <p style="color: #b91c1c; margin: 0; font-size: 14px;">
-  //             Your venue will be removed from our platform if not renewed immediately.
-  //           </p>
-  //         </div>
-  //       `
-  //     } else if (daysUntilExpiration <= 7) {
-  //       urgencyLevel = "warning"
-  //       headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)"
-  //       urgencyBadgeColor = "#fef3c7"
-  //       urgencyMessage = `
-  //         <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-  //           <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏰ Package Expires in ${daysUntilExpiration} days</p>
-  //           <p style="color: #92400e; margin: 0; font-size: 14px;">
-  //             Don't let your venue go offline. Renew now to continue receiving bookings.
-  //           </p>
-  //         </div>
-  //       `
-  //     } else {
-  //       urgencyLevel = "reminder"
-  //       headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)"
-  //       urgencyBadgeColor = "#dbeafe"
-  //       urgencyMessage = `
-  //         <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 16px; margin: 20px 0;">
-  //           <p style="color: #1e40af; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">📅 Package Expires in ${daysUntilExpiration} days</p>
-  //           <p style="color: #1e40af; margin: 0; font-size: 14px;">
-  //             Plan ahead and renew your package to avoid any interruption in service.
-  //           </p>
-  //         </div>
-  //       `
-  //     }
+    if (daysUntilExpiration <= 3) {
+      urgencyLevel = "critical"
+      headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)"
+      urgencyBadgeColor = "#fee2e2"
+      urgencyMessage = `
+          <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
+            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⚠️ Critical: Package Expires in ${daysUntilExpiration} day${daysUntilExpiration === 1 ? "" : "s"}!</p>
+            <p style="color: #b91c1c; margin: 0; font-size: 14px;">
+              Your venue will be removed from our platform if not renewed immediately.
+            </p>
+          </div>
+        `
+    } else if (daysUntilExpiration <= 7) {
+      urgencyLevel = "warning"
+      headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)"
+      urgencyBadgeColor = "#fef3c7"
+      urgencyMessage = `
+          <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
+            <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏰ Package Expires in ${daysUntilExpiration} days</p>
+            <p style="color: #92400e; margin: 0; font-size: 14px;">
+              Don't let your venue go offline. Renew now to continue receiving bookings.
+            </p>
+          </div>
+        `
+    } else {
+      urgencyLevel = "reminder"
+      headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)"
+      urgencyBadgeColor = "#dbeafe"
+      urgencyMessage = `
+          <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 16px; margin: 20px 0;">
+            <p style="color: #1e40af; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">📅 Package Expires in ${daysUntilExpiration} days</p>
+            <p style="color: #1e40af; margin: 0; font-size: 14px;">
+              Plan ahead and renew your package to avoid any interruption in service.
+            </p>
+          </div>
+        `
+    }
 
-  //     const subject =
-  //       daysUntilExpiration <= 3
-  //         ? `🚨 URGENT: Your Venue Package Expires in ${daysUntilExpiration} Day${daysUntilExpiration === 1 ? "" : "s"}!`
-  //         : `⏰ Reminder: Your Venue Package Expires in ${daysUntilExpiration} Days`
+    const subject =
+      daysUntilExpiration <= 3
+        ? `🚨 URGENT: Your Venue Package Expires in ${daysUntilExpiration} Day${daysUntilExpiration === 1 ? "" : "s"}!`
+        : `⏰ Reminder: Your Venue Package Expires in ${daysUntilExpiration} Days`
 
-  //     const mailOptions = {
-  //       from: "gullyteam33@gmail.com",
-  //       to: user.email,
-  //       subject: subject,
-  //       html: `<!DOCTYPE html>
-  // <html lang="en">
-  // <head>
-  //   <meta charset="UTF-8">
-  //   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  //   <title>Package Expiration Reminder – Gully Team</title>
-  //   <style>
-  //     body, table, td, p, a, li, blockquote {
-  //       -webkit-text-size-adjust: 100%;
-  //       -ms-text-size-adjust: 100%;
-  //     }
+    const mailOptions = {
+      from: "gullyteam33@gmail.com",
+      to: user.email,
+      subject: subject,
+      html: `<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Package Expiration Reminder – Gully Team</title>
+    <style>
+      body, table, td, p, a, li, blockquote {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
 
-  //     table, td {
-  //       mso-table-lspace: 0pt;
-  //       mso-table-rspace: 0pt;
-  //     }
+      table, td {
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+      }
 
-  //     img {
-  //       -ms-interpolation-mode: bicubic;
-  //       border: 0;
-  //       height: auto;
-  //       line-height: 100%;
-  //       outline: none;
-  //       text-decoration: none;
-  //     }
+      img {
+        -ms-interpolation-mode: bicubic;
+        border: 0;
+        height: auto;
+        line-height: 100%;
+        outline: none;
+        text-decoration: none;
+      }
 
-  //     body {
-  //       margin: 0 !important;
-  //       padding: 0 !important;
-  //       background-color: #f4f6f8 !important;
-  //       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  //       -webkit-font-smoothing: antialiased;
-  //       -moz-osx-font-smoothing: grayscale;
-  //     }
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: #f4f6f8 !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
 
-  //     .email-wrapper {
-  //       width: 100% !important;
-  //       background-color: #f4f6f8;
-  //       padding: 20px 0;
-  //     }
+      .email-wrapper {
+        width: 100% !important;
+        background-color: #f4f6f8;
+        padding: 20px 0;
+      }
 
-  //     .email-container {
-  //       max-width: 600px;
-  //       margin: 0 auto;
-  //       background-color: #ffffff;
-  //       border-radius: 12px;
-  //       overflow: hidden;
-  //       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  //     }
+      .email-container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      }
 
-  //     .header {
-  //       background: ${headerColor};
-  //       padding: 40px 30px;
-  //       text-align: center;
-  //     }
+      .header {
+        background: ${headerColor};
+        padding: 40px 30px;
+        text-align: center;
+      }
 
-  //     .header h1 {
-  //       margin: 0;
-  //       color: #ffffff;
-  //       font-size: 26px;
-  //       font-weight: bold;
-  //       line-height: 1.2;
-  //     }
+      .header h1 {
+        margin: 0;
+        color: #ffffff;
+        font-size: 26px;
+        font-weight: bold;
+        line-height: 1.2;
+      }
 
-  //     .header p {
-  //       margin: 8px 0 0 0;
-  //       color: #bfdbfe;
-  //       font-size: 16px;
-  //     }
+      .header p {
+        margin: 8px 0 0 0;
+        color: #bfdbfe;
+        font-size: 16px;
+      }
 
-  //     .content {
-  //       padding: 40px 30px;
-  //     }
+      .content {
+        padding: 40px 30px;
+      }
 
-  //     .welcome-text {
-  //       font-size: 20px;
-  //       font-weight: bold;
-  //       color: #1f2937;
-  //       margin: 0 0 20px 0;
-  //       line-height: 1.3;
-  //     }
+      .welcome-text {
+        font-size: 20px;
+        font-weight: bold;
+        color: #1f2937;
+        margin: 0 0 20px 0;
+        line-height: 1.3;
+      }
 
-  //     .intro-text {
-  //       font-size: 16px;
-  //       color: #6b7280;
-  //       margin: 0 0 30px 0;
-  //       line-height: 1.6;
-  //     }
+      .intro-text {
+        font-size: 16px;
+        color: #6b7280;
+        margin: 0 0 30px 0;
+        line-height: 1.6;
+      }
 
-  //     .package-info {
-  //       background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  //       border: 2px solid #0ea5e9;
-  //       border-radius: 12px;
-  //       padding: 25px;
-  //       margin: 30px 0;
-  //     }
+      .package-info {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 2px solid #0ea5e9;
+        border-radius: 12px;
+        padding: 25px;
+        margin: 30px 0;
+      }
 
-  //     .package-title {
-  //       font-size: 18px;
-  //       font-weight: bold;
-  //       color: #0c4a6e;
-  //       margin: 0 0 15px 0;
-  //     }
+      .package-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #0c4a6e;
+        margin: 0 0 15px 0;
+      }
 
-  //     .package-details {
-  //       color: #0c4a6e;
-  //       font-size: 15px;
-  //       line-height: 1.6;
-  //       margin: 0;
-  //     }
+      .package-details {
+        color: #0c4a6e;
+        font-size: 15px;
+        line-height: 1.6;
+        margin: 0;
+      }
 
-  //     .expiration-info {
-  //       background-color: ${urgencyBadgeColor};
-  //       border: 2px solid ${urgencyLevel === "critical" ? "#f87171" : urgencyLevel === "warning" ? "#fbbf24" : "#93c5fd"};
-  //       border-radius: 8px;
-  //       padding: 20px;
-  //       margin: 25px 0;
-  //       text-align: center;
-  //     }
+      .expiration-info {
+        background-color: ${urgencyBadgeColor};
+        border: 2px solid ${urgencyLevel === "critical" ? "#f87171" : urgencyLevel === "warning" ? "#fbbf24" : "#93c5fd"};
+        border-radius: 8px;
+        padding: 20px;
+        margin: 25px 0;
+        text-align: center;
+      }
 
-  //     .expiration-date {
-  //       font-size: 24px;
-  //       font-weight: bold;
-  //       color: ${urgencyLevel === "critical" ? "#b91c1c" : urgencyLevel === "warning" ? "#92400e" : "#1e40af"};
-  //       margin: 0 0 10px 0;
-  //     }
+      .expiration-date {
+        font-size: 24px;
+        font-weight: bold;
+        color: ${urgencyLevel === "critical" ? "#b91c1c" : urgencyLevel === "warning" ? "#92400e" : "#1e40af"};
+        margin: 0 0 10px 0;
+      }
 
-  //     .expiration-label {
-  //       font-size: 14px;
-  //       color: ${urgencyLevel === "critical" ? "#b91c1c" : urgencyLevel === "warning" ? "#92400e" : "#1e40af"};
-  //       font-weight: 600;
-  //       text-transform: uppercase;
-  //       letter-spacing: 0.5px;
-  //     }
+      .expiration-label {
+        font-size: 14px;
+        color: ${urgencyLevel === "critical" ? "#b91c1c" : urgencyLevel === "warning" ? "#92400e" : "#1e40af"};
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
 
-  //     .warning-section {
-  //       background-color: #fef2f2;
-  //       border: 1px solid #fecaca;
-  //       border-radius: 8px;
-  //       padding: 20px;
-  //       margin: 25px 0;
-  //     }
+      .warning-section {
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 25px 0;
+      }
 
-  //     .warning-title {
-  //       font-size: 16px;
-  //       font-weight: bold;
-  //       color: #dc2626;
-  //       margin: 0 0 10px 0;
-  //     }
+      .warning-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #dc2626;
+        margin: 0 0 10px 0;
+      }
 
-  //     .warning-text {
-  //       color: #dc2626;
-  //       font-size: 14px;
-  //       line-height: 1.5;
-  //       margin: 0;
-  //     }
+      .warning-text {
+        color: #dc2626;
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 0;
+      }
 
-  //     .cta-section {
-  //       text-align: center;
-  //       margin: 35px 0;
-  //     }
+      .cta-section {
+        text-align: center;
+        margin: 35px 0;
+      }
 
-  //     .cta-button {
-  //       display: inline-block;
-  //       padding: 16px 32px;
-  //       background-color: #2563eb;
-  //       color: #ffffff !important;
-  //       text-decoration: none;
-  //       border-radius: 8px;
-  //       font-weight: bold;
-  //       font-size: 16px;
-  //       line-height: 1;
-  //       transition: background-color 0.3s ease;
-  //     }
+      .cta-button {
+        display: inline-block;
+        padding: 16px 32px;
+        background-color: #2563eb;
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 16px;
+        line-height: 1;
+        transition: background-color 0.3s ease;
+      }
 
-  //     .cta-button:hover {
-  //       background-color: #1d4ed8;
-  //     }
+      .cta-button:hover {
+        background-color: #1d4ed8;
+      }
 
-  //     .cta-button.urgent {
-  //       background-color: #dc2626;
-  //       animation: pulse 2s infinite;
-  //     }
+      .cta-button.urgent {
+        background-color: #dc2626;
+        animation: pulse 2s infinite;
+      }
 
-  //     .cta-button.urgent:hover {
-  //       background-color: #b91c1c;
-  //     }
+      .cta-button.urgent:hover {
+        background-color: #b91c1c;
+      }
 
-  //     @keyframes pulse {
-  //       0% { transform: scale(1); }
-  //       50% { transform: scale(1.05); }
-  //       100% { transform: scale(1); }
-  //     }
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
 
-  //     .footer {
-  //       background-color: #f9fafb;
-  //       padding: 25px 30px;
-  //       text-align: center;
-  //       border-top: 1px solid #e5e7eb;
-  //     }
+      .footer {
+        background-color: #f9fafb;
+        padding: 25px 30px;
+        text-align: center;
+        border-top: 1px solid #e5e7eb;
+      }
 
-  //     .footer-text {
-  //       font-size: 13px;
-  //       color: #6b7280;
-  //       margin: 0 0 8px 0;
-  //       line-height: 1.5;
-  //     }
+      .footer-text {
+        font-size: 13px;
+        color: #6b7280;
+        margin: 0 0 8px 0;
+        line-height: 1.5;
+      }
 
-  //     .footer-link {
-  //       color: #2563eb;
-  //       text-decoration: none;
-  //     }
+      .footer-link {
+        color: #2563eb;
+        text-decoration: none;
+      }
 
-  //     .footer-link:hover {
-  //       color: #1d4ed8;
-  //     }
+      .footer-link:hover {
+        color: #1d4ed8;
+      }
 
-  //     /* Mobile responsiveness */
-  //     @media only screen and (max-width: 600px) {
-  //       .email-wrapper {
-  //         padding: 10px 0;
-  //       }
+      /* Mobile responsiveness */
+      @media only screen and (max-width: 600px) {
+        .email-wrapper {
+          padding: 10px 0;
+        }
 
-  //       .email-container {
-  //         margin: 0 10px;
-  //         border-radius: 8px;
-  //       }
+        .email-container {
+          margin: 0 10px;
+          border-radius: 8px;
+        }
 
-  //       .header {
-  //         padding: 30px 20px;
-  //       }
+        .header {
+          padding: 30px 20px;
+        }
 
-  //       .header h1 {
-  //         font-size: 22px;
-  //       }
+        .header h1 {
+          font-size: 22px;
+        }
 
-  //       .content {
-  //         padding: 30px 20px;
-  //       }
+        .content {
+          padding: 30px 20px;
+        }
 
-  //       .package-info,
-  //       .warning-section {
-  //         padding: 20px;
-  //       }
+        .package-info,
+        .warning-section {
+          padding: 20px;
+        }
 
-  //       .cta-button {
-  //         display: block;
-  //         margin: 15px 0;
-  //       }
-  //     }
-  //   </style>
-  // </head>
-  // <body>
-  //   <div class="email-wrapper">
-  //     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-  //       <tr>
-  //         <td align="center">
-  //           <div class="email-container">
-  //             <!-- Header -->
-  //             <div class="header">
-  //               <h1>Package Expiration Reminder</h1>
-  //               <p>Gully Team Venue Subscription</p>
-  //             </div>
+        .cta-button {
+          display: block;
+          margin: 15px 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-wrapper">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+        <tr>
+          <td align="center">
+            <div class="email-container">
+              <!-- Header -->
+              <div class="header">
+                <h1>Package Expiration Reminder</h1>
+                <p>Gully Team Venue Subscription</p>
+              </div>
 
-  //             <!-- Content -->
-  //             <div class="content">
-  //               <!-- Welcome Message -->
-  //               <p class="welcome-text">Hello ${user.fullName}! 🏟️</p>
-  //               <p class="intro-text">
-  //                 We hope your venue <strong>${venue.venue_name}</strong> has been successfully attracting sports enthusiasts through our platform. 
-  //                 We're writing to remind you that your current subscription package is approaching its expiration date.
-  //               </p>
+              <!-- Content -->
+              <div class="content">
+                <!-- Welcome Message -->
+                <p class="welcome-text">Hello ${user.fullName}! 🏟️</p>
+                <p class="intro-text">
+                  We hope your venue <strong>${venue.venue_name}</strong> has been successfully attracting sports enthusiasts through our platform. 
+                  We're writing to remind you that your current subscription package is approaching its expiration date.
+                </p>
 
-  //               <!-- Urgency Message -->
-  //               ${urgencyMessage}
+                <!-- Urgency Message -->
+                ${urgencyMessage}
 
-  //               <!-- Package Information -->
-  //               <div class="package-info">
-  //                 <h3 class="package-title">Current Package: ${packageDetails.name}</h3>
-  //                 <div class="package-details">
-  //                   <strong>Package Features:</strong><br>
-  //                   • Venue listing on Gully Team platform<br>
-  //                   • Multi-sport booking management<br>
-  //                   • Payment processing integration<br>
-  //                   • Customer booking notifications<br>
-  //                   • Basic venue analytics<br>
-  //                   ${packageDetails.description ? `<br><strong>Additional Benefits:</strong> ${packageDetails.description}` : ""}
-  //                 </div>
-  //               </div>
+                <!-- Package Information -->
+                <div class="package-info">
+                  <h3 class="package-title">Current Package: ${packageDetails.name}</h3>
+                  <div class="package-details">
+                    <strong>Package Features:</strong><br>
+                    • Venue listing on Gully Team platform<br>
+                    • Multi-sport booking management<br>
+                    • Payment processing integration<br>
+                    • Customer booking notifications<br>
+                    • Basic venue analytics<br>
+                    ${packageDetails.description ? `<br><strong>Additional Benefits:</strong> ${packageDetails.description}` : ""}
+                  </div>
+                </div>
 
-  //               <!-- Expiration Date -->
-  //               <div class="expiration-info">
-  //                 <div class="expiration-date">${formattedExpirationDate}</div>
-  //                 <div class="expiration-label">Package Expiration Date</div>
-  //               </div>
+                <!-- Expiration Date -->
+                <div class="expiration-info">
+                  <div class="expiration-date">${formattedExpirationDate}</div>
+                  <div class="expiration-label">Package Expiration Date</div>
+                </div>
 
-  //               <!-- Warning Section -->
-  //               <div class="warning-section">
-  //                 <h3 class="warning-title">⚠️ Important Notice</h3>
-  //                 <p class="warning-text">
-  //                   <strong>If your package is not renewed, your venue will no longer be visible on our platform.</strong>
-  //                   This means you will stop receiving new bookings and your venue listing will be deactivated until renewal.
-  //                 </p>
-  //               </div>
+                <!-- Warning Section -->
+                <div class="warning-section">
+                  <h3 class="warning-title">⚠️ Important Notice</h3>
+                  <p class="warning-text">
+                    <strong>If your package is not renewed, your venue will no longer be visible on our platform.</strong>
+                    This means you will stop receiving new bookings and your venue listing will be deactivated until renewal.
+                  </p>
+                </div>
 
-  //               <!-- Call to Action -->
-  //               <div class="cta-section">
-  //                 <a href="mailto:gullyteam33@gmail.com?subject=Package Renewal Request - ${venue.venue_name}" 
-  //                    class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}">
-  //                   ${urgencyLevel === "critical" ? "🚨 Renew Now - Urgent!" : "🔄 Renew Package"}
-  //                 </a>
-  //               </div>
+                <!-- Call to Action -->
+                <div class="cta-section">
+                  <a href="mailto:gullyteam33@gmail.com?subject=Package Renewal Request - ${venue.venue_name}" 
+                     class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}">
+                    ${urgencyLevel === "critical" ? "🚨 Renew Now - Urgent!" : "🔄 Renew Package"}
+                  </a>
+                </div>
 
-  //               <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 20px;">
-  //                 Questions about renewal? Contact our support team at 
-  //                 <a href="mailto:gullyteam33@gmail.com" style="color: #2563eb;">gullyteam33@gmail.com</a>
-  //               </p>
-  //             </div>
+                <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 20px;">
+                  Questions about renewal? Contact our support team at 
+                  <a href="mailto:gullyteam33@gmail.com" style="color: #2563eb;">gullyteam33@gmail.com</a>
+                </p>
+              </div>
 
-  //             <!-- Footer -->
-  //             <div class="footer">
-  //               <p class="footer-text">
-  //                 © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
-  //               </p>
-  //               <p class="footer-text">
-  //                 Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
-  //               </p>
-  //               <p class="footer-text">
-  //                 Thank you for being a valued partner with Gully Team!
-  //               </p>
-  //             </div>
-  //           </div>
-  //         </td>
-  //       </tr>
-  //     </table>
-  //   </div>
-  // </body>
-  // </html>`,
-  //     }
+              <!-- Footer -->
+              <div class="footer">
+                <p class="footer-text">
+                  © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
+                </p>
+                <p class="footer-text">
+                  Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
+                </p>
+                <p class="footer-text">
+                  Thank you for being a valued partner with Gully Team!
+                </p>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+  </html>`,
+    }
 
-  //     transporter.sendMail(mailOptions, (error, info) => {
-  //       if (error) {
-  //         console.log("Error sending venue expiration reminder:", error)
-  //       } else {
-  //         console.log("Venue expiration reminder sent:", info.response)
-  //       }
-  //     })
-  //   },
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log("Error sending venue expiration reminder:", error)
+      } else {
+        console.log("Venue expiration reminder sent:", info.response)
+      }
+    })
+  },
 
   //#region Reminder mail for Individual
   async sendExpirationReminder(individual, user, packageDetails, expirationDate, daysUntilExpiration) {
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
       secure: false,
