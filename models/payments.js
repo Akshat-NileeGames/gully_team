@@ -24,7 +24,7 @@ const paymentSchema = new mongoose.Schema(
     },
     venueId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Ground",
+      ref: "Venue",
       required: false,
     },
     individualId: {

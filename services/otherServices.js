@@ -6,6 +6,8 @@ import ImageUploader from "../helpers/ImageUploader.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
 import { ShopService } from "../services/index.js"
 import nodemailer from "nodemailer"
+import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/index.js";
+import axios from "axios";
 import {
   Banner,
   Content,
@@ -20,7 +22,7 @@ import {
   Payment,
   Package,
   Shop,
-  Ground,
+  Venue,
   Individual,
   Booking
   // Transaction
@@ -1796,7 +1798,7 @@ const otherServices = {
 
     const result = await RazorpayHandler.createOrder(paymentData);
     // const shopId = mongoose.Types.ObjectId.isValid(data.shopId) ? data.shopId : null;
-    const venue = await Ground.findById(data.venueId);
+    const venue = await Venue.findById(data.venueId);
     if (!venue) throw CustomErrorHandler.notFound("Venue Not Found");
 
     const user = await User.findById(venue.userId);
@@ -2476,7 +2478,7 @@ const otherServices = {
 
     const result = await RazorpayHandler.createOrder(paymentData);
     // const shopId = mongoose.Types.ObjectId.isValid(data.shopId) ? data.shopId : null;
-    const venue = await Ground.findById(data.venueId);
+    const venue = await Venue.findById(data.venueId);
     if (!venue) throw CustomErrorHandler.notFound("Venue Not Found");
 
     const user = await User.findById(venue.userId);
@@ -2525,7 +2527,6 @@ const otherServices = {
     await payment.save();
 
     setTimeout(async () => {
-
       console.log("Sending email after 10 seconds...",);
       await otherServices.sendvenuepaymentMail(
         "shop-subscription",
@@ -2537,10 +2538,73 @@ const otherServices = {
         data.status
       );
     }, 10000);
+    await otherServices.creatContactonRazorPay(venue);
     return {
       order: result,
       message: "Shop Order created successfully. Payment is pending.",
     };
+  },
+  /**
+   * Creates a Razorpay Contact and Fund Account (VPA) for a Venue.
+   * Updates the Venue document with the generated Razorpay IDs.
+   *
+   * @param {Object} venue - The venue document containing necessary details.
+   * @returns {Boolean} - Returns true if both contact and fund account creation succeed.
+   * @throws {Error} - Throws error if any Razorpay API call fails.
+   */
+  async creatContactonRazorPay(venue) {
+    try {
+      const endpoint = 'https://api.razorpay.com/v1/contacts';
+      // Razorpay basic auth configuration
+      const auth = {
+        username: RAZORPAY_KEY_ID,
+        password: RAZORPAY_KEY_SECRET
+      };
+
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      // Payload for Razorpay Contact creation
+      const payload = {
+        name: venue.venue_name || `Venue_${venue._id}`,
+        contact: venue.venue_contact || "0000000000",
+        email: venue.venue_email || `venue_${venue._id}@example.com`,
+        type: "vendor",
+        reference_id: "test",
+        notes: {
+          source: "Venue Registration",
+          venueId: venue._id.toString()
+        }
+      };
+
+      const contactResponse = await axios.post(endpoint, payload, { auth, headers });
+      const contactId = contactResponse.data.id;
+      console.log("✅ Razorpay contact created:", contactId);
+      const fundAccountResponse = await axios.post(
+        'https://api.razorpay.com/v1/fund_accounts',
+        {
+          account_type: "vpa",
+          contact_id: contactId,
+          vpa: {
+            address: venue.venue_vpa || "demo@upi" // Use actual venue UPI if available
+          }
+        },
+        { auth, headers }
+      );
+
+      const fundAccountId = fundAccountResponse.data.id;
+      console.log("✅ Fund account created:", fundAccountId);
+
+      await Venue.findByIdAndUpdate(venue._id, {
+        razorpayContactId: contactId,
+        razorpayFundAccountId: fundAccountId
+      });
+
+      return true;
+    } catch (error) {
+      console.error("❌ Failed to create Razorpay contact:", error.response?.data || error.message);
+      throw new Error("Could not create contact on Razorpay");
+    }
   },
   async sendvenuepaymentMail(userFor = "", user, venue, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS) {
     const transporter = nodemailer.createTransport({
@@ -3255,7 +3319,7 @@ const otherServices = {
           : `
                     Your venue subscription gives you access to powerful tools to manage your sports facility and grow your booking business. This includes:
                     <br><br>
-                    • <strong>Venue Listing:</strong> Showcase your ground/turf on our platform with photos and detailed information<br>
+                    • <strong>Venue Listing:</strong> Showcase your Venue/turf on our platform with photos and detailed information<br>
                     • <strong>Multi-Sport Management:</strong> Add multiple sports with individual pricing for each<br>
                     • <strong>Booking Management:</strong> Accept and manage slot bookings from sports enthusiasts<br>
                     • <strong>Flexible Pricing:</strong> Set per-hour charges for different sports and time slots<br>
@@ -4927,7 +4991,7 @@ const otherServices = {
 
   //   const VenueExpirationReminderService = require("./venue-expiration-reminder")
   // const IndividualExpirationReminderService = require("./individual-expiration-reminder")
-  // const Ground = require("./Ground") // Assuming Ground is a model
+  // const Venue = require("./Venue") // Assuming Venue is a model
   // const Individual = require("./Individual") // Assuming Individual is a model
   // const User = require("./User") // Assuming User is a model
   // const Package = require("./Package") // Assuming Package is a model
@@ -4946,7 +5010,7 @@ const otherServices = {
   //       ]
 
   //       for (const reminderDate of reminderDates) {
-  //         const venues = await Ground.find({
+  //         const venues = await Venue.find({
   //           isSubscriptionPurchased: true,
   //           subscriptionExpiry: {
   //             $gte: reminderDate,

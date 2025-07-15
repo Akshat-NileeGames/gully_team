@@ -154,7 +154,8 @@ const shopSchema = new mongoose.Schema({
     TotalEditDone: {
         type: Number,
         default: 0,
-    }
+    },
+
 }, {
     timestamps: true
 });

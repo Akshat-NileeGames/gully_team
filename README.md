@@ -51,7 +51,7 @@ gully_team
 │  ├─ eliminateTeams.js
 │  ├─ entryFees.js
 │  ├─ entryform.js
-│  ├─ ground.js
+│  ├─ Venue.js
 │  ├─ helpdesk.js
 │  ├─ index.js
 │  ├─ Individual.js
@@ -163,7 +163,7 @@ gully_team
 │  ├─ eliminateTeams.js
 │  ├─ entryFees.js
 │  ├─ entryform.js
-│  ├─ ground.js
+│  ├─ Venue.js
 │  ├─ helpdesk.js
 │  ├─ index.js
 │  ├─ Individual.js

@@ -7,13 +7,13 @@ import validateUser from "../middlewares/validateUser.js"
 
 router.post("/createVenue", validateUser, ProviderController.createVenue)
 
-// ==================== GROUND ROUTES ====================
+// ==================== Venue ROUTES ====================
 router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround)
 // router.post("/getNearbyVenue", validateUser, ProviderController.GetNearByVenue)
-router.get("/getGroundById/:id", ProviderController.getGroundById)
+router.get("/getVenueById/:id", ProviderController.getVenueById)
 router.get("/getAllGrounds", ProviderController.getAllGrounds)
 
-// ==================== GROUND BOOKING ROUTES ====================
+// ==================== Venue BOOKING ROUTES ====================
 router.post("/bookVenue", validateUser, ProviderController.bookVenue)
 router.post("/checkMultipleDateAvailability", ProviderController.checkMultipleDateAvailability)
 router.post("/availableSlots", ProviderController.getAvailableSlots)
@@ -23,16 +23,16 @@ router.post("/bookings/today", validateUser, ProviderController.getTodayBookings
 router.post("/bookings/upcoming", validateUser, ProviderController.getUpcomingBookings)
 router.post("/bookings/past", validateUser, ProviderController.getPastBooking)
 // ==================== ANALYTICS ROUTES ====================
-router.get("/analytics/dashboard/:groundId", validateUser, ProviderController.getDashboardAnalytics)
-router.get("/analytics/revenue/:groundId", validateUser, ProviderController.getRevenueAnalytics)
-router.get("/analytics/sports/:groundId", validateUser, ProviderController.getSportsAnalytics)
+router.get("/analytics/dashboard/:venueId", validateUser, ProviderController.getDashboardAnalytics)
+router.get("/analytics/revenue/:venueId", validateUser, ProviderController.getRevenueAnalytics)
+router.get("/analytics/sports/:venueId", validateUser, ProviderController.getSportsAnalytics)
 
-router.get("/dashboard/:groundId", validateUser, ProviderController.getDashboardAnalytics)
-router.get("/revenue/:groundId", validateUser, ProviderController.getRevenueAnalytics)
-router.get("/sports/:groundId", validateUser, ProviderController.getSportsAnalytics)
-router.get("/time-slots/:groundId", validateUser, ProviderController.getTimeSlotAnalytics)
-router.get("/bookings/:groundId", validateUser, ProviderController.getBookingAnalytics)
-router.get("/performance/:groundId", validateUser, ProviderController.getPerformanceAnalytics)
+router.get("/dashboard/:venueId", validateUser, ProviderController.getDashboardAnalytics)
+router.get("/revenue/:venueId", validateUser, ProviderController.getRevenueAnalytics)
+router.get("/sports/:venueId", validateUser, ProviderController.getSportsAnalytics)
+router.get("/time-slots/:venueId", validateUser, ProviderController.getTimeSlotAnalytics)
+router.get("/bookings/:venueId", validateUser, ProviderController.getBookingAnalytics)
+router.get("/performance/:venueId", validateUser, ProviderController.getPerformanceAnalytics)
 // ==================== INDIVIDUAL ROUTES ====================
 router.post("/createIndividualService", validateUser, ProviderController.createIndividual)
 router.get("/getUserIndividualRegisteredService", validateUser, ProviderController.getUserIndividualRegisteredGround)

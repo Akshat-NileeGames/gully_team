@@ -9,7 +9,7 @@ export const {
     APP_PORT,
     DEBUG_MODE,
     MONGO_DB_URL,
-    JWT_SECRET ,
+    JWT_SECRET,
     BUCKET_NAME,
     AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY,
@@ -19,6 +19,7 @@ export const {
     MESSAGE_ID,
     FCM_SERVER_KEY,
     RAZORPAY_KEY_ID,
-    RAZORPAY_KEY_SECRET
+    RAZORPAY_KEY_SECRET,
+    RAZORPAY_ACCOUNT_NUMBER
 
 } = process.env;

@@ -1,9 +1,10 @@
-import { Ground, Booking, User, Package, Individual, Category, Payout } from "../models/index.js"
+import { Venue, Booking, User, Package, Individual, Category, Payout } from "../models/index.js"
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
 import mongoose from "mongoose"
 import Razorpay from "razorpay"
 import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/index.js";
+
 var razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
   key_secret: RAZORPAY_KEY_SECRET,
@@ -11,15 +12,12 @@ var razorpay = new Razorpay({
 const ProviderServices = {
   async createVenue(data) {
     try {
-      console.log("These api is called");
       const userInfo = global.user
       const packageInfo = await Package.findById(data.packageRef)
       if (!packageInfo) throw CustomErrorHandler.notFound("Package not found")
 
       const user = await User.findById(userInfo.userId)
       if (!user) throw CustomErrorHandler.notFound("User not found")
-      console.log(packageInfo);
-      // Validate sport pricing if provided
       if (data.sportPricing && data.sportPricing.length > 0) {
         const providedSports = data.sportPricing.map((sp) => sp.sport)
         const missingPricing = data.venue_sports.filter((sport) => !providedSports.includes(sport))
@@ -28,9 +26,8 @@ const ProviderServices = {
           throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`)
         }
       }
-      console.log(DateTime.now().plus({ month: packageInfo.duration }).toJSDate());
 
-      const ground = new Ground({
+      const venue = new Venue({
         venue_name: data.venue_name,
         venue_description: data.venue_description,
         venue_address: data.venue_address,
@@ -59,10 +56,10 @@ const ProviderServices = {
         subscriptionExpiry: DateTime.now().plus({ month: packageInfo.duration }).toJSDate(),
       })
 
-      await ground.save()
-      return ground
+      await venue.save()
+      return venue
     } catch (error) {
-      console.log("Failed to create ground:", error)
+      console.log("Failed to create Venue:", error)
       throw error
     }
   },
@@ -97,17 +94,17 @@ const ProviderServices = {
       }
 
       const skip = (page - 1) * limit
-      const grounds = await Ground.find(query)
+      const venues = await Venue.find(query)
         .populate("userId", "name email")
         .populate("packageRef")
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 })
 
-      const total = await Ground.countDocuments(query)
+      const total = await Venue.countDocuments(query)
 
       return {
-        grounds,
+        venues,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(total / limit),
@@ -121,21 +118,21 @@ const ProviderServices = {
     }
   },
 
-  async getGroundById(data) {
+  async getVenueById(data) {
     try {
       if (!data.id.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
-      const ground = await Ground.findById(data.id).populate("packageRef")
+      const venue = await Venue.findById(data.id).populate("packageRef")
 
-      if (!ground) {
-        throw CustomErrorHandler.notFound("Ground not found")
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
       }
 
-      return ground
+      return venue
     } catch (error) {
-      console.log("Failed to get ground by id:", error)
+      console.log("Failed to get Venue by id:", error)
       throw error
     }
   },
@@ -146,7 +143,7 @@ const ProviderServices = {
       const user = await User.findById(userInfo.userId)
       if (!user) throw CustomErrorHandler.notFound("User not found")
 
-      const grounds = await Ground.find({
+      const grounds = await Venue.find({
         userId: userInfo.userId,
       }).populate("packageRef")
 
@@ -171,14 +168,14 @@ const ProviderServices = {
         bookingStatus,
       } = bookingData;
       const userInfo = global.user
-      const ground = await Ground.findById(venueId);
-      if (!ground) throw CustomErrorHandler.notFound("Venue not found ");
+      const venue = await Venue.findById(venueId);
+      if (!venue) throw CustomErrorHandler.notFound("Venue not found ");
 
-      if (!ground.venue_sports.includes(sport)) throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
+      if (!venue.venue_sports.includes(sport)) throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
 
       for (const dateSlot of scheduledDates) {
         const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc");
-        const dayTiming = ground.venue_timeslots[bookingDay];
+        const dayTiming = venue.venue_timeslots[bookingDay];
 
         if (!dayTiming || !dayTiming.isOpen) {
           throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`);
@@ -206,8 +203,13 @@ const ProviderServices = {
       });
 
       await booking.save();
-      await Ground.findByIdAndUpdate(venueId, { $inc: { totalBookings: 1 } });
-
+      await Venue.findByIdAndUpdate(venueId, {
+        $inc: {
+          totalBookings: 1,
+          amountNeedToPay: totalamount,
+          totalAmount: totalamount,
+        },
+      });
       return await booking.populate("venueId userId");
     } catch (error) {
       console.log("Failed to book venue:", error);
@@ -276,7 +278,7 @@ const ProviderServices = {
       //TODO:Need to remove these comment below
       console.log("The current location:", userLocation);
       // Find shops with expired subscriptions within the defined radius
-      const expiredGround = await Ground.find({
+      const expiredvenue = await Venue.find({
         "locationHistory.point": {
           $near: {
             $geometry: userLocation,
@@ -287,14 +289,14 @@ const ProviderServices = {
         isSubscriptionPurchased: true
       }).select('_id');
 
-      if (expiredGround.length > 0) {
-        const expiredGroundIds = expiredGround.map(ground => ground._id);
-        await Ground.updateMany(
-          { _id: { $in: expiredGroundIds } },
+      if (expiredvenue.length > 0) {
+        const expiredvenueIds = expiredvenue.map(Venue => Venue._id);
+        await Venue.updateMany(
+          { _id: { $in: expiredvenueIds } },
           { $set: { isSubscriptionPurchased: false } }
         );
       }
-      const nearbyVenue = await Ground.aggregate([
+      const nearbyVenue = await Venue.aggregate([
         {
           $geoNear: {
             near: userLocation,
@@ -362,7 +364,7 @@ const ProviderServices = {
       }).select('_id');
 
       if (expiredindividualPackage.length > 0) {
-        const expiredindividualPackageIds = expiredindividualPackage.map(ground => ground._id);
+        const expiredindividualPackageIds = expiredindividualPackage.map(Venue => Venue._id);
         await Individual.updateMany(
           { _id: { $in: expiredindividualPackageIds } },
           { $set: { hasActiveSubscription: false } }
@@ -626,7 +628,7 @@ const ProviderServices = {
         },
       ]
 
-      const venues = await Ground.aggregate(pipeline)
+      const venues = await Venue.aggregate(pipeline)
 
       // Get total count for pagination
       const countPipeline = [
@@ -663,7 +665,7 @@ const ProviderServices = {
         { $count: "total" },
       ]
 
-      const countResult = await Ground.aggregate(countPipeline)
+      const countResult = await Venue.aggregate(countPipeline)
       const total = countResult[0]?.total || 0
 
       return {
@@ -898,12 +900,12 @@ const ProviderServices = {
   },
   async getTodayBookings(data) {
     try {
-      const { groundId, sport = "all" } = data;
+      const { venueId, sport = "all" } = data;
 
-      // Check if ground exists
-      const isGroundExists = await Ground.findById(groundId);
+      // Check if Venue exists
+      const isGroundExists = await Venue.findById(venueId);
       if (!isGroundExists) {
-        return CustomErrorHandler.notFound("Ground Not Found");
+        return CustomErrorHandler.notFound("Venue Not Found");
       }
 
       // Today's date range
@@ -913,7 +915,7 @@ const ProviderServices = {
 
       // Build query
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         "scheduledDates.date": { $gte: startOfToday, $lte: endOfToday },
       };
 
@@ -962,17 +964,17 @@ const ProviderServices = {
   },
   async getUpcomingBookings(data) {
     try {
-      const { groundId, sport = 'all', page = 1 } = data;
+      const { venueId, sport = 'all', page = 1 } = data;
       const limit = 10
-      const isGroundExists = await Ground.findById(groundId);
+      const isGroundExists = await Venue.findById(venueId);
       if (!isGroundExists) {
-        return CustomErrorHandler.notFound("Ground Not Found");
+        return CustomErrorHandler.notFound("Venue Not Found");
       }
       const now = new Date()
       const skip = (page - 1) * limit
 
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         "scheduledDates.date": { $gt: now },
         bookingStatus: { $in: ["confirmed", "pending"] },
       }
@@ -1042,14 +1044,14 @@ const ProviderServices = {
   },
   async getPastBooking(data) {
     try {
-      const { groundId, sport = "all", page = 1 } = data;
+      const { venueId, sport = "all", page = 1 } = data;
       const limit = 10;
       const skip = (page - 1) * limit;
 
-      // Validate ground
-      const groundExists = await Ground.findById(groundId);
+      // Validate Venue
+      const groundExists = await Venue.findById(venueId);
       if (!groundExists) {
-        throw CustomErrorHandler.notFound("Ground Not Found");
+        throw CustomErrorHandler.notFound("Venue Not Found");
       }
 
       // Date logic
@@ -1058,7 +1060,7 @@ const ProviderServices = {
 
       // Build query for past bookings
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         scheduledDates: {
           $elemMatch: {
             date: { $lt: startOfToday }
@@ -1255,8 +1257,8 @@ const ProviderServices = {
     };
 
     //TODO:Need to remove these comment below
-    // Find Ground with expired subscriptions within the defined radius
-    const expiredGround = await Ground.find({
+    // Find Venue with expired subscriptions within the defined radius
+    const expiredGround = await Venue.find({
       "locationHistory.point": {
         $near: {
           $geometry: userLocation,
@@ -1269,14 +1271,14 @@ const ProviderServices = {
 
     // Update the subscription status of expired shops
     if (expiredGround.length > 0) {
-      const expiredGroundIds = expiredGround.map(ground => ground._id);
-      await Ground.updateMany(
+      const expiredGroundIds = expiredGround.map(Venue => Venue._id);
+      await Venue.updateMany(
         { _id: { $in: expiredGroundIds } },
         { $set: { isSubscriptionPurchased: false } }
       );
     }
     console.log("The current location:", userLocation);
-    const ground = await Ground.aggregate([
+    const venue = await Venue.aggregate([
       {
         $geoNear: {
           near: userLocation,
@@ -1313,16 +1315,11 @@ const ProviderServices = {
         }
       },
     ]);
-    console.log(ground);
-    return ground;
+    return venue;
   },
-
-
-
-
-  async getAvailableSlots({ groundId, sport, date }) {
+  async getAvailableSlots({ venueId, sport, date }) {
     try {
-      const venue = await Ground.findById(groundId);
+      const venue = await Venue.findById(venueId);
       if (!venue) {
         throw CustomErrorHandler.notFound("Venue not found");
       }
@@ -1356,7 +1353,7 @@ const ProviderServices = {
       end.setHours(23, 59, 59, 999);
 
       const existingBookings = await Booking.find({
-        venueId: groundId,
+        venueId: venueId,
         sport: new RegExp(`^${sport}$`, 'i'),
         bookingStatus: { $in: ["confirmed", "pending", "completed"] },
         "scheduledDates.date": { $gte: start, $lte: end },
@@ -1395,8 +1392,8 @@ const ProviderServices = {
 
   async getBookedSlots(data) {
     try {
-      const { groundId, sport, date } = data;
-      const isGroundExist = await Ground.findById(groundId);
+      const { venueId, sport, date } = data;
+      const isGroundExist = await Venue.findById(venueId);
       if (!isGroundExist) return CustomErrorHandler.notFound("Venue Not Found");
 
       const queryDate = new Date(date);
@@ -1406,7 +1403,7 @@ const ProviderServices = {
       endOfDay.setHours(23, 59, 59, 999);
 
       const bookings = await Booking.find({
-        venueId: groundId,
+        venueId: venueId,
         sport: new RegExp(`^${sport}$`, 'i'),
         bookingStatus: { $in: ["confirmed", "pending", "completed"] },
         $or: [
@@ -1449,10 +1446,10 @@ const ProviderServices = {
   },
   async getGroundBookings(data) {
     try {
-      const { groundId, startDate, endDate, sport, status, paymentStatus, page = 1, limit = 10 } = data
+      const { venueId, startDate, endDate, sport, status, paymentStatus, page = 1, limit = 10 } = data
 
       const matchQuery = {
-        venueId: groundId,
+        venueId: venueId,
       }
 
       if (sport) {
@@ -1499,25 +1496,25 @@ const ProviderServices = {
         },
       }
     } catch (error) {
-      console.error("Failed to get ground bookings:", error)
+      console.error("Failed to get Venue bookings:", error)
       throw error
     }
   },
   async checkMultipleDateAvailability(data) {
     try {
-      const { groundId, sport, startDate, endDate, timeSlots } = data
+      const { venueId, sport, startDate, endDate, timeSlots } = data
 
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
-      const ground = await Ground.findById(groundId)
-      if (!ground) {
-        throw CustomErrorHandler.notFound("Ground not found")
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
       }
 
-      if (!ground.venue_sports.includes(sport)) {
-        throw CustomErrorHandler.badRequest(`Ground does not support ${sport}`)
+      if (!venue.venue_sports.includes(sport)) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
       }
 
       const availability = []
@@ -1527,13 +1524,13 @@ const ProviderServices = {
       let date = currentDate
       while (date <= endDateTime) {
         const dayName = date.toFormat("cccc")
-        const dayTiming = ground.venue_timeslots[dayName]
+        const dayTiming = Venue.venue_timeslots[dayName]
 
         if (!dayTiming || !dayTiming.isOpen) {
           availability.push({
             date: date.toJSDate(),
             available: false,
-            reason: "Ground closed",
+            reason: "Venue closed",
           })
         } else {
           const dayAvailability = {
@@ -1543,7 +1540,7 @@ const ProviderServices = {
           }
 
           for (const slot of timeSlots) {
-            const isAvailable = await this.checkGroundSlotAvailability(groundId, sport, date.toJSDate(), slot)
+            const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, date.toJSDate(), slot)
             dayAvailability.slots.push({
               ...slot,
               available: isAvailable,
@@ -1573,7 +1570,7 @@ const ProviderServices = {
   },
 
 
-  async getDashboardAnalytics(groundId) {
+  async getDashboardAnalytics(venueId) {
     try {
       const today = new Date()
       const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -1584,7 +1581,7 @@ const ProviderServices = {
 
       // Today's bookings
       const todayBookings = await Booking.countDocuments({
-        venueId: groundId,
+        venueId: venueId,
         "scheduledDates.date": { $gte: startOfToday, $lte: endOfToday },
       })
 
@@ -1592,7 +1589,7 @@ const ProviderServices = {
       const todayRevenueResult = await Booking.aggregate([
         {
           $match: {
-            venueId: mongoose.Types.ObjectId(groundId),
+            venueId: mongoose.Types.ObjectId(venueId),
             "scheduledDates.date": { $gte: startOfToday, $lte: endOfToday },
             paymentStatus: "successful",
           }
@@ -1611,7 +1608,7 @@ const ProviderServices = {
       const monthlyRevenueResult = await Booking.aggregate([
         {
           $match: {
-            venueId: mongoose.Types.ObjectId(groundId),
+            venueId: mongoose.Types.ObjectId(venueId),
             "scheduledDates.date": { $gte: startOfMonth, $lte: endOfMonth },
             paymentStatus: "successful",
           }
@@ -1628,19 +1625,19 @@ const ProviderServices = {
 
       // Booking status distribution
       const statusStats = await Booking.aggregate([
-        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $match: { venueId: mongoose.Types.ObjectId(venueId) } },
         { $group: { _id: "$bookingStatus", count: { $sum: 1 } } }
       ])
 
       // Payment status distribution
       const paymentStats = await Booking.aggregate([
-        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $match: { venueId: mongoose.Types.ObjectId(venueId) } },
         { $group: { _id: "$paymentStatus", count: { $sum: 1 } } }
       ])
 
       // Sport-wise bookings
       const sportStats = await Booking.aggregate([
-        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $match: { venueId: mongoose.Types.ObjectId(venueId) } },
         { $group: { _id: "$sport", count: { $sum: 1 }, revenue: { $sum: "$totalAmount" } } }
       ])
 
@@ -1667,10 +1664,10 @@ const ProviderServices = {
     }
   },
 
-  async getRevenueAnalytics(groundId, period = "month") {
+  async getRevenueAnalytics(venueId, period = "month") {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
       const today = new Date()
@@ -1701,7 +1698,7 @@ const ProviderServices = {
       const revenueData = await Booking.aggregate([
         {
           $match: {
-            venueId: mongoose.Types.ObjectId(groundId),
+            venueId: mongoose.Types.ObjectId(venueId),
             createdAt: { $gte: startDate },
             paymentStatus: "successful",
           }
@@ -1728,14 +1725,14 @@ const ProviderServices = {
     }
   },
 
-  async getSportsAnalytics(groundId) {
+  async getSportsAnalytics(venueId) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
       const sportAnalytics = await Booking.aggregate([
-        { $match: { venueId: mongoose.Types.ObjectId(groundId) } },
+        { $match: { venueId: mongoose.Types.ObjectId(venueId) } },
         {
           $group: {
             _id: "$sport",
@@ -2222,9 +2219,9 @@ const ProviderServices = {
     return end.diff(start, "hours").hours
   },
 
-  getSportPrice(ground, sport) {
-    const sportPricing = ground.sportPricing.find((sp) => sp.sport === sport)
-    return sportPricing ? sportPricing.perHourCharge : ground.perHourCharge
+  getSportPrice(Venue, sport) {
+    const sportPricing = Venue.sportPricing.find((sp) => sp.sport === sport)
+    return sportPricing ? sportPricing.perHourCharge : Venue.perHourCharge
   },
   async GetServiceType() {
     try {
@@ -2236,7 +2233,6 @@ const ProviderServices = {
           __v: 0
         }
       );
-      console.log(categories);
       if (categories) {
         return categories[0].categoryItem;
       } else {
@@ -2250,17 +2246,17 @@ const ProviderServices = {
   },
 
   //#region  New Changes API
-  async getDashboardAnalytics({ groundId, sport, period = "month", startDate, endDate }) {
+  async getDashboardAnalytics({ venueId, sport, period = "month", startDate, endDate }) {
     try {
 
-      const ground = await Ground.findById(groundId)
-      if (!ground) {
-        throw CustomErrorHandler.notFound("Ground not found")
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
       }
 
       const dateRange = this.getDateRange(period, startDate, endDate)
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         createdAt: { $gte: dateRange.start, $lte: dateRange.end },
       }
 
@@ -2319,11 +2315,11 @@ const ProviderServices = {
         ]),
 
         // Top time slots
-        this.getPopularTimeSlots(groundId, sport, dateRange),
+        this.getPopularTimeSlots(venueId, sport, dateRange),
 
         // Sport performance
         Booking.aggregate([
-          { $match: { venueId: mongoose.Types.ObjectId(groundId), createdAt: { $gte: dateRange.start, $lte: dateRange.end } } },
+          { $match: { venueId: mongoose.Types.ObjectId(venueId), createdAt: { $gte: dateRange.start, $lte: dateRange.end } } },
           {
             $group: {
               _id: "$sport",
@@ -2340,14 +2336,14 @@ const ProviderServices = {
       const previousPeriod = this.getPreviousDateRange(period, dateRange)
       const previousStats = await Promise.all([
         Booking.countDocuments({
-          venueId: mongoose.Types.ObjectId(groundId),
+          venueId: mongoose.Types.ObjectId(venueId),
           createdAt: { $gte: previousPeriod.start, $lte: previousPeriod.end },
           ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
         }),
         Booking.aggregate([
           {
             $match: {
-              venueId: mongoose.Types.ObjectId(groundId),
+              venueId: mongoose.Types.ObjectId(venueId),
               createdAt: { $gte: previousPeriod.start, $lte: previousPeriod.end },
               paymentStatus: "successful",
               ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
@@ -2391,15 +2387,15 @@ const ProviderServices = {
     }
   },
 
-  async getRevenueAnalytics({ groundId, period = "month", sport, comparison = false }) {
+  async getRevenueAnalytics({ venueId, period = "month", sport, comparison = false }) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
       const dateRange = this.getDateRange(period)
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         createdAt: { $gte: dateRange.start, $lte: dateRange.end },
         paymentStatus: "successful"
       }
@@ -2441,7 +2437,7 @@ const ProviderServices = {
       const sportRevenue = await Booking.aggregate([
         {
           $match: {
-            venueId: mongoose.Types.ObjectId(groundId),
+            venueId: mongoose.Types.ObjectId(venueId),
             createdAt: { $gte: dateRange.start, $lte: dateRange.end },
             paymentStatus: "successful"
           }
@@ -2469,7 +2465,7 @@ const ProviderServices = {
         comparisonData = await Booking.aggregate([
           {
             $match: {
-              venueId: mongoose.Types.ObjectId(groundId),
+              venueId: mongoose.Types.ObjectId(venueId),
               createdAt: { $gte: previousPeriod.start, $lte: previousPeriod.end },
               paymentStatus: "successful",
               ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
@@ -2506,10 +2502,10 @@ const ProviderServices = {
     }
   },
 
-  async getSportsAnalytics({ groundId, period = "month" }) {
+  async getSportsAnalytics({ venueId, period = "month" }) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
       const dateRange = this.getDateRange(period)
@@ -2517,7 +2513,7 @@ const ProviderServices = {
       const sportsData = await Booking.aggregate([
         {
           $match: {
-            venueId: mongoose.Types.ObjectId(groundId),
+            venueId: mongoose.Types.ObjectId(venueId),
             createdAt: { $gte: dateRange.start, $lte: dateRange.end }
           }
         },
@@ -2552,7 +2548,7 @@ const ProviderServices = {
       const sportTrends = await Booking.aggregate([
         {
           $match: {
-            venueId: mongoose.Types.ObjectId(groundId),
+            venueId: mongoose.Types.ObjectId(venueId),
             createdAt: { $gte: dateRange.start, $lte: dateRange.end }
           }
         },
@@ -2589,15 +2585,15 @@ const ProviderServices = {
     }
   },
 
-  async getTimeSlotAnalytics({ groundId, sport, period = "month" }) {
+  async getTimeSlotAnalytics({ venueId, sport, period = "month" }) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
       const dateRange = this.getDateRange(period)
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         createdAt: { $gte: dateRange.start, $lte: dateRange.end }
       }
 
@@ -2710,15 +2706,15 @@ const ProviderServices = {
     }
   },
 
-  async getBookingAnalytics({ groundId, sport, period = "month" }) {
+  async getBookingAnalytics({ venueId, sport, period = "month" }) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
       const dateRange = this.getDateRange(period)
       const matchQuery = {
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         createdAt: { $gte: dateRange.start, $lte: dateRange.end }
       }
 
@@ -2810,18 +2806,18 @@ const ProviderServices = {
     }
   },
 
-  async getPerformanceAnalytics({ groundId, sport }) {
+  async getPerformanceAnalytics({ venueId, sport }) {
     try {
-      if (!groundId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid ground ID format")
+      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
       }
 
-      const ground = await Ground.findById(groundId)
-      if (!ground) {
-        throw CustomErrorHandler.notFound("Ground not found")
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
       }
 
-      const matchQuery = { venueId: mongoose.Types.ObjectId(groundId) }
+      const matchQuery = { venueId: mongoose.Types.ObjectId(venueId) }
       if (sport && sport !== 'all') {
         matchQuery.sport = new RegExp(`^${sport}$`, "i")
       }
@@ -2845,10 +2841,10 @@ const ProviderServices = {
         Promise.resolve(4.2),
 
         // Calculate utilization rate
-        this.calculateUtilizationRate(groundId, sport),
+        this.calculateUtilizationRate(venueId, sport),
 
         // Monthly growth
-        this.calculateMonthlyGrowth(groundId, sport)
+        this.calculateMonthlyGrowth(venueId, sport)
       ])
 
       // Performance benchmarks
@@ -2934,9 +2930,9 @@ const ProviderServices = {
     }
   },
 
-  async getPopularTimeSlots(groundId, sport, dateRange) {
+  async getPopularTimeSlots(venueId, sport, dateRange) {
     const matchQuery = {
-      venueId: mongoose.Types.ObjectId(groundId),
+      venueId: mongoose.Types.ObjectId(venueId),
       createdAt: { $gte: dateRange.start, $lte: dateRange.end }
     }
 
@@ -2970,7 +2966,7 @@ const ProviderServices = {
     ])
   },
 
-  async calculateUtilizationRate(groundId, sport) {
+  async calculateUtilizationRate(venueId, sport) {
     // This is a simplified calculation
     // You might want to implement more sophisticated logic based on your business rules
     const totalSlots = 12 // Assuming 12 hours of operation per day
@@ -2980,7 +2976,7 @@ const ProviderServices = {
     const bookedSlots = await Booking.aggregate([
       {
         $match: {
-          venueId: mongoose.Types.ObjectId(groundId),
+          venueId: mongoose.Types.ObjectId(venueId),
           createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
           ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
         }
@@ -2994,19 +2990,19 @@ const ProviderServices = {
     return Math.round((bookedSlotsCount / totalAvailableSlots) * 100)
   },
 
-  async calculateMonthlyGrowth(groundId, sport) {
+  async calculateMonthlyGrowth(venueId, sport) {
     const currentMonth = new Date()
     const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
     const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
 
     const [currentBookings, previousBookings] = await Promise.all([
       Booking.countDocuments({
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         createdAt: { $gte: currentMonthStart },
         ...(sport && sport !== 'all' ? { sport: new RegExp(`^${sport}$`, "i") } : {})
       }),
       Booking.countDocuments({
-        venueId: mongoose.Types.ObjectId(groundId),
+        venueId: mongoose.Types.ObjectId(venueId),
         createdAt: {
           $gte: previousMonth,
           $lt: currentMonthStart
@@ -3086,7 +3082,7 @@ const ProviderServices = {
       };
 
       // Handle expired subscriptions first
-      const expiredGround = await Ground.find({
+      const expiredGround = await Venue.find({
         "locationHistory.point": {
           $near: {
             $geometry: userLocation,
@@ -3098,8 +3094,8 @@ const ProviderServices = {
       }).select('_id');
 
       if (expiredGround.length > 0) {
-        const expiredGroundIds = expiredGround.map(ground => ground._id);
-        await Ground.updateMany(
+        const expiredGroundIds = expiredGround.map(Venue => Venue._id);
+        await Venue.updateMany(
           { _id: { $in: expiredGroundIds } },
           { $set: { isSubscriptionPurchased: false } }
         );
@@ -3206,11 +3202,11 @@ const ProviderServices = {
         { $limit: limit }
       ];
 
-      const venues = await Ground.aggregate(pipeline);
+      const venues = await Venue.aggregate(pipeline);
 
       // Get total count for pagination
       const countPipeline = [...pipeline.slice(0, -2), { $count: "total" }];
-      const countResult = await Ground.aggregate(countPipeline);
+      const countResult = await Venue.aggregate(countPipeline);
       const total = countResult[0]?.total || 0;
 
       return {
@@ -3574,11 +3570,11 @@ const ProviderServices = {
         { $limit: limit },
       ];
 
-      const venues = await Ground.aggregate(pipeline);
+      const venues = await Venue.aggregate(pipeline);
 
       // Get total count
       const countPipeline = [...pipeline.slice(0, -2), { $count: "total" }];
-      const countResult = await Ground.aggregate(countPipeline);
+      const countResult = await Venue.aggregate(countPipeline);
       const total = countResult[0]?.total || 0;
 
       return {
@@ -3908,13 +3904,10 @@ const ProviderServices = {
   },
 
 
-
-
-
   //#region Initiate Payout
   async initiatePayout(payoutData) {
     try {
-      console.log(razorpay)
+
       const {
         recipientVpa,
         amount,
@@ -3922,17 +3915,17 @@ const ProviderServices = {
         description,
         reference_id,
         userId,
-        groundId,
+        venueId,
         bookingId
       } = payoutData
 
       // Validate user has sufficient balance or permissions
-      await this.validatePayoutEligibility(userId, amount, groundId)
+      // await this.validatePayoutEligibility(userId, amount, venueId)
 
       // Create payout record in database first
       const payout = new Payout({
         userId,
-        groundId,
+        venueId,
         bookingId,
         recipientVpa,
         amount: Math.round(amount * 100), // Convert to paise
@@ -3955,7 +3948,7 @@ const ProviderServices = {
         })
 
         // Create fund account for VPA
-        const fundAccount = await razorpay.fundAccount.create({
+        const fundAccount = razorpay.fundAccount.create({
           contact_id: contact.id,
           account_type: "vpa",
           vpa: {
@@ -3964,10 +3957,10 @@ const ProviderServices = {
         })
 
         // Create payout
-        const razorpayPayout = await razorpay.payouts.create({
-          account_number: process.env.RAZORPAY_ACCOUNT_NUMBER, // Your account number
-          fund_account_id: fundAccount.id,
-          amount: Math.round(amount * 100), // Amount in paise
+        const razorpayPayout = await razorpay.Payout.create({
+          account_number: "2323230052942900",
+          fund_account_id: "fa_Qss6qqpHKGfyFC",
+          amount: Math.round(amount * 100),
           currency: "INR",
           mode: "UPI",
           purpose: purpose,
@@ -4010,7 +4003,7 @@ const ProviderServices = {
   //#endregion
 
   //#region Validate Payout Eligibility
-  async validatePayoutEligibility(userId, amount, groundId) {
+  async validatePayoutEligibility(userId, amount, venueId) {
     try {
       // Check if user exists and is active
       const user = await User.findById(userId)
@@ -4018,11 +4011,11 @@ const ProviderServices = {
         throw CustomErrorHandler.notFound("User not found")
       }
 
-      // If groundId is provided, validate ground ownership
-      if (groundId) {
-        const ground = await Ground.findOne({ _id: groundId, userId: userId })
-        if (!ground) {
-          throw CustomErrorHandler.badRequest("You don't have permission to initiate payouts for this ground")
+      // If venueId is provided, validate Venue ownership
+      if (venueId) {
+        const venue = await Venue.findOne({ _id: venueId, userId: userId })
+        if (!venue) {
+          throw CustomErrorHandler.badRequest("You don't have permission to initiate payouts for this Venue")
         }
       }
 
@@ -4070,7 +4063,7 @@ const ProviderServices = {
     try {
       const payout = await Payout.findById(payoutId)
         .populate('userId', 'name email')
-        .populate('groundId', 'venue_name')
+        .populate('venueId', 'venue_name')
         .populate('bookingId')
 
       if (!payout) {
@@ -4112,7 +4105,7 @@ const ProviderServices = {
         processedAt: payout.processedAt,
         failureReason: payout.failureReason,
         retryCount: payout.retryCount,
-        ground: payout.groundId,
+        Venue: payout.venueId,
         booking: payout.bookingId
       }
     } catch (error) {
@@ -4130,7 +4123,7 @@ const ProviderServices = {
         page = 1,
         limit = 10,
         status,
-        groundId,
+        venueId,
         startDate,
         endDate
       } = filters
@@ -4141,8 +4134,8 @@ const ProviderServices = {
         query.status = status
       }
 
-      if (groundId) {
-        query.groundId = mongoose.Types.ObjectId(groundId)
+      if (venueId) {
+        query.venueId = mongoose.Types.ObjectId(venueId)
       }
 
       if (startDate || endDate) {
@@ -4155,7 +4148,7 @@ const ProviderServices = {
 
       const [payouts, total] = await Promise.all([
         Payout.find(query)
-          .populate('groundId', 'venue_name')
+          .populate('venueId', 'venue_name')
           .populate('bookingId', 'totalAmount sport')
           .sort({ createdAt: -1 })
           .skip(skip)
@@ -4320,7 +4313,7 @@ const ProviderServices = {
         description: payout.description,
         reference_id: `${payout.reference_id}_retry_${payout.retryCount}`,
         userId: payout.userId,
-        groundId: payout.groundId,
+        venueId: payout.venueId,
         bookingId: payout.bookingId
       }
 

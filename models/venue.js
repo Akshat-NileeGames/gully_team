@@ -1,6 +1,6 @@
 import mongoose from "mongoose"
 
-const groundSchema = new mongoose.Schema(
+const venueSchema = new mongoose.Schema(
   {
     venueImages: [
       {
@@ -41,7 +41,7 @@ const groundSchema = new mongoose.Schema(
     },
     venue_type: {
       type: String,
-      enum: ["Open Ground", "Turf", "Stadium"],
+      enum: ["Open Venue", "Turf", "Stadium"],
       default: "Turf",
     },
     venue_surfacetype: {
@@ -169,9 +169,21 @@ const groundSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    totalAmout: {
+      type: Number,
+      default: 0,
+    },
+    amountNeedToPay: {
+      type: Number,
+      default: 0,
+    },
+    razorpay_fund_account_id: {
+      type: String,
+      default: ''
+    }
   },
   { timestamps: true },
 )
 
-groundSchema.index({ "locationHistory.point": "2dsphere" })
-export default mongoose.model("Ground", groundSchema)
+venueSchema.index({ "locationHistory.point": "2dsphere" })
+export default mongoose.model("Venue", venueSchema)

@@ -4,7 +4,7 @@ import Joi from "joi"
 
 const ProviderController = {
 
-    //#region Create Ground
+    //#region Create Venue
     async createVenue(req, res, next) {
         const venueValidation = Joi.object({
             venue_name: Joi.string().required(),
@@ -13,7 +13,7 @@ const ProviderController = {
             venue_contact: Joi.string()
                 .pattern(/^[0-9]{10}$/)
                 .required(),
-            venue_type: Joi.string().valid("Open Ground", "Turf", "Stadium").required(),
+            venue_type: Joi.string().valid("Open Venue", "Turf", "Stadium").required(),
             venue_surfacetype: Joi.string()
                 .valid(
                     "PVC",
@@ -111,11 +111,11 @@ const ProviderController = {
             const result = await ProviderServices.createVenue(req.body)
             return res.status(200).json({
                 success: true,
-                message: "Ground created successfully",
+                message: "Venue created successfully",
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to create ground:", error))
+            return next(CustomErrorHandler.badRequest("Failed to create Venue:", error))
         }
     },
     //#endregion
@@ -142,8 +142,8 @@ const ProviderController = {
         }
     },
     //#endregion
-    //#region GetGroundById
-    async getGroundById(req, res, next) {
+    //#region getVenueById
+    async getVenueById(req, res, next) {
         const validation = Joi.object({
             id: Joi.string().required(),
         })
@@ -154,14 +154,14 @@ const ProviderController = {
         }
 
         try {
-            const result = await ProviderServices.getGroundById(req.params)
+            const result = await ProviderServices.getVenueById(req.params)
             return res.json({
                 success: true,
-                message: "Ground retrieved successfully",
+                message: "Venue retrieved successfully",
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to get ground:", error))
+            return next(CustomErrorHandler.badRequest("Failed to get Venue:", error))
         }
     },
     //#endregion
@@ -172,8 +172,8 @@ const ProviderController = {
             const result = await ProviderServices.getUserGroundRegisteredGround()
             return res.status(200).json({
                 success: true,
-                message: "User Ground Fetched successfully",
-                data: { ground: result },
+                message: "User Venue Fetched successfully",
+                data: { Venue: result },
             })
         } catch (error) {
             return next(CustomErrorHandler.badRequest("Something went Wrong", error))
@@ -181,7 +181,7 @@ const ProviderController = {
     },
     //#endregion
 
-    //#region Book Ground 
+    //#region Book Venue 
     async bookVenue(req, res, next) {
         const bookingValidation = Joi.object({
             venueId: Joi.string().required(),
@@ -277,7 +277,7 @@ const ProviderController = {
             page: Joi.number().min(1).default(1),
             radius: Joi.number().default(15),
             sport: Joi.string().allow('').optional(),
-            venueType: Joi.string().valid("Open Ground", "Turf", "Stadium").optional(),
+            venueType: Joi.string().valid("Open Venue", "Turf", "Stadium").optional(),
             priceRange: Joi.object({
                 min: Joi.number().min(0).optional(),
                 max: Joi.number().min(0).optional(),
@@ -397,7 +397,7 @@ const ProviderController = {
     //#region Get Available Slots
     async getAvailableSlots(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().required(),
             date: Joi.date().required(),
         })
@@ -423,7 +423,7 @@ const ProviderController = {
     //#region Get Booked Slots 
     async getBookedSlots(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().required(),
             date: Joi.date().required(),
         })
@@ -449,7 +449,7 @@ const ProviderController = {
     //#region getGroundBookings
     async getGroundBookings(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             startDate: Joi.date().optional(),
             endDate: Joi.date().optional(),
             sport: Joi.string().optional(),
@@ -468,18 +468,18 @@ const ProviderController = {
             const result = await ProviderServices.getGroundBookings(req.body)
             return res.json({
                 success: true,
-                message: "Ground bookings retrieved successfully",
+                message: "Venue bookings retrieved successfully",
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to get ground bookings:", error))
+            return next(CustomErrorHandler.badRequest("Failed to get Venue bookings:", error))
         }
     },
     //#endregion 
     //#region Get Today's Bookings
     async getTodayBookings(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
         });
         const { error } = validation.validate(req.body)
@@ -503,7 +503,7 @@ const ProviderController = {
     //#region Get Upcoming Bookings
     async getUpcomingBookings(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
             page: Joi.number().min(1).default(1),
         })
@@ -530,7 +530,7 @@ const ProviderController = {
     //#region Get Past Bookings
     async getPastBooking(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
             page: Joi.number().min(1).default(1),
         })
@@ -555,7 +555,7 @@ const ProviderController = {
     //#region checkMultipleDateAvailability
     async checkMultipleDateAvailability(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().required(),
             startDate: Joi.date().min("now").required(),
             endDate: Joi.date().min(Joi.ref("startDate")).required(),
@@ -590,7 +590,7 @@ const ProviderController = {
     //#region getDashBoardAnalytics
     async getDashboardAnalytics(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
             period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
             startDate: Joi.date().optional(),
@@ -604,7 +604,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getDashboardAnalytics({
-                groundId: req.params.groundId,
+                venueId: req.params.venueId,
                 sport: req.query.sport,
                 period: req.query.period,
                 startDate: req.query.startDate,
@@ -624,7 +624,7 @@ const ProviderController = {
 
     async getRevenueAnalytics(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             period: Joi.string().valid("week", "month", "quarter", "year").default("year"),
             sport: Joi.string().optional(),
             comparison: Joi.boolean().default(false),
@@ -637,7 +637,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getRevenueAnalytics({
-                groundId: req.params.groundId,
+                venueId: req.params.venueId,
                 period: req.query.period,
                 sport: req.query.sport,
                 comparison: req.query.comparison === "true",
@@ -655,7 +655,7 @@ const ProviderController = {
 
     async getSportsAnalytics(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
         })
 
@@ -666,7 +666,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getSportsAnalytics({
-                groundId: req.params.groundId,
+                venueId: req.params.venueId,
                 period: req.query.period,
             })
 
@@ -682,7 +682,7 @@ const ProviderController = {
 
     async getTimeSlotAnalytics(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
             period: Joi.string().valid("week", "month", "quarter").default("month"),
         })
@@ -694,7 +694,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getTimeSlotAnalytics({
-                groundId: req.params.groundId,
+                venueId: req.params.venueId,
                 sport: req.query.sport,
                 period: req.query.period,
             })
@@ -711,7 +711,7 @@ const ProviderController = {
 
     async getBookingAnalytics(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
             period: Joi.string().valid("week", "month", "quarter", "year").default("month"),
         })
@@ -723,7 +723,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getBookingAnalytics({
-                groundId: req.params.groundId,
+                venueId: req.params.venueId,
                 sport: req.query.sport,
                 period: req.query.period,
             })
@@ -740,7 +740,7 @@ const ProviderController = {
 
     async getPerformanceAnalytics(req, res, next) {
         const validation = Joi.object({
-            groundId: Joi.string().required(),
+            venueId: Joi.string().required(),
             sport: Joi.string().optional(),
         })
 
@@ -751,7 +751,7 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getPerformanceAnalytics({
-                groundId: req.params.groundId,
+                venueId: req.params.venueId,
                 sport: req.query.sport,
             })
 
@@ -915,7 +915,7 @@ const ProviderController = {
     //#region getUserBookings
     async getUserBookings(req, res, next) {
         const validation = Joi.object({
-            // bookingType: Joi.string().valid("ground", "individual").optional(),
+            // bookingType: Joi.string().valid("Venue", "individual").optional(),
             // status: Joi.string().valid("pending", "confirmed", "cancelled", "completed").optional(),
             page: Joi.number().min(1).default(1),
             // limit: Joi.number().min(1).max(100).default(10),
@@ -1084,7 +1084,7 @@ const ProviderController = {
             page: Joi.number().min(1).default(1),
             radius: Joi.number().min(1).max(100).default(25),
             sport: Joi.string().default("all"),
-            venueType: Joi.string().valid("all", "Open Ground", "Turf", "Stadium").default("all"),
+            venueType: Joi.string().valid("all", "Open Venue", "Turf", "Stadium").default("all"),
             surfaceTypes: Joi.array()
                 .items(
                     Joi.string().valid(
@@ -1177,7 +1177,7 @@ const ProviderController = {
             page: Joi.number().min(1).default(1),
             radius: Joi.number().min(1).max(100).default(25),
             sport: Joi.string().default("all"),
-            venueType: Joi.string().valid("all", "Open Ground", "Turf", "Stadium").default("all"),
+            venueType: Joi.string().valid("all", "Open Venue", "Turf", "Stadium").default("all"),
             surfaceTypes: Joi.array()
                 .items(
                     Joi.string().valid(
@@ -1417,7 +1417,7 @@ const ProviderController = {
 
     //#region Payout api
 
-    async   initiatePayout(req, res, next) {
+    async initiatePayout(req, res, next) {
         const payoutValidation = Joi.object({
             recipientVpa: Joi.string()
                 .pattern(/^[\w.-]+@[\w]+$/)
@@ -1445,7 +1445,7 @@ const ProviderController = {
                 .required(),
             description: Joi.string().max(255).optional(),
             reference_id: Joi.string().max(40).optional(),
-            groundId: Joi.string().optional(), // For tracking which ground the payout is related to
+            venueId: Joi.string().optional(), // For tracking which Venue the payout is related to
             bookingId: Joi.string().optional(), // For refund scenarios
         })
 
@@ -1507,7 +1507,7 @@ const ProviderController = {
             page: Joi.number().min(1).default(1),
             limit: Joi.number().min(1).max(100).default(10),
             status: Joi.string().valid('queued', 'pending', 'processed', 'cancelled', 'failed').optional(),
-            groundId: Joi.string().optional(),
+            venueId: Joi.string().optional(),
             startDate: Joi.date().optional(),
             endDate: Joi.date().optional(),
         })

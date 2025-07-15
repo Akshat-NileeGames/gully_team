@@ -29,7 +29,7 @@ export { default as Category } from "./category.js";
 export { default as ProductView } from "./productViewSchema.js";
 export { default as ShopVisit } from "./shopVisitSchema.js";
 export { default as Individual } from "./Individual.js";
-export { default as Ground } from "./ground.js";
+export { default as Venue } from "./Venue.js";
 export { default as Booking } from "./booking.js";
 export { default as Payout } from "./payout.js";
 
