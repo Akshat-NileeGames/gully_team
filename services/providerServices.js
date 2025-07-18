@@ -10,6 +10,7 @@ var razorpay = new Razorpay({
   key_secret: RAZORPAY_KEY_SECRET,
 });
 const ProviderServices = {
+
   async createVenue(data) {
     try {
       const userInfo = global.user
@@ -21,7 +22,6 @@ const ProviderServices = {
       if (data.sportPricing && data.sportPricing.length > 0) {
         const providedSports = data.sportPricing.map((sp) => sp.sport)
         const missingPricing = data.venue_sports.filter((sport) => !providedSports.includes(sport))
-
         if (missingPricing.length > 0) {
           throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`)
         }
@@ -33,12 +33,10 @@ const ProviderServices = {
         venue_address: data.venue_address,
         venue_contact: data.venue_contact,
         venue_type: data.venue_type,
-        venue_surfacetype: data.venue_surfacetype,
         venue_sports: data.venue_sports,
         sportPricing: data.sportPricing || [],
         paymentMethods: data.paymentMethods,
         upiId: data.upiId,
-        perHourCharge: data.perHourCharge,
         venuefacilities: data.venuefacilities,
         venue_rules: data.venue_rules || [],
         venueImages: data.venueImages,
@@ -181,6 +179,7 @@ const ProviderServices = {
           throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`);
         }
 
+        console.log(dateSlot)
         for (const slot of dateSlot.timeSlots) {
           const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, dateSlot.date, slot);
           if (!isAvailable) {
@@ -216,6 +215,114 @@ const ProviderServices = {
       throw error;
     }
   },
+
+  // async bookVenue(bookingData) {
+  //   try {
+  //     const {
+  //       venueId,
+  //       sport,
+  //       bookingPattern,
+  //       scheduledDates,
+  //       durationInHours,
+  //       totalamount,
+  //       paymentStatus,
+  //       bookingStatus,
+  //       isMultiDay = false,
+  //       multiDayStartDate,
+  //       multiDayEndDate,
+  //       isFullDay = false,
+  //     } = bookingData
+
+  //     const userInfo = global.user
+  //     const venue = await Venue.findById(venueId)
+  //     if (!venue) throw CustomErrorHandler.notFound("Venue not found")
+
+  //     if (!venue.venue_sports.includes(sport)) {
+  //       throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
+  //     }
+
+  //     // Enhanced validation for multi-day and full-day bookings
+  //     if (isMultiDay && (!multiDayStartDate || !multiDayEndDate)) {
+  //       throw CustomErrorHandler.badRequest("Multi-day bookings require start and end dates")
+  //     }
+
+  //     // Calculate total days for multi-day bookings
+  //     let totalDays = 1
+  //     if (isMultiDay) {
+  //       const startDate = new Date(multiDayStartDate)
+  //       const endDate = new Date(multiDayEndDate)
+  //       totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
+  //     }
+
+  //     // Validate availability for all dates
+  //     for (const dateSlot of scheduledDates) {
+  //       const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
+  //       const dayTiming = venue.venue_timeslots[bookingDay]
+
+  //       if (!dayTiming || !dayTiming.isOpen) {
+  //         throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`)
+  //       }
+
+  //       // For full-day bookings, check entire day availability
+  //       if (dateSlot.isFullDay || isFullDay) {
+  //         const isFullDayAvailable = await this.checkFullDayAvailability(venueId, sport, dateSlot.date)
+  //         if (!isFullDayAvailable) {
+  //           throw CustomErrorHandler.badRequest(`Full day booking not available on ${dateSlot.date}`)
+  //         }
+  //       } else {
+  //         // Check individual time slots
+  //         for (const slot of dateSlot.timeSlots || []) {
+  //           const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, dateSlot.date, slot)
+  //           if (!isAvailable) {
+  //             throw CustomErrorHandler.badRequest(
+  //               `Slot ${slot.startTime} - ${slot.endTime} is unavailable on ${dateSlot.date}`,
+  //             )
+  //           }
+  //         }
+  //       }
+  //     }
+
+  //     // Calculate pricing with multi-day discounts
+  //     const pricingBreakdown = this.calculateMultiDayPricing(venue, sport, totalDays, totalamount, isFullDay)
+
+  //     const booking = new Booking({
+  //       venueId,
+  //       sport,
+  //       bookingPattern: bookingPattern || "single_slots",
+  //       scheduledDates: scheduledDates.map((dateSlot) => ({
+  //         ...dateSlot,
+  //         isFullDay: dateSlot.isFullDay || isFullDay,
+  //       })),
+  //       isMultiDay,
+  //       multiDayStartDate: isMultiDay ? new Date(multiDayStartDate) : undefined,
+  //       multiDayEndDate: isMultiDay ? new Date(multiDayEndDate) : undefined,
+  //       totalDays,
+  //       durationInHours,
+  //       totalAmount: pricingBreakdown.finalAmount,
+  //       dailyRate: pricingBreakdown.dailyRate,
+  //       pricingBreakdown,
+  //       paymentStatus: paymentStatus || "pending",
+  //       bookingStatus: bookingStatus || "pending",
+  //       userId: userInfo.userId,
+  //     })
+
+  //     await booking.save()
+
+  //     // Update venue statistics
+  //     await Venue.findByIdAndUpdate(venueId, {
+  //       $inc: {
+  //         totalBookings: 1,
+  //         amountNeedToPay: pricingBreakdown.finalAmount,
+  //         totalAmount: pricingBreakdown.finalAmount,
+  //       },
+  //     })
+
+  //     return await booking.populate("venueId userId")
+  //   } catch (error) {
+  //     console.log("Failed to book venue:", error)
+  //     throw error
+  //   }
+  // },
   levenshteinDistance(str1, str2) {
     const matrix = []
     const len1 = str1.length
@@ -1317,7 +1424,7 @@ const ProviderServices = {
     ]);
     return venue;
   },
-  async getAvailableSlots({ venueId, sport, date }) {
+  async getAvailableSlots({ venueId, sport, date, playable_plots }) {
     try {
       const venue = await Venue.findById(venueId);
       if (!venue) {
@@ -1355,6 +1462,7 @@ const ProviderServices = {
       const existingBookings = await Booking.find({
         venueId: venueId,
         sport: new RegExp(`^${sport}$`, 'i'),
+        
         bookingStatus: { $in: ["confirmed", "pending", "completed"] },
         "scheduledDates.date": { $gte: start, $lte: end },
       });
@@ -2150,7 +2258,6 @@ const ProviderServices = {
   },
   async checkGroundSlotAvailability(venueId, sport, date, timeSlot) {
     const { startTime, endTime } = timeSlot;
-
     const booking = await Booking.findOne({
       venueId,
       sport,
@@ -2165,6 +2272,22 @@ const ProviderServices = {
               endTime: { $gt: startTime }
             }
           }
+        }
+      }
+    });
+
+    return !booking;
+  },
+  async checkFullDaySlotAvailability(venueId, sport, date) {
+    const booking = await Booking.findOne({
+      venueId,
+      sport,
+      bookingDate: new Date(date),
+      bookingStatus: { $in: ["confirmed"] },
+      scheduledDates: {
+        $elemMatch: {
+          date: new Date(date),
+          timeSlots: { $exists: true, $not: { $size: 0 } }
         }
       }
     });
@@ -3059,7 +3182,7 @@ const ProviderServices = {
 
   //#region new filter changes
 
-  async getNearbyVenuesWithFilters(filters) {
+  async getNearbyVenues(filters) {
     try {
       const {
         latitude,
@@ -3235,7 +3358,7 @@ const ProviderServices = {
   },
 
   // ==================== ENHANCED NEARBY INDIVIDUALS ====================
-  async getNearbyIndividualsWithFilters(filters) {
+  async getNearbyIndividuals(filters) {
     try {
       const {
         latitude,

@@ -44,20 +44,6 @@ const venueSchema = new mongoose.Schema(
       enum: ["Open Venue", "Turf", "Stadium"],
       default: "Turf",
     },
-    venue_surfacetype: {
-      type: String,
-      enum: [
-        "PVC",
-        "Synthetic PVC",
-        "8 Layered Acrylic Surface",
-        "Wooden",
-        "Natural Grass Lane",
-        "Artificial Grass Lane",
-        "Hard Court",
-        "Natural Grass Turf",
-      ],
-      default: "PVC",
-    },
     venue_timeslots: {
       Monday: {
         isOpen: Boolean,
@@ -112,13 +98,47 @@ const venueSchema = new mongoose.Schema(
           type: Number,
           required: true,
         },
+        sports_playable_area: {
+          type: Number,
+          required: true,
+          default: 0
+        },
+        venue_surfacetype: {
+          type: String,
+          enum: [
+            "PVC",
+            "SYNTHETIC_PVC",
+            "EIGHT_LAYERED_ACRYLIC_SURFACE",
+            "WOODEN",
+            "NATURAL_GRASS_LANE",
+            "ARTIFICIAL_GRASS_LANE",
+            "HARD_COURT",
+            "NATURAL_GRASS_TURF",
+            "ARTIFICIAL_ICE",
+            "ARTIFICIAL_TURF_INFILL",
+            "CANVAS",
+            "CARPET",
+            "CLAY",
+            "COMPOSITE_DECKING",
+            "CONCRETE",
+            "DIRT",
+            "FOAM",
+            "HYBRID_TURF",
+            "ICE",
+            "POLYURETHANE",
+            "RUBBER",
+            "SAND",
+            "SYNTHETIC_ICE",
+            "SYNTHETIC_RUBBER_TRACK",
+            "TABLE_TOP",
+            "TATAMI",
+            "TILE",
+            "VINYL"
+          ],
+          default: "PVC",
+        },
       },
     ],
-    // Default pricing for backward compatibility
-    perHourCharge: {
-      type: Number,
-      required: true,
-    },
     paymentMethods: [
       {
         type: String,

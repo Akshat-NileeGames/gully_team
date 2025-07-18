@@ -15,6 +15,7 @@ router.get("/getAllGrounds", ProviderController.getAllGrounds)
 
 // ==================== Venue BOOKING ROUTES ====================
 router.post("/bookVenue", validateUser, ProviderController.bookVenue)
+// router.post("/checkGroundSlotAvailability", validateUser, ProviderController.checkGroundSlotAvailability)
 router.post("/checkMultipleDateAvailability", ProviderController.checkMultipleDateAvailability)
 router.post("/availableSlots", ProviderController.getAvailableSlots)
 router.post("/getbookedSlots", ProviderController.getBookedSlots)
@@ -65,8 +66,8 @@ router.get("/individual/:id", ProviderController.getIndividualProfile)
 
 
 // Enhanced nearby routes with advanced filters
-router.post("/getNearbyVenues", validateUser, ProviderController.getNearbyVenuesWithFilters)
-router.post("/getNearbyindividuals", validateUser, ProviderController.getNearbyIndividualsWithFilters,
+router.post("/getNearbyVenues", validateUser, ProviderController.getNearbyVenues)
+router.post("/getNearbyindividuals", validateUser, ProviderController.getNearbyIndividuals,
 )
 
 // Enhanced search routes with advanced filters

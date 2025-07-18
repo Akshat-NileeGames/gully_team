@@ -13,29 +13,62 @@ const bookingSchema = new mongoose.Schema(
     },
     bookingPattern: {
       type: String,
-      enum: ["single_slots", "multiple_slots", "full_day_booking", "week_booking"],
+      enum: ["single_slots", "multiple_slots", "full_day_booking", "multi_day_booking", "week_booking"],
       default: "single_slots",
     },
     scheduledDates: [
       {
         date: {
           type: Date,
-          required: true
+          required: true,
         },
+        endDate: {
+          type: Date,
+          required: false,
+        },
+        isFullDay: {
+          type: Boolean,
+          default: false,
+        },
+
         timeSlots: [
           {
             startTime: {
               type: String,
-              required: true
+              required: function () {
+                return !this.parent().isFullDay
+              },
             },
             endTime: {
               type: String,
-              required: true
+              required: function () {
+                return !this.parent().isFullDay
+              },
             },
           },
         ],
       },
     ],
+    isMultiDay: {
+      type: Boolean,
+      default: false,
+    },
+    multiDayStartDate: {
+      type: Date,
+      required: function () {
+        return this.isMultiDay
+      },
+    },
+    multiDayEndDate: {
+      type: Date,
+      required: function () {
+        return this.isMultiDay
+      },
+    },
+    totalDays: {
+      type: Number,
+      default: 1,
+    },
     durationInHours: {
       type: Number,
       required: true,
@@ -43,6 +76,12 @@ const bookingSchema = new mongoose.Schema(
     totalAmount: {
       type: Number,
       required: true,
+    },
+    dailyRate: {
+      type: Number,
+      required: function () {
+        return this.isMultiDay || this.bookingPattern === "full_day_booking"
+      },
     },
     paymentStatus: {
       type: String,
@@ -64,7 +103,15 @@ const bookingSchema = new mongoose.Schema(
     },
     refundAmount: {
       type: Number,
-      default: 0
+      default: 0,
+    },
+    // Pricing breakdown for multi-day bookings
+    pricingBreakdown: {
+      basePrice: Number,
+      multiDayDiscount: Number,
+      totalBeforeDiscount: Number,
+      discountAmount: Number,
+      finalAmount: Number,
     },
   },
   { timestamps: true },
@@ -73,5 +120,6 @@ const bookingSchema = new mongoose.Schema(
 bookingSchema.index({ venueId: 1, "scheduledDates.date": 1, sport: 1 })
 bookingSchema.index({ userId: 1, bookingStatus: 1 })
 bookingSchema.index({ "scheduledDates.date": 1, bookingStatus: 1 })
+bookingSchema.index({ isMultiDay: 1, multiDayStartDate: 1, multiDayEndDate: 1 })
 
 export default mongoose.model("Booking", bookingSchema)
