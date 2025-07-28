@@ -153,6 +153,262 @@ const ProviderServices = {
   },
 
 
+  async lockSlots({ venueId, sport, date, selectedSlots, userId, sessionId }) {
+    try {
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
+      }
+
+      if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
+      }
+
+      const queryDate = new Date(date + "T00:00:00.000Z")
+      const startOfDay = new Date(queryDate)
+      startOfDay.setUTCHours(0, 0, 0, 0)
+      const endOfDay = new Date(queryDate)
+      endOfDay.setUTCHours(23, 59, 59, 999)
+
+      // for (const slot of selectedSlots) {
+      //   const existingBooking = await Booking.findOne({
+      //     venueId,
+      //     sport: sport,
+      //     $or: [
+      //       { bookingStatus: { $in: ["confirmed", "pending", "completed"] } },
+      //       {
+      //         isLocked: true,
+      //         lockedUntil: { $gt: new Date() },
+      //         userId: { $ne: userId },
+      //       },
+      //     ],
+      //     scheduledDates: {
+      //       $elemMatch: {
+      //         date: startOfDay,
+      //         timeSlots: {
+      //           $elemMatch: {
+      //             startTime: slot.startTime,
+      //             endTime: slot.endTime,
+      //             playableArea: slot.playableArea,
+      //           },
+      //         },
+      //       },
+      //     },
+      //   })
+
+      //   if (existingBooking) {
+      //     throw CustomErrorHandler.badRequest(
+      //       `Slot ${slot.startTime} - ${slot.endTime} on playable area ${slot.playableArea} is not available`,
+      //     )
+      //   }
+      // }
+
+      const lockedUntil = new Date(Date.now() + 5 * 60 * 1000)
+      const booking = await Booking.findOne({
+        sessionId,
+        userId,
+        isLocked: true,
+        isPaymentConfirm: false,
+      })
+
+      if (booking) {
+        booking.lockedUntil = lockedUntil
+
+        let dateMatched = false
+        for (const sched of booking.scheduledDates) {
+          if (sched.date.toISOString().split("T")[0] === date) {
+            const existingSlots = sched.timeSlots
+            const newSlots = selectedSlots.filter(
+              (newSlot) =>
+                !existingSlots.some(
+                  (existing) =>
+                    existing.startTime === newSlot.startTime &&
+                    existing.endTime === newSlot.endTime &&
+                    existing.playableArea === newSlot.playableArea,
+                ),
+            )
+            sched.timeSlots.push(...newSlots)
+            dateMatched = true
+            break
+          }
+        }
+
+        if (!dateMatched) {
+          booking.scheduledDates.push({
+            date: queryDate,
+            timeSlots: selectedSlots,
+          })
+        }
+
+        await booking.save()
+
+        return {
+          bookingId: booking._id,
+          lockedSlots: selectedSlots,
+          lockedUntil,
+          sessionId,
+          message: `${selectedSlots.length} slots added and locked to existing session`,
+        }
+      }
+
+      const newBooking = new Booking({
+        venueId,
+        userId,
+        sport,
+        bookingPattern: "single_slots",
+        scheduledDates: [
+          {
+            date: queryDate,
+            timeSlots: selectedSlots,
+          },
+        ],
+        durationInHours: 1,
+        totalAmount: 0,
+        paymentStatus: "pending",
+        bookingStatus: "pending",
+        isLocked: true,
+        lockedUntil,
+        sessionId,
+        isPaymentConfirm: false,
+      })
+
+      await newBooking.save()
+
+      return {
+        bookingId: newBooking._id,
+        lockedSlots: selectedSlots,
+        lockedUntil,
+        sessionId,
+        message: `${selectedSlots.length} slots locked successfully for 5 minutes`,
+      }
+    } catch (error) {
+      console.log("Failed to lock slots:", error)
+      throw error
+    }
+  },
+
+  async releaseLockedSlots({ venueId, sport, date, userId, selectedSlots, sessionId }) {
+    try {
+      const queryDate = new Date(date + "T00:00:00.000Z")
+      const startOfDay = new Date(queryDate)
+      startOfDay.setUTCHours(0, 0, 0, 0)
+      const endOfDay = new Date(queryDate)
+      endOfDay.setUTCHours(23, 59, 59, 999)
+
+      const booking = await Booking.findOne({
+        sessionId: sessionId,
+        userId: userId,
+        isLocked: true,
+        isPaymentConfirm: false,
+      })
+
+      if (!booking) {
+        throw CustomErrorHandler.notFound("No locked booking found for this session")
+      }
+
+      // Find the scheduled date entry for the given date
+      const scheduledDateEntry = booking.scheduledDates.find((sched) => sched.date.toISOString().split("T")[0] === date)
+
+      if (!scheduledDateEntry) {
+        throw CustomErrorHandler.notFound("No scheduled date entry found for the given date")
+      }
+
+      // Remove the specified slots from the scheduled date entry
+      scheduledDateEntry.timeSlots = scheduledDateEntry.timeSlots.filter((slot) => {
+        return !selectedSlots.some(
+          (selectedSlot) =>
+            slot.startTime === selectedSlot.startTime &&
+            slot.endTime === selectedSlot.endTime &&
+            slot.playableArea === selectedSlot.playableArea,
+        )
+      })
+
+      // If all slots for the date are removed, remove the scheduled date entry
+      if (scheduledDateEntry.timeSlots.length === 0) {
+        booking.scheduledDates = booking.scheduledDates.filter(
+          (sched) => sched.date.toISOString().split("T")[0] !== date,
+        )
+      }
+
+      // If no slots remain across all scheduledDates, delete the booking
+      if (booking.scheduledDates.length === 0) {
+        await Booking.findByIdAndDelete(booking._id)
+        console.log(`🗑️ Deleted booking ${booking._id} as no slots remain`)
+        return {
+          releasedCount: 1,
+          message: "Booking deleted as no slots remain",
+        }
+      }
+
+      // Save the updated booking
+      await booking.save()
+
+      console.log(`🔓 Released slots for booking ${booking._id}`)
+
+      return {
+        releasedCount: selectedSlots.length,
+        message: `Released ${selectedSlots.length} locked slots`,
+      }
+    } catch (error) {
+      console.log("Failed to release locked slots:", error)
+      throw error
+    }
+  },
+
+  async confirmPayment({ venueId, sport, date, paymentId, bookingData, userId }) {
+    try {
+      const queryDate = new Date(date + "T00:00:00.000Z")
+      const startOfDay = new Date(queryDate)
+      startOfDay.setUTCHours(0, 0, 0, 0)
+      const endOfDay = new Date(queryDate)
+      endOfDay.setUTCHours(23, 59, 59, 999)
+
+      // Find and update locked bookings to confirmed
+      const lockedBookings = await Booking.find({
+        venueId: venueId,
+        sport: new RegExp(`^${sport}$`, "i"),
+        lockedBy: userId,
+        isLocked: true,
+        isPaymentConfirm: false,
+        "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
+      })
+
+      if (lockedBookings.length === 0) {
+        throw CustomErrorHandler.badRequest("No locked slots found for confirmation")
+      }
+
+      // Update all locked bookings with payment information
+      const updatePromises = lockedBookings.map((booking) =>
+        Booking.findByIdAndUpdate(
+          booking._id,
+          {
+            ...bookingData,
+            paymentId,
+            isPaymentConfirm: true,
+            isLocked: false,
+            bookingStatus: "confirmed",
+            paymentStatus: "successful",
+          },
+          { new: true },
+        ),
+      )
+
+      const updatedBookings = await Promise.all(updatePromises)
+
+      console.log(`✅ Confirmed payment for ${updatedBookings.length} bookings`)
+
+      return {
+        confirmedBookings: updatedBookings,
+        message: `Payment confirmed for ${updatedBookings.length} slots`,
+      }
+    } catch (error) {
+      console.log("Failed to confirm payment:", error)
+      throw error
+    }
+  },
+
+  // MARK: - Modified existing methods
+
   async bookVenue(bookingData) {
     try {
       const {
@@ -164,55 +420,84 @@ const ProviderServices = {
         totalamount,
         paymentStatus,
         bookingStatus,
-      } = bookingData;
-      const userInfo = global.user
-      const venue = await Venue.findById(venueId);
-      if (!venue) throw CustomErrorHandler.notFound("Venue not found ");
+        userId,
+        paymentId,
+        razorpayPaymentId,
+        razorpaySignature,
+        isPaymentConfirm = false,
+      } = bookingData
 
-      if (!venue.venue_sports.includes(sport)) throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
+      const venue = await Venue.findById(venueId)
+      if (!venue) throw CustomErrorHandler.notFound("Venue not found")
 
-      for (const dateSlot of scheduledDates) {
-        const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc");
-        const dayTiming = venue.venue_timeslots[bookingDay];
+      if (!venue.venue_sports.includes(sport)) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
+      }
 
-        if (!dayTiming || !dayTiming.isOpen) {
-          throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`);
+      // For time-sensitive bookings, check if slots are locked by this user
+      if (isPaymentConfirm) {
+        // This is a confirmed payment, proceed with booking
+        for (const dateSlot of scheduledDates) {
+          const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
+          const dayTiming = venue.venue_timeslots[bookingDay]
+
+          if (!dayTiming || !dayTiming.isOpen) {
+            throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`)
+          }
         }
+      } else {
+        // Regular booking flow - check availability
+        for (const dateSlot of scheduledDates) {
+          const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
+          const dayTiming = venue.venue_timeslots[bookingDay]
 
-        console.log(dateSlot)
-        for (const slot of dateSlot.timeSlots) {
-          const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, dateSlot.date, slot);
-          if (!isAvailable) {
-            throw CustomErrorHandler.badRequest(
-              `Slot ${slot.startTime} - ${slot.endTime} is unavailable on ${dateSlot.date}`
-            );
+          if (!dayTiming || !dayTiming.isOpen) {
+            throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`)
+          }
+
+          // Validate each time slot with playable area
+          for (const slot of dateSlot.timeSlots) {
+            const isAvailable = await this.checkSlotAvailabilityWithPlayableArea(venueId, sport, dateSlot.date, slot)
+
+            if (!isAvailable) {
+              throw CustomErrorHandler.badRequest(
+                `Slot ${slot.startTime} - ${slot.endTime} on playable area ${slot.playableArea} is unavailable on ${dateSlot.date}`,
+              )
+            }
           }
         }
       }
+
       const booking = new Booking({
         venueId,
+        userId,
         sport,
         bookingPattern: bookingPattern || "single_slots",
         scheduledDates,
         durationInHours: durationInHours,
         totalAmount: totalamount,
-        paymentStatus: paymentStatus || "Pending",
-        bookingStatus: bookingStatus || "Pending",
-        userId: userInfo.userId,
-      });
+        paymentStatus: paymentStatus || "pending",
+        bookingStatus: bookingStatus || "pending",
+        paymentId,
+        razorpayPaymentId,
+        razorpaySignature,
+        isPaymentConfirm,
+        isLocked: false,
+      })
 
-      await booking.save();
+      await booking.save()
       await Venue.findByIdAndUpdate(venueId, {
         $inc: {
           totalBookings: 1,
           amountNeedToPay: totalamount,
           totalAmount: totalamount,
         },
-      });
-      return await booking.populate("venueId userId");
+      })
+
+      return await booking.populate("venueId userId")
     } catch (error) {
-      console.log("Failed to book venue:", error);
-      throw error;
+      console.log("Failed to book venue:", error)
+      throw error
     }
   },
 
@@ -1424,134 +1709,722 @@ const ProviderServices = {
     ]);
     return venue;
   },
-  async getAvailableSlots({ venueId, sport, date, playable_plots }) {
+  // Add this new method to ProviderServices
+  async checkSlotConflicts({ venueId, sport, date, playableArea, selectedSlots }) {
     try {
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
+      }
+
+      if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
+      }
+
+      // Parse the date in yyyy-MM-dd format
+      const queryDate = new Date(date + "T00:00:00.000Z")
+      const startOfDay = new Date(queryDate)
+      startOfDay.setUTCHours(0, 0, 0, 0)
+      const endOfDay = new Date(queryDate)
+      endOfDay.setUTCHours(23, 59, 59, 999)
+
+      console.log(
+        `Checking conflicts for venue: ${venueId}, sport: ${sport}, date: ${date}, playableArea: ${playableArea}`,
+      )
+
+      // Find existing bookings for the specific date, sport, and playable area
+      const existingBookings = await Booking.find({
+        venueId: venueId,
+        sport: new RegExp(`^${sport}$`, "i"),
+        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
+        "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
+      }).lean()
+
+      console.log(`Found ${existingBookings.length} existing bookings for the date range`)
+
+      const conflictingSlots = []
+      const availableSlots = []
+
+      // Check each selected slot for conflicts
+      for (const selectedSlot of selectedSlots) {
+        let hasConflict = false
+
+        // Normalize selected slot times for robust comparison
+        const normalizedSelectedStartTime = selectedSlot.startTime.trim().toUpperCase()
+        const normalizedSelectedEndTime = selectedSlot.endTime.trim().toUpperCase()
+
+        // Check against all existing bookings
+        for (const booking of existingBookings) {
+          for (const dateSlot of booking.scheduledDates) {
+            const bookingDate = new Date(dateSlot.date)
+
+            // Check if the booking date matches our query date
+            // This comparison correctly handles MongoDB's $date objects
+            if (bookingDate >= startOfDay && bookingDate <= endOfDay) {
+              for (const timeSlot of dateSlot.timeSlots) {
+                // Normalize booked slot times for robust comparison
+                const normalizedBookingStartTime = timeSlot.startTime.trim().toUpperCase()
+                const normalizedBookingEndTime = timeSlot.endTime.trim().toUpperCase()
+
+                // Check if playable area matches and time slots overlap
+                if (
+                  timeSlot.playableArea === selectedSlot.playableArea &&
+                  normalizedBookingStartTime === normalizedSelectedStartTime &&
+                  normalizedBookingEndTime === normalizedSelectedEndTime
+                ) {
+                  hasConflict = true
+                  conflictingSlots.push({
+                    startTime: selectedSlot.startTime,
+                    endTime: selectedSlot.endTime,
+                    playableArea: selectedSlot.playableArea,
+                    bookingId: booking._id,
+                    conflictReason: "Slot already booked",
+                  })
+                  break // Found conflict for this selectedSlot, move to next selectedSlot
+                }
+              }
+              if (hasConflict) break // Found conflict for this selectedSlot, move to next selectedSlot
+            }
+          }
+          if (hasConflict) break // Found conflict for this selectedSlot, move to next selectedSlot
+        }
+
+        if (!hasConflict) {
+          availableSlots.push(selectedSlot)
+        }
+      }
+
+      console.log(`Conflict check results: ${conflictingSlots.length} conflicts, ${availableSlots.length} available`)
+
+      return {
+        hasConflicts: conflictingSlots.length > 0,
+        conflictingSlots,
+        availableSlots,
+        totalChecked: selectedSlots.length,
+        date,
+        playableArea,
+        sport,
+      }
+    } catch (error) {
+      console.log("Failed to check slot conflicts:", error)
+      throw error
+    }
+  },
+  async getAvailableSlots({ venueId, sport, date, playableArea, userId }) {
+    try {
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
+      }
+
+      if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
+      }
+
+      const requestedDate = DateTime.fromISO(date)
+      const bookingDay = requestedDate.toFormat("cccc")
+      const dayTiming = venue.venue_timeslots[bookingDay]
+
+      if (!dayTiming || !dayTiming.isOpen) {
+        return {
+          availableSlots: [],
+          bookedSlots: [],
+          lockedSlots: [],
+          totalSlots: 0,
+          sport,
+          date,
+          playableArea,
+          pricing: this.getSportPrice(venue, sport),
+          message: `Venue is closed on ${bookingDay}`,
+        }
+      }
+
+      // Generate all potential slots for the day
+      const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime)
+
+      // Apply time-based filtering for current date
+      const currentDate = DateTime.now()
+      const isToday = requestedDate.hasSame(currentDate, "day")
+      let filteredSlots = allSlots
+
+      if (isToday) {
+        const currentTime = currentDate.toFormat("h:mm a")
+        filteredSlots = allSlots.filter((slot) => {
+          const slotStartTime = DateTime.fromFormat(slot.startTime, "h:mm a")
+          const currentDateTime = DateTime.fromFormat(currentTime, "h:mm a")
+          return slotStartTime >= currentDateTime
+        })
+      }
+
+      const queryDate = new Date(date)
+      const start = new Date(queryDate.setHours(0, 0, 0, 0))
+      const end = new Date(queryDate.setHours(23, 59, 59, 999))
+
+      // Get both confirmed bookings and locked slots
+      const existingBookings = await Booking.find({
+        venueId: venueId,
+        sport: sport,
+        $or: [
+          { bookingStatus: { $in: ["confirmed", "pending", "completed"] } },
+          // {
+          //   isLocked: true,
+          //   lockedUntil: { $gt: new Date() },
+          //   isPaymentConfirm: false,
+          // },
+        ],
+        "scheduledDates.date": { $gte: start, $lte: end },
+      }).lean()
+
+      // Extract booked and locked slots
+      const bookedSlotsForPlayableArea = new Set()
+      const lockedSlotsForPlayableArea = new Set()
+      const userLockedSlots = new Set()
+
+      existingBookings.forEach((booking) => {
+        booking.scheduledDates.forEach((dateSlot) => {
+          const slotDate = DateTime.fromJSDate(dateSlot.date)
+          if (slotDate >= DateTime.fromJSDate(start) && slotDate <= DateTime.fromJSDate(end)) {
+            dateSlot.timeSlots.forEach((slot) => {
+              if (slot.playableArea === playableArea) {
+                const slotKey = `${slot.startTime}-${slot.endTime}`
+
+                if (booking.isLocked && !booking.isPaymentConfirm) {
+                  lockedSlotsForPlayableArea.add(slotKey)
+                  if (userId && booking.lockedBy?.toString() === userId) {
+                    userLockedSlots.add(slotKey)
+                  }
+                } else {
+                  bookedSlotsForPlayableArea.add(slotKey)
+                }
+              }
+            })
+          }
+        })
+      })
+
+      // Filter available slots
+      const availableSlots = filteredSlots
+        .filter((slot) => {
+          const slotKey = `${slot.startTime}-${slot.endTime}`
+          const isBooked = bookedSlotsForPlayableArea.has(slotKey)
+          // const isLockedByOther = lockedSlotsForPlayableArea.has(slotKey) && !userLockedSlots.has(slotKey)
+
+          return !isBooked
+        })
+        .map((slot) => ({
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          playableArea: playableArea,
+          isLockedByUser: userLockedSlots.has(`${slot.startTime}-${slot.endTime}`),
+        }))
+      console.log(availableSlots);
+      const response = {
+        availableSlots,
+        bookedSlots: Array.from(bookedSlotsForPlayableArea),
+        lockedSlots: Array.from(lockedSlotsForPlayableArea),
+        userLockedSlots: Array.from(userLockedSlots),
+        totalSlots: allSlots.length,
+        sport,
+        date,
+        playableArea,
+        pricing: this.getSportPrice(venue, sport),
+      }
+
+      if (isToday) {
+        response.message = `Showing slots from ${currentDate.toFormat("h:mm a")} onwards for today`
+        response.currentTime = currentDate.toFormat("h:mm a")
+        response.timeFilteringApplied = true
+      }
+
+      return response
+    } catch (error) {
+      console.log("Failed to get available slots:", error)
+      throw error
+    }
+  },
+
+  async checkSlotAvailabilityWithPlayableArea(venueId, sport, date, timeSlot) {
+    const { startTime, endTime, playableArea } = timeSlot
+    const normalizedDate = new Date(new Date(date).toISOString().split("T")[0])
+
+    const booking = await Booking.findOne({
+      venueId,
+      sport,
+      $or: [
+        { bookingStatus: { $in: ["confirmed", "pending", "completed"] } },
+        {
+          isLocked: true,
+          lockedUntil: { $gt: new Date() },
+          isPaymentConfirm: false,
+        },
+      ],
+      scheduledDates: {
+        $elemMatch: {
+          date: normalizedDate,
+          timeSlots: {
+            $elemMatch: {
+              playableArea: playableArea,
+              startTime: startTime,
+              endTime: endTime,
+            },
+          },
+        },
+      },
+    })
+
+    return !booking
+  },
+
+  // async getBookedSlots(data) {
+  //   try {
+  //     const { venueId, sport, date, playableArea } = data;
+
+  //     const isGroundExist = await Venue.findById(venueId);
+  //     if (!isGroundExist) {
+  //       throw CustomErrorHandler.notFound("Venue Not Found");
+  //     }
+
+  //     const queryDate = new Date(date);
+  //     const startOfDay = new Date(queryDate);
+  //     startOfDay.setHours(0, 0, 0, 0);
+  //     const endOfDay = new Date(queryDate);
+  //     endOfDay.setHours(23, 59, 59, 999);
+
+  //     console.log(
+  //       `Getting booked slots for venue: ${venueId}, sport: ${sport}, date: ${date}, playableArea: ${playableArea}`
+  //     );
+
+  //     const bookings = await Booking.find({
+  //       venueId: venueId,
+  //       sport: new RegExp(`^${sport}$`, "i"),
+  //       bookingStatus: { $in: ["confirmed", "pending", "completed"] },
+  //       "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
+  //     }).lean();
+
+  //     console.log(`Found ${bookings.length} bookings for the date range`);
+
+  //     const conflictingTimeSlots = [];
+
+  //     bookings.forEach((booking) => {
+  //       if (booking.scheduledDates && booking.scheduledDates.length) {
+  //         booking.scheduledDates.forEach((dateEntry) => {
+  //           const entryDate = new Date(dateEntry.date);
+  //           if (
+  //             entryDate >= startOfDay &&
+  //             entryDate <= endOfDay &&
+  //             Array.isArray(dateEntry.timeSlots)
+  //           ) {
+  //             dateEntry.timeSlots.forEach((slot) => {
+  //               if (slot.playableArea === playableArea) {
+  //                 conflictingTimeSlots.push({
+  //                   startTime: slot.startTime,
+  //                   endTime: slot.endTime,
+  //                   playableArea: slot.playableArea,
+  //                 });
+  //               }
+  //             });
+  //           }
+  //         });
+  //       }
+  //     });
+
+  //     console.log(`Total conflicting time slots: ${conflictingTimeSlots.length}`);
+
+  //     return [
+  //       {
+  //         date: new Date(date).toISOString(),
+  //         endDate: null,
+  //         isFullDay: false,
+  //         timeSlots: conflictingTimeSlots,
+  //       },
+  //     ];
+  //   } catch (error) {
+  //     console.error("Failed to get booked slots:", error);
+  //     throw error;
+  //   }
+  // },
+
+  async getBookedSlots(data) {
+    try {
+      const { venueId, sport, date, playableArea } = data
+      const isGroundExist = await Venue.findById(venueId)
+      if (!isGroundExist) return CustomErrorHandler.notFound("Venue Not Found")
+
+      const queryDate = new Date(date)
+      const startOfDay = new Date(queryDate)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(queryDate)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      console.log(
+        `Getting booked slots for venue: ${venueId}, sport: ${sport}, date: ${date}, playableArea: ${playableArea}`,
+      )
+
+      const bookings = await Booking.find({
+        venueId: venueId,
+        sport: new RegExp(`^${sport}$`, "i"),
+        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
+        "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
+      }).lean()
+
+      console.log(`Found ${bookings.length} bookings for the date range`)
+
+      const bookedSlots = []
+
+      bookings.forEach((booking) => {
+        if (booking.scheduledDates && booking.scheduledDates.length) {
+          booking.scheduledDates.forEach((dateEntry) => {
+            const entryDate = new Date(dateEntry.date)
+            if (entryDate >= startOfDay && entryDate <= endOfDay && dateEntry.timeSlots && dateEntry.timeSlots.length) {
+              dateEntry.timeSlots.forEach((slot) => {
+                if (slot.playableArea === playableArea) {
+                  bookedSlots.push({
+                    startTime: slot.startTime,
+                    endTime: slot.endTime,
+                    playableArea: slot.playableArea,
+                    bookingId: booking._id,
+                    userId: booking.userId,
+                    status: booking.bookingStatus,
+                  })
+                  console.log(`Added booked slot: ${slot.startTime}-${slot.endTime} for playable area ${playableArea}`)
+                } else {
+                  console.log(
+                    `Skipped slot ${slot.startTime}-${slot.endTime} for different playable area ${slot.playableArea}`,
+                  )
+                }
+              })
+            }
+          })
+        }
+      })
+
+      console.log(`Total booked slots for playable area ${playableArea}: ${bookedSlots.length}`)
+
+      return bookedSlots;
+    } catch (error) {
+      console.log("Failed to get booked slots:", error)
+      throw error
+    }
+  },
+
+  //#region Previous to get SLots 
+  // async checkMultipleSlots(data) {
+  //   try {
+  //     const { venueId, sport, date, playableArea } = data;
+
+  //     // Validate venue
+  //     const venue = await Venue.findById(venueId);
+  //     if (!venue) {
+  //       throw CustomErrorHandler.notFound("Venue not found");
+  //     }
+
+  //     if (!venue.venue_sports.includes(sport)) {
+  //       throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
+  //     }
+
+  //     const conflictingDateSlots = [];
+
+  //     // Get all bookings for the venue and sport
+  //     const existingBookings = await Booking.find({
+  //       venueId: venueId,
+  //       sport: sport,
+  //       bookingStatus: { $in: ["confirmed", "pending"] },
+  //     });
+
+  //     for (const dateString of date) {
+  //       const conflictingTimeSlots = [];
+  //       const requestedDateStr = dateString.split('T')[0];
+  //       for (const booking of existingBookings) {
+  //         for (const scheduledDate of booking.scheduledDates) {
+  //           const bookingDateStr = scheduledDate.date.toISOString().split('T')[0];
+  //           if (bookingDateStr === requestedDateStr) {
+  //             for (const timeSlot of scheduledDate.timeSlots) {
+  //               if (timeSlot.playableArea === playableArea) {
+  //                 conflictingTimeSlots.push({
+  //                   startTime: timeSlot.startTime,
+  //                   endTime: timeSlot.endTime,
+  //                   playableArea: timeSlot.playableArea,
+  //                 });
+  //               }
+  //             }
+  //           }
+  //         }
+  //       }
+  //       if (conflictingTimeSlots.length > 0) {
+  //         conflictingDateSlots.push({
+  //           date: requestedDateStr,
+  //           endDate: null,
+  //           isFullDay: false,
+  //           timeSlots: conflictingTimeSlots,
+  //         });
+  //       }
+  //     }
+  //     return conflictingDateSlots;
+  //   } catch (error) {
+  //     console.error("Failed to get conflicting date slots:", error);
+  //     throw error;
+  //   }
+  // },
+
+  //#region new to get slots with avaialble slots
+  // async checkMultipleSlots(data) {
+  //   try {
+  //     const { venueId, sport, date, playableArea } = data;
+
+  //     // Validate venue
+  //     const venue = await Venue.findById(venueId);
+  //     if (!venue) {
+  //       throw CustomErrorHandler.notFound("Venue not found");
+  //     }
+
+  //     if (!venue.venue_sports.includes(sport)) {
+  //       throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
+  //     }
+
+  //     const conflictingDateSlots = [];
+  //     const availableSlotsByDate = [];
+
+  //     // Get all bookings for the venue and sport
+  //     const existingBookings = await Booking.find({
+  //       venueId: venueId,
+  //       sport: sport,
+  //       bookingStatus: { $in: ["confirmed", "pending"] },
+  //     });
+
+  //     for (const dateString of date) {
+  //       const requestedDate = DateTime.fromISO(dateString);
+  //       const requestedDateStr = requestedDate.toISODate(); // YYYY-MM-DD format
+  //       const dayName = requestedDate.toFormat("cccc");
+  //       const dayTiming = venue.venue_timeslots[dayName];
+
+  //       // Initialize time slots containers
+  //       const conflictingTimeSlots = [];
+  //       const bookedSlotsSet = new Set();
+
+  //       // Handle unavailable days (venue closed)
+  //       if (!dayTiming || !dayTiming.isOpen) {
+  //         availableSlotsByDate.push({
+  //           date: requestedDate.toISO(),
+  //           endDate: null,
+  //           isFullDay: false,
+  //           timeSlots: [],
+  //         });
+
+  //         continue; // Skip to next date
+  //       }
+
+  //       // Generate all possible slots
+  //       const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime);
+
+  //       for (const booking of existingBookings) {
+  //         for (const scheduledDate of booking.scheduledDates) {
+  //           const bookingDateStr = scheduledDate.date.toISOString().split('T')[0];
+
+  //           if (bookingDateStr === requestedDateStr) {
+  //             for (const timeSlot of scheduledDate.timeSlots) {
+  //               if (timeSlot.playableArea === playableArea) {
+  //                 const slotKey = `${timeSlot.startTime}-${timeSlot.endTime}`;
+  //                 bookedSlotsSet.add(slotKey);
+
+  //                 conflictingTimeSlots.push({
+  //                   startTime: timeSlot.startTime,
+  //                   endTime: timeSlot.endTime,
+  //                   playableArea: timeSlot.playableArea,
+  //                 });
+  //               }
+  //             }
+  //           }
+  //         }
+  //       }
+
+  //       // Filter available slots
+  //       const availableTimeSlots = allSlots
+  //         .filter((slot) => !bookedSlotsSet.has(`${slot.startTime}-${slot.endTime}`))
+  //         .map((slot) => ({
+  //           startTime: slot.startTime,
+  //           endTime: slot.endTime,
+  //           playableArea: playableArea,
+  //         }));
+
+  //       // Push conflicting slots if found
+  //       if (conflictingTimeSlots.length > 0) {
+  //         conflictingDateSlots.push({
+  //           date: requestedDateStr,
+  //           endDate: null,
+  //           isFullDay: false,
+  //           timeSlots: conflictingTimeSlots,
+  //         });
+  //       }
+
+  //       // Push available slots
+  //       availableSlotsByDate.push({
+  //         date: requestedDate.toISO(),
+  //         endDate: null,
+  //         isFullDay: false,
+  //         timeSlots: availableTimeSlots,
+  //       });
+  //     }
+
+  //     return {
+  //       conflictingDateSlots,
+  //       availableSlotsByDate,
+  //     };
+  //   } catch (error) {
+  //     console.error("Failed to get conflicting and available slots:", error);
+  //     throw error;
+  //   }
+  // },
+
+  async checkMultipleSlots(data) {
+    try {
+      const { venueId, sport, date, playableArea } = data;
+
       const venue = await Venue.findById(venueId);
       if (!venue) {
         throw CustomErrorHandler.notFound("Venue not found");
       }
 
-      if (!venue.venue_sports.map(s => s.toLowerCase()).includes(sport.toLowerCase())) {
+      if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
         throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
       }
 
-      // Check if venue is open
-      const bookingDay = DateTime.fromJSDate(new Date(date)).toFormat("cccc");
-      const dayTiming = venue.venue_timeslots[bookingDay];
-      if (!dayTiming || !dayTiming.isOpen) {
-        return {
-          availableSlots: [],
-          bookedSlots: [],
-          totalSlots: 0,
-          sport,
-          date,
-          pricing: this.getSportPrice(venue, sport),
-          message: `Venue is closed on ${bookingDay}`,
-        };
-      }
+      const conflictingDateSlots = [];
+      const availableSlotsByDate = [];
 
-      // Generate all potential slots
-      const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime);
-
-      // Fetch existing bookings for that date
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
-
+      // Fetch all existing bookings once for performance
       const existingBookings = await Booking.find({
-        venueId: venueId,
-        sport: new RegExp(`^${sport}$`, 'i'),
-        
+        venueId,
+        sport: new RegExp(`^${sport}$`, "i"),
         bookingStatus: { $in: ["confirmed", "pending", "completed"] },
-        "scheduledDates.date": { $gte: start, $lte: end },
-      });
+      }).lean();
 
-      // Flatten booked slots
-      const bookedSlots = new Set();
-      existingBookings.forEach(bk => {
-        bk.scheduledDates.forEach(ds => {
-          const dsDate = new Date(ds.date);
-          if (dsDate >= start && dsDate <= end) {
-            ds.timeSlots.forEach(slot => {
-              bookedSlots.add(`${slot.startTime}-${slot.endTime}`);
-            });
-          }
-        });
-      });
+      for (const dateString of date) {
+        const requestedDate = DateTime.fromISO(dateString);
+        const requestedDateStr = requestedDate.toISODate();
+        const dayName = requestedDate.toFormat("cccc");
+        const dayTiming = venue.venue_timeslots[dayName];
 
-      const availableSlots = allSlots.filter(slot => {
-        return !bookedSlots.has(`${slot.startTime}-${slot.endTime}`);
-      });
+        const bookedSlotsSet = new Set();
+        const conflictingTimeSlots = [];
 
-      return {
-        availableSlots,
-        bookedSlots: Array.from(bookedSlots),
-        totalSlots: allSlots.length,
-        sport,
-        date,
-        pricing: this.getSportPrice(venue, sport),
-      };
-    } catch (error) {
-      console.log("Failed to get available slots:", error);
-      throw error;
-    }
-  },
+        // If venue is closed, just skip
+        if (!dayTiming || !dayTiming.isOpen) {
+          availableSlotsByDate.push({
+            date: requestedDate.toISO(),
+            endDate: null,
+            isFullDay: false,
+            timeSlots: [],
+          });
+          continue;
+        }
 
-  async getBookedSlots(data) {
-    try {
-      const { venueId, sport, date } = data;
-      const isGroundExist = await Venue.findById(venueId);
-      if (!isGroundExist) return CustomErrorHandler.notFound("Venue Not Found");
+        // Step 1: Generate all possible slots
+        const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime);
 
-      const queryDate = new Date(date);
-      const startOfDay = new Date(queryDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(queryDate);
-      endOfDay.setHours(23, 59, 59, 999);
+        // Step 2: If the requested date is today, filter out past slots
+        const currentDate = DateTime.now();
+        let filteredSlots = allSlots;
+        if (requestedDate.hasSame(currentDate, "day")) {
+          const currentTime = currentDate.toFormat("h:mm a");
+          filteredSlots = allSlots.filter((slot) => {
+            const slotStartTime = DateTime.fromFormat(slot.startTime, "h:mm a");
+            const currentSlotTime = DateTime.fromFormat(currentTime, "h:mm a");
+            return slotStartTime >= currentSlotTime;
+          });
 
-      const bookings = await Booking.find({
-        venueId: venueId,
-        sport: new RegExp(`^${sport}$`, 'i'),
-        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
-        $or: [
-          { bookingDate: { $gte: startOfDay, $lte: endOfDay } },
-          { "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay } },
-        ],
-      });
+          console.log(`Time filtering applied for today (${requestedDateStr}). Slots before: ${allSlots.length}, after: ${filteredSlots.length}`);
+        }
 
-      const bookedSlots = [];
-
-      bookings.forEach((booking) => {
-        if (booking.scheduledDates && booking.scheduledDates.length) {
-          booking.scheduledDates.forEach((dateEntry) => {
-            const entryDate = new Date(dateEntry.date);
-            if (entryDate >= startOfDay && entryDate <= endOfDay && dateEntry.timeSlots && dateEntry.timeSlots.length) {
-              dateEntry.timeSlots.forEach((slot) => {
-                bookedSlots.push({
-                  startTime: slot.startTime,
-                  endTime: slot.endTime,
-                  bookingId: booking._id,
-                  userId: booking.userId,
-                  status: booking.bookingStatus,
-                });
-              });
+        // Step 3: Check for conflicts with existing bookings
+        for (const booking of existingBookings) {
+          for (const scheduledDate of booking.scheduledDates) {
+            const bookingDateStr = new Date(scheduledDate.date).toISOString().split("T")[0];
+            if (bookingDateStr === requestedDateStr) {
+              for (const timeSlot of scheduledDate.timeSlots) {
+                const slotKey = `${timeSlot.startTime}-${timeSlot.endTime}`;
+                if (timeSlot.playableArea === playableArea) {
+                  bookedSlotsSet.add(slotKey);
+                  conflictingTimeSlots.push({
+                    startTime: timeSlot.startTime,
+                    endTime: timeSlot.endTime,
+                    playableArea: timeSlot.playableArea,
+                  });
+                }
+              }
             }
+          }
+        }
+
+        // Step 4: Filter available slots
+        const availableTimeSlots = filteredSlots
+          .filter((slot) => !bookedSlotsSet.has(`${slot.startTime}-${slot.endTime}`))
+          .map((slot) => ({
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            playableArea,
+          }));
+
+        // Step 5: Push both booked and available slots
+        if (conflictingTimeSlots.length > 0) {
+          conflictingDateSlots.push({
+            date: requestedDateStr,
+            endDate: null,
+            isFullDay: false,
+            timeSlots: conflictingTimeSlots,
           });
         }
-      });
+
+        availableSlotsByDate.push({
+          date: requestedDate.toISODate(),
+          endDate: null,
+          isFullDay: false,
+          timeSlots: availableTimeSlots,
+        });
+      }
 
       return {
-        bookedSlots,
-        sport,
-        date: queryDate,
-        totalBookings: bookings.length,
+        bookedSlots: conflictingDateSlots,
+        availableSlots: availableSlotsByDate,
       };
     } catch (error) {
-      console.log("Failed to get booked slots:", error);
+      console.error("Failed to get conflicting and available slots:", error);
       throw error;
     }
   },
+  async checkSlotAvailabilityWithPlayableArea(venueId, sport, date, timeSlot) {
+    const { startTime, endTime, playableArea } = timeSlot;
+    const normalizedDate = new Date(new Date(date).toISOString().split('T')[0]);
+
+    console.log(
+      `Checking availability for slot: ${startTime}-${endTime} on playable area ${playableArea}, date: ${normalizedDate.toISOString()}`
+    );
+
+    const booking = await Booking.findOne({
+      venueId,
+      sport,
+      bookingStatus: { $in: ["confirmed", "pending"] },
+      scheduledDates: {
+        $elemMatch: {
+          date: normalizedDate,
+          timeSlots: {
+            $elemMatch: {
+              playableArea: playableArea,
+              startTime: startTime,
+              endTime: endTime,
+            },
+          },
+        },
+      },
+    });
+
+    const isAvailable = !booking;
+    console.log(
+      `Slot ${startTime}-${endTime} on playable area ${playableArea} is ${isAvailable ? "available" : "booked"}`
+    );
+
+    return isAvailable;
+  }
+  ,
   async getGroundBookings(data) {
     try {
       const { venueId, startDate, endDate, sport, status, paymentStatus, page = 1, limit = 10 } = data
@@ -4025,473 +4898,6 @@ const ProviderServices = {
       throw error;
     }
   },
-
-
-  //#region Initiate Payout
-  async initiatePayout(payoutData) {
-    try {
-
-      const {
-        recipientVpa,
-        amount,
-        purpose,
-        description,
-        reference_id,
-        userId,
-        venueId,
-        bookingId
-      } = payoutData
-
-      // Validate user has sufficient balance or permissions
-      // await this.validatePayoutEligibility(userId, amount, venueId)
-
-      // Create payout record in database first
-      const payout = new Payout({
-        userId,
-        venueId,
-        bookingId,
-        recipientVpa,
-        amount: Math.round(amount * 100), // Convert to paise
-        purpose,
-        description,
-        reference_id: reference_id || `payout_${Date.now()}`,
-        status: 'queued'
-      })
-
-      await payout.save()
-
-      try {
-        // Create contact in Razorpay
-        const contact = await razorpay.contacts.create({
-          name: `User_${userId}`,
-          email: `user_${userId}@example.com`, // You might want to get actual email
-          contact: "9999999999", // You might want to get actual phone
-          type: "customer",
-          reference_id: `contact_${userId}_${Date.now()}`
-        })
-
-        // Create fund account for VPA
-        const fundAccount = razorpay.fundAccount.create({
-          contact_id: contact.id,
-          account_type: "vpa",
-          vpa: {
-            address: recipientVpa
-          }
-        })
-
-        // Create payout
-        const razorpayPayout = await razorpay.Payout.create({
-          account_number: "2323230052942900",
-          fund_account_id: "fa_Qss6qqpHKGfyFC",
-          amount: Math.round(amount * 100),
-          currency: "INR",
-          mode: "UPI",
-          purpose: purpose,
-          queue_if_low_balance: true,
-          reference_id: payout.reference_id,
-          narration: description || `Payout for ${purpose}`,
-        })
-
-        // Update payout record with Razorpay response
-        payout.razorpayPayoutId = razorpayPayout.id
-        payout.status = razorpayPayout.status
-        payout.razorpayResponse = razorpayPayout
-        await payout.save()
-
-        return {
-          payoutId: payout._id,
-          razorpayPayoutId: razorpayPayout.id,
-          status: razorpayPayout.status,
-          amount: amount,
-          recipientVpa: recipientVpa,
-          reference_id: payout.reference_id,
-          estimatedSettlement: this.calculateEstimatedSettlement()
-        }
-
-      } catch (razorpayError) {
-        // Update payout status to failed
-        payout.status = 'failed'
-        payout.failureReason = razorpayError.message
-        payout.razorpayResponse = razorpayError
-        await payout.save()
-
-        throw new Error(`Razorpay payout failed: ${razorpayError.message}`)
-      }
-
-    } catch (error) {
-      console.error("Payout initiation error:", error)
-      throw error
-    }
-  },
-  //#endregion
-
-  //#region Validate Payout Eligibility
-  async validatePayoutEligibility(userId, amount, venueId) {
-    try {
-      // Check if user exists and is active
-      const user = await User.findById(userId)
-      if (!user) {
-        throw CustomErrorHandler.notFound("User not found")
-      }
-
-      // If venueId is provided, validate Venue ownership
-      if (venueId) {
-        const venue = await Venue.findOne({ _id: venueId, userId: userId })
-        if (!venue) {
-          throw CustomErrorHandler.badRequest("You don't have permission to initiate payouts for this Venue")
-        }
-      }
-
-      // Check daily payout limits (example: max 50k per day)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const tomorrow = new Date(today)
-      tomorrow.setDate(tomorrow.getDate() + 1)
-
-      const todayPayouts = await Payout.aggregate([
-        {
-          $match: {
-            userId: mongoose.Types.ObjectId(userId),
-            createdAt: { $gte: today, $lt: tomorrow },
-            status: { $in: ['queued', 'pending', 'processed'] }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: "$amount" }
-          }
-        }
-      ])
-
-      const todayTotal = todayPayouts[0]?.totalAmount || 0
-      const dailyLimit = 5000000 // 50k in paise
-
-      if (todayTotal + (amount * 100) > dailyLimit) {
-        throw CustomErrorHandler.badRequest("Daily payout limit exceeded. Maximum ₹50,000 per day allowed.")
-      }
-
-      // Check for minimum balance or other business rules
-      // You can add more validation logic here
-
-      return true
-    } catch (error) {
-      throw error
-    }
-  },
-  //#endregion
-
-  //#region Get Payout Status
-  async getPayoutStatus(payoutId) {
-    try {
-      const payout = await Payout.findById(payoutId)
-        .populate('userId', 'name email')
-        .populate('venueId', 'venue_name')
-        .populate('bookingId')
-
-      if (!payout) {
-        throw CustomErrorHandler.notFound("Payout not found")
-      }
-
-      // If payout has Razorpay ID, fetch latest status from Razorpay
-      if (payout.razorpayPayoutId) {
-        try {
-          const razorpayPayout = await razorpay.payouts.fetch(payout.razorpayPayoutId)
-
-          // Update local status if different
-          if (razorpayPayout.status !== payout.status) {
-            payout.status = razorpayPayout.status
-            payout.razorpayResponse = razorpayPayout
-
-            if (razorpayPayout.status === 'processed') {
-              payout.processedAt = new Date()
-            }
-
-            await payout.save()
-          }
-        } catch (razorpayError) {
-          console.error("Error fetching payout from Razorpay:", razorpayError)
-          // Continue with local data if Razorpay API fails
-        }
-      }
-
-      return {
-        payoutId: payout._id,
-        razorpayPayoutId: payout.razorpayPayoutId,
-        status: payout.status,
-        amount: payout.amount / 100, // Convert back to rupees
-        recipientVpa: payout.recipientVpa,
-        purpose: payout.purpose,
-        description: payout.description,
-        reference_id: payout.reference_id,
-        createdAt: payout.createdAt,
-        processedAt: payout.processedAt,
-        failureReason: payout.failureReason,
-        retryCount: payout.retryCount,
-        Venue: payout.venueId,
-        booking: payout.bookingId
-      }
-    } catch (error) {
-      console.error("Error getting payout status:", error)
-      throw error
-    }
-  },
-  //#endregion
-
-  //#region Get Payout History
-  async getPayoutHistory(filters) {
-    try {
-      const {
-        userId,
-        page = 1,
-        limit = 10,
-        status,
-        venueId,
-        startDate,
-        endDate
-      } = filters
-
-      const query = { userId: mongoose.Types.ObjectId(userId) }
-
-      if (status) {
-        query.status = status
-      }
-
-      if (venueId) {
-        query.venueId = mongoose.Types.ObjectId(venueId)
-      }
-
-      if (startDate || endDate) {
-        query.createdAt = {}
-        if (startDate) query.createdAt.$gte = new Date(startDate)
-        if (endDate) query.createdAt.$lte = new Date(endDate)
-      }
-
-      const skip = (page - 1) * limit
-
-      const [payouts, total] = await Promise.all([
-        Payout.find(query)
-          .populate('venueId', 'venue_name')
-          .populate('bookingId', 'totalAmount sport')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        Payout.countDocuments(query)
-      ])
-
-      // Calculate summary statistics
-      const summary = await Payout.aggregate([
-        { $match: query },
-        {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: "$amount" },
-            totalPayouts: { $sum: 1 },
-            successfulPayouts: {
-              $sum: { $cond: [{ $eq: ["$status", "processed"] }, 1, 0] }
-            },
-            failedPayouts: {
-              $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] }
-            },
-            pendingPayouts: {
-              $sum: { $cond: [{ $in: ["$status", ["queued", "pending"]] }, 1, 0] }
-            }
-          }
-        }
-      ])
-
-      const stats = summary[0] || {
-        totalAmount: 0,
-        totalPayouts: 0,
-        successfulPayouts: 0,
-        failedPayouts: 0,
-        pendingPayouts: 0
-      }
-
-      return {
-        payouts: payouts.map(payout => ({
-          ...payout,
-          amount: payout.amount / 100 // Convert to rupees
-        })),
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-          hasMore: page < Math.ceil(total / limit),
-        },
-        summary: {
-          ...stats,
-          totalAmount: stats.totalAmount / 100, // Convert to rupees
-          successRate: stats.totalPayouts > 0 ?
-            Math.round((stats.successfulPayouts / stats.totalPayouts) * 100) : 0
-        }
-      }
-    } catch (error) {
-      console.error("Error getting payout history:", error)
-      throw error
-    }
-  },
-  //#endregion
-
-  //#region Handle Payout Webhook
-  async handlePayoutWebhook(webhookBody, webhookSignature) {
-    try {
-      // Verify webhook signature
-      const expectedSignature = crypto
-        .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
-        .update(webhookBody)
-        .digest('hex')
-
-      if (expectedSignature !== webhookSignature) {
-        throw new Error('Invalid webhook signature')
-      }
-
-      const webhookData = JSON.parse(webhookBody)
-      const { event, payload } = webhookData
-
-      if (event === 'payout.processed' || event === 'payout.failed' || event === 'payout.cancelled') {
-        const razorpayPayoutId = payload.payout.entity.id
-
-        const payout = await Payout.findOne({ razorpayPayoutId })
-        if (!payout) {
-          console.warn(`Payout not found for Razorpay ID: ${razorpayPayoutId}`)
-          return
-        }
-
-        // Update payout status
-        payout.status = payload.payout.entity.status
-        payout.webhookData = webhookData
-        payout.razorpayResponse = payload.payout.entity
-
-        if (payload.payout.entity.status === 'processed') {
-          payout.processedAt = new Date()
-        } else if (payload.payout.entity.status === 'failed') {
-          payout.failureReason = payload.payout.entity.failure_reason || 'Unknown error'
-        }
-
-        await payout.save()
-
-        // You can add additional business logic here
-        // For example, send notifications, update booking status, etc.
-        await this.handlePayoutStatusChange(payout)
-      }
-
-      return { success: true }
-    } catch (error) {
-      console.error("Webhook handling error:", error)
-      throw error
-    }
-  },
-  //#endregion
-
-  //#region Handle Payout Status Change
-  async handlePayoutStatusChange(payout) {
-    try {
-      // Add your business logic here based on payout status change
-      // For example:
-
-      if (payout.status === 'processed' && payout.bookingId) {
-        // If this was a refund, update booking status
-        await Booking.findByIdAndUpdate(payout.bookingId, {
-          refundStatus: 'completed',
-          refundProcessedAt: new Date()
-        })
-      }
-
-      if (payout.status === 'failed' && payout.retryCount < payout.maxRetries) {
-        // Schedule retry for failed payouts
-        setTimeout(async () => {
-          await this.retryFailedPayout(payout._id)
-        }, 30000) // Retry after 30 seconds
-      }
-
-      // Send notifications to user
-      // await this.sendPayoutNotification(payout)
-
-    } catch (error) {
-      console.error("Error handling payout status change:", error)
-    }
-  },
-  //#endregion
-
-  //#region Retry Failed Payout
-  async retryFailedPayout(payoutId) {
-    try {
-      const payout = await Payout.findById(payoutId)
-      if (!payout || payout.status !== 'failed' || payout.retryCount >= payout.maxRetries) {
-        return
-      }
-
-      payout.retryCount += 1
-      payout.status = 'queued'
-      await payout.save()
-
-      // Retry the payout with Razorpay
-      const retryData = {
-        recipientVpa: payout.recipientVpa,
-        amount: payout.amount / 100,
-        purpose: payout.purpose,
-        description: payout.description,
-        reference_id: `${payout.reference_id}_retry_${payout.retryCount}`,
-        userId: payout.userId,
-        venueId: payout.venueId,
-        bookingId: payout.bookingId
-      }
-
-      await this.initiatePayout(retryData)
-    } catch (error) {
-      console.error("Error retrying payout:", error)
-    }
-  },
-  //#endregion
-
-  //#region Helper Methods
-  calculateEstimatedSettlement() {
-    // UPI payouts are usually instant, but can take up to 30 minutes
-    const now = new Date()
-    const estimated = new Date(now.getTime() + 30 * 60 * 1000) // Add 30 minutes
-    return estimated
-  },
-
-  async getPayoutAnalytics(userId, period = 'month') {
-    try {
-      const dateRange = this.getDateRange(period)
-
-      const analytics = await Payout.aggregate([
-        {
-          $match: {
-            userId: mongoose.Types.ObjectId(userId),
-            createdAt: { $gte: dateRange.start, $lte: dateRange.end }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalPayouts: { $sum: 1 },
-            totalAmount: { $sum: "$amount" },
-            successfulPayouts: {
-              $sum: { $cond: [{ $eq: ["$status", "processed"] }, 1, 0] }
-            },
-            failedPayouts: {
-              $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] }
-            },
-            avgAmount: { $avg: "$amount" },
-            purposeBreakdown: {
-              $push: "$purpose"
-            }
-          }
-        }
-      ])
-
-      return analytics[0] || {}
-    } catch (error) {
-      console.error("Error getting payout analytics:", error)
-      throw error
-    }
-  }
-  //#endregion
 }
 
 export default ProviderServices

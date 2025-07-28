@@ -1,7 +1,7 @@
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { ProviderServices } from "../services/index.js"
 import Joi from "joi"
-
+import { v4 as uuidv4 } from "uuid"
 const ProviderController = {
 
     //#region Create Venue
@@ -170,40 +170,205 @@ const ProviderController = {
     },
     //#endregion
 
+    async lockSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.string()
+                .pattern(/^\d{4}-\d{2}-\d{2}$/)
+                .required(),
+            selectedSlots: Joi.array()
+                .items(
+                    Joi.object({
+                        startTime: Joi.string().required(),
+                        endTime: Joi.string().required(),
+                        playableArea: Joi.number().min(1).required(),
+                    }),
+                )
+                .required(),
+            sessionId: Joi.string().required(),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.lockSlots({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Slots locked successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to lock slots: ${error}`))
+        }
+    },
+
+    async releaseLockedSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.string()
+                .pattern(/^\d{4}-\d{2}-\d{2}$/)
+                .required(),
+            sessionId: Joi.string().required(),
+            selectedSlots: Joi.array()
+                .items(
+                    Joi.object({
+                        startTime: Joi.string().required(),
+                        endTime: Joi.string().required(),
+                        playableArea: Joi.number().min(1).required(),
+                    }),
+                )
+                .required()
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.releaseLockedSlots({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Locked slots released successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to release locked slots:", error))
+        }
+    },
+
+    async confirmPayment(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.string()
+                .pattern(/^\d{4}-\d{2}-\d{2}$/)
+                .required(),
+            paymentId: Joi.string().required(),
+            bookingData: Joi.object().required(),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const result = await ProviderServices.confirmPayment({
+                ...req.body,
+                userId: req.user.id,
+            })
+
+            return res.json({
+                success: true,
+                message: "Payment confirmed and booking finalized",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to confirm payment:", error))
+        }
+    },
+
     //#region Book Venue 
     async bookVenue(req, res, next) {
         const bookingValidation = Joi.object({
             venueId: Joi.string().required(),
             sport: Joi.string().required(),
             bookingPattern: Joi.string().optional(),
-            scheduledDates: Joi.array().items(
-                Joi.object({
-                    date: Joi.date().required(),
-                    timeSlots: Joi.array().items(
-                        Joi.object({ startTime: Joi.string().required(), endTime: Joi.string().required() }),).required(),
-                })).min(1).required(),
+            scheduledDates: Joi.array()
+                .items(
+                    Joi.object({
+                        date: Joi.date().required(),
+                        timeSlots: Joi.array()
+                            .items(
+                                Joi.object({
+                                    startTime: Joi.string().required(),
+                                    endTime: Joi.string().required(),
+                                    playableArea: Joi.number().min(1).required(),
+                                }),
+                            )
+                            .required(),
+                    }),
+                )
+                .min(1)
+                .required(),
             durationInHours: Joi.number().required(),
             totalamount: Joi.number().required(),
             paymentStatus: Joi.string().optional(),
             bookingStatus: Joi.string().optional(),
-        });
+            paymentId: Joi.string().optional(),
+            razorpayPaymentId: Joi.string().optional(),
+            razorpaySignature: Joi.string().optional(),
+            isPaymentConfirm: Joi.boolean().optional(),
+        })
 
         const { error } = bookingValidation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to Validate request:${error}`));
+            return next(CustomErrorHandler.badRequest(`Failed to Validate request: ${error}`))
         }
+
         try {
-            const result = await ProviderServices.bookVenue(req.body)
+            const result = await ProviderServices.bookVenue({
+                ...req.body,
+                userId: req.user.id,
+            })
             return res.status(200).json({
                 success: true,
                 message: "Venue booked successfully",
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to book venue:${error}`))
+            return next(CustomErrorHandler.badRequest(`Failed to book venue: ${error}`))
         }
     },
     //#endregion
+
+    //#region Get Available Slots
+    async getAvailableSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.date().required(),
+            playableArea: Joi.number().min(1).required(),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to Validate request: ${error}`))
+        }
+
+        try {
+            const result = await ProviderServices.getAvailableSlots({
+                ...req.body,
+                userId: req.user?.id,
+            })
+            return res.json({
+                success: true,
+                message: result.message || "Available slots retrieved successfully",
+                data: result,
+            })
+        } catch (error) {
+            console.error("Error in getAvailableSlots:", error)
+            return next(CustomErrorHandler.badRequest("Failed to get available slots:", error))
+        }
+    },
+    //#endregion
+
 
     //    async bookVenue(req, res, next) {
     //     try {
@@ -427,6 +592,7 @@ const ProviderController = {
         }
     },
     //#endregion 
+
     //#region getIndividualProfile
     async getIndividualProfile(req, res, next) {
         const validation = Joi.object({
@@ -450,39 +616,48 @@ const ProviderController = {
         }
     },
     //#endregion 
-    //#region Get Available Slots
-    async getAvailableSlots(req, res, next) {
+
+
+    //#region checkSlotConflict
+    async checkSlotConflicts(req, res, next) {
         const validation = Joi.object({
             venueId: Joi.string().required(),
             sport: Joi.string().required(),
-            date: Joi.date().required(),
-            playable_plots: Joi.number().default(1).required()
+            date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required(),
+            playableArea: Joi.number().min(1).required(),
+            selectedSlots: Joi.array().items(
+                Joi.object({
+                    startTime: Joi.string().required(),
+                    endTime: Joi.string().required(),
+                    playableArea: Joi.number().min(1).required(),
+                })
+            ).required(),
         })
 
         const { error } = validation.validate(req.body)
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to Validate request:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
         }
 
         try {
-            const result = await ProviderServices.getAvailableSlots(req.body)
+            const result = await ProviderServices.checkSlotConflicts(req.body)
             return res.json({
                 success: true,
-                message: "Available slots retrieved successfully",
+                message: "Slot conflicts checked successfully",
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to get available slots:", error))
+            return next(CustomErrorHandler.badRequest("Failed to check slot conflicts:", error))
         }
     },
-    //#endregion
 
-    //#region Get Booked Slots 
+    //#region getBookedSlots
     async getBookedSlots(req, res, next) {
         const validation = Joi.object({
             venueId: Joi.string().required(),
             sport: Joi.string().required(),
             date: Joi.date().required(),
+            playableArea: Joi.number().min(1).required(),
         })
 
         const { error } = validation.validate(req.body)
@@ -495,13 +670,37 @@ const ProviderController = {
             return res.json({
                 success: true,
                 message: "Booked slots retrieved successfully",
-                data: result,
+                data: { bookedSlots: result },
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to get booked slots:", error))
+            return next(CustomErrorHandler.badRequest("Failed to get booked slots:",))
         }
     },
-    //#endregion 
+
+    async checkMultipleSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.array().items(Joi.date()).min(1).required(),
+            playableArea: Joi.number().min(1).required(),
+        });
+
+        const { error } = validation.validate(req.body);
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request:${error}`));
+        }
+        try {
+            const result = await ProviderServices.checkMultipleSlots(req.body);
+            console.log(result);
+            return res.json({
+                success: true,
+                message: "Booked slots retrieved successfully",
+                data: result,
+            });
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to get booked slots: ${error}`));
+        }
+    },
 
     //#region getGroundBookings
     async getGroundBookings(req, res, next) {
@@ -1469,155 +1668,5 @@ const ProviderController = {
         }
     },
 
-    //#region Payout api
-
-    async initiatePayout(req, res, next) {
-        const payoutValidation = Joi.object({
-            recipientVpa: Joi.string()
-                .pattern(/^[\w.-]+@[\w]+$/)
-                .required()
-                .messages({
-                    'string.pattern.base': 'Invalid VPA format. Please provide a valid UPI ID.'
-                }),
-            amount: Joi.number()
-                .min(1)
-                .max(200000) // Max 2 lakh per transaction as per RBI guidelines
-                .required()
-                .messages({
-                    'number.min': 'Amount must be at least ₹1',
-                    'number.max': 'Amount cannot exceed ₹2,00,000 per transaction'
-                }),
-            purpose: Joi.string()
-                .valid(
-                    'refund',
-                    'cashback',
-                    'payout',
-                    'salary',
-                    'utility_bill',
-                    'vendor_payments'
-                )
-                .required(),
-            description: Joi.string().max(255).optional(),
-            reference_id: Joi.string().max(40).optional(),
-            venueId: Joi.string().optional(), // For tracking which Venue the payout is related to
-            bookingId: Joi.string().optional(), // For refund scenarios
-        })
-
-        const { error } = payoutValidation.validate(req.body)
-        if (error) {
-            return next(CustomErrorHandler.badRequest(`Validation failed: ${error.details[0].message}`))
-        }
-
-        try {
-            const userInfo = global.user
-            const payoutData = {
-                ...req.body,
-                userId: userInfo.userId,
-                initiatedBy: userInfo.userId
-            }
-
-            const result = await ProviderServices.initiatePayout(payoutData)
-
-            return res.status(200).json({
-                success: true,
-                message: "Payout initiated successfully",
-                data: result,
-            })
-        } catch (error) {
-            console.error("Payout initiation failed:", error)
-            return next(CustomErrorHandler.badRequest(`Failed to initiate payout: ${error.message}`))
-        }
-    },
-    //#endregion
-
-    //#region Get Payout Status
-    async getPayoutStatus(req, res, next) {
-        const validation = Joi.object({
-            payoutId: Joi.string().required(),
-        })
-
-        const { error } = validation.validate(req.params)
-        if (error) {
-            return next(CustomErrorHandler.badRequest("Invalid payout ID"))
-        }
-
-        try {
-            const result = await ProviderServices.getPayoutStatus(req.params.payoutId)
-
-            return res.json({
-                success: true,
-                message: "Payout status retrieved successfully",
-                data: result,
-            })
-        } catch (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to get payout status: ${error.message}`))
-        }
-    },
-    //#endregion
-
-    //#region Get Payout History
-    async getPayoutHistory(req, res, next) {
-        const validation = Joi.object({
-            page: Joi.number().min(1).default(1),
-            limit: Joi.number().min(1).max(100).default(10),
-            status: Joi.string().valid('queued', 'pending', 'processed', 'cancelled', 'failed').optional(),
-            venueId: Joi.string().optional(),
-            startDate: Joi.date().optional(),
-            endDate: Joi.date().optional(),
-        })
-
-        const { error } = validation.validate(req.query)
-        if (error) {
-            return next(CustomErrorHandler.badRequest("Invalid query parameters"))
-        }
-
-        try {
-            const userInfo = global.user
-            const filters = {
-                ...req.query,
-                userId: userInfo.userId
-            }
-
-            const result = await ProviderServices.getPayoutHistory(filters)
-
-            return res.json({
-                success: true,
-                message: "Payout history retrieved successfully",
-                data: result,
-            })
-        } catch (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to get payout history: ${error.message}`))
-        }
-    },
-    //#endregion
-
-    //#region Handle Payout Webhook
-    async handlePayoutWebhook(req, res, next) {
-        try {
-            const webhookSignature = req.headers['x-razorpay-signature']
-            const webhookBody = JSON.stringify(req.body)
-
-            const result = await ProviderServices.handlePayoutWebhook(webhookBody, webhookSignature)
-
-            return res.status(200).json({
-                success: true,
-                message: "Webhook processed successfully"
-            })
-        } catch (error) {
-            console.error("Webhook processing failed:", error)
-            return res.status(400).json({
-                success: false,
-                message: "Webhook processing failed"
-            })
-        }
-    },
-    //#endregion
-
-
 }
-
-
-
-
-
 export default ProviderController

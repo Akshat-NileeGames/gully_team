@@ -1,10 +1,39 @@
 import mongoose from "mongoose"
 
+const timeSlotSchema = new mongoose.Schema({
+  startTime: {
+    type: String,
+    required: true,
+  },
+  endTime: {
+    type: String,
+    required: true,
+  },
+  playableArea: {
+    type: Number,
+    required: true,
+    min: 1,
+  },
+})
+
+const scheduledDateSchema = new mongoose.Schema({
+  date: {
+    type: Date,
+    required: true,
+  },
+  timeSlots: [timeSlotSchema],
+})
+
 const bookingSchema = new mongoose.Schema(
   {
     venueId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Venue",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
     },
     sport: {
@@ -13,75 +42,19 @@ const bookingSchema = new mongoose.Schema(
     },
     bookingPattern: {
       type: String,
-      enum: ["single_slots", "multiple_slots", "full_day_booking", "multi_day_booking", "week_booking"],
+      enum: ["single_slots", "multiple_slots", "multiple_dates"],
       default: "single_slots",
     },
-    scheduledDates: [
-      {
-        date: {
-          type: Date,
-          required: true,
-        },
-        endDate: {
-          type: Date,
-          required: false,
-        },
-        isFullDay: {
-          type: Boolean,
-          default: false,
-        },
-
-        timeSlots: [
-          {
-            startTime: {
-              type: String,
-              required: function () {
-                return !this.parent().isFullDay
-              },
-            },
-            endTime: {
-              type: String,
-              required: function () {
-                return !this.parent().isFullDay
-              },
-            },
-          },
-        ],
-      },
-    ],
-    isMultiDay: {
-      type: Boolean,
-      default: false,
-    },
-    multiDayStartDate: {
-      type: Date,
-      required: function () {
-        return this.isMultiDay
-      },
-    },
-    multiDayEndDate: {
-      type: Date,
-      required: function () {
-        return this.isMultiDay
-      },
-    },
-    totalDays: {
-      type: Number,
-      default: 1,
-    },
+    scheduledDates: [scheduledDateSchema],
     durationInHours: {
       type: Number,
       required: true,
+      min: 0.5,
     },
     totalAmount: {
       type: Number,
       required: true,
-    },
-    dailyRate: {
-      type: Number,
-      required: function () {
-        return this.isMultiDay || this.bookingPattern === "full_day_booking"
-      },
+      min: 0,
     },
     paymentStatus: {
       type: String,
@@ -93,33 +66,67 @@ const bookingSchema = new mongoose.Schema(
       enum: ["pending", "confirmed", "cancelled", "completed"],
       default: "pending",
     },
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+    // Time-sensitive booking fields
+    isLocked: {
+      type: Boolean,
+      default: false,
     },
+    lockedUntil: {
+      type: Date,
+      required: function () {
+        return this.isLocked
+      },
+    },
+    isPaymentConfirm: {
+      type: Boolean,
+      default: false,
+    },
+    sessionId: {
+      type: String,
+      required: function () {
+        return this.isLocked
+      },
+    },
+    // Existing fields
     cancellationReason: {
       type: String,
     },
-    refundAmount: {
-      type: Number,
-      default: 0,
+    paymentId: {
+      type: String,
     },
-    // Pricing breakdown for multi-day bookings
-    pricingBreakdown: {
-      basePrice: Number,
-      multiDayDiscount: Number,
-      totalBeforeDiscount: Number,
-      discountAmount: Number,
-      finalAmount: Number,
+    razorpayOrderId: {
+      type: String,
+    },
+    razorpayPaymentId: {
+      type: String,
+    },
+    razorpaySignature: {
+      type: String,
     },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+  },
 )
 
-bookingSchema.index({ venueId: 1, "scheduledDates.date": 1, sport: 1 })
-bookingSchema.index({ userId: 1, bookingStatus: 1 })
-bookingSchema.index({ "scheduledDates.date": 1, bookingStatus: 1 })
-bookingSchema.index({ isMultiDay: 1, multiDayStartDate: 1, multiDayEndDate: 1 })
+// Existing indexes
+bookingSchema.index({ venueId: 1, "scheduledDates.date": 1 })
+bookingSchema.index({ userId: 1, createdAt: -1 })
+bookingSchema.index({ bookingStatus: 1 })
+bookingSchema.index({ paymentStatus: 1 })
+bookingSchema.index({
+  venueId: 1,
+  sport: 1,
+  bookingStatus: 1,
+  "scheduledDates.date": 1,
+  "scheduledDates.timeSlots.playableArea": 1,
+})
 
-export default mongoose.model("Booking", bookingSchema)
+// New indexes for time-sensitive booking
+bookingSchema.index({ isLocked: 1, lockedUntil: 1, lockedBy: 1 })
+bookingSchema.index({ sessionId: 1 })
+bookingSchema.index({ lockedUntil: 1 }, { expireAfterSeconds: 0 })
+
+const Booking = mongoose.model("Booking", bookingSchema)
+
+export default Booking

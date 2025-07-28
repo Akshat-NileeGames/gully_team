@@ -18,7 +18,9 @@ router.post("/bookVenue", validateUser, ProviderController.bookVenue)
 // router.post("/checkGroundSlotAvailability", validateUser, ProviderController.checkGroundSlotAvailability)
 router.post("/checkMultipleDateAvailability", ProviderController.checkMultipleDateAvailability)
 router.post("/availableSlots", ProviderController.getAvailableSlots)
+router.post("/checkSlotConflicts", validateUser, ProviderController.checkSlotConflicts)
 router.post("/getbookedSlots", ProviderController.getBookedSlots)
+router.post("/checkMultipleSlots", ProviderController.checkMultipleSlots)
 router.post("/groundBookings", validateUser, ProviderController.getGroundBookings)
 router.post("/bookings/today", validateUser, ProviderController.getTodayBookings)
 router.post("/bookings/upcoming", validateUser, ProviderController.getUpcomingBookings)
@@ -76,10 +78,10 @@ router.post("/searchIndividuals", ProviderController.searchIndividualsWithFilter
 
 // Combined search with filters
 // router.post("/combinedSearch", ProviderController.combinedSearchWithFilters)
-// Add this to your existing router file
-router.post("/initiatePayout", validateUser, ProviderController.initiatePayout)
-router.get("/payout/status/:payoutId", validateUser, ProviderController.getPayoutStatus)
-router.get("/payouts/history", validateUser, ProviderController.getPayoutHistory)
-// Add this route for handling webhooks (should be before other middleware)
-router.post("/webhook/payout", express.raw({ type: 'application/json' }), ProviderController.handlePayoutWebhook)
+
+
+router.post("/lockSlots", validateUser, ProviderController.lockSlots)
+router.post("/releaseLockedSlots", validateUser, ProviderController.releaseLockedSlots)
+router.post("/confirmPayment", validateUser, ProviderController.confirmPayment)
+
 export default router
