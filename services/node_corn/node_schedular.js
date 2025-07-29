@@ -1,5 +1,5 @@
 import cron from "node-cron"
-import { Venue, Shop, Individual, Payout } from "../../models/index.js"
+import { Venue, Shop, Individual, Payout, Booking } from "../../models/index.js"
 
 import EmailReminderService from "./reminder.js"
 import axios from "axios"
@@ -556,6 +556,32 @@ class EmailReminderScheduler {
     }
 
     initializeCronJobs() {
+
+        cron.schedule('*/5 * * * *', async () => {
+            try {
+                const now = new Date();
+                const expiredBookings = await Booking.find({
+                    isLocked: true,
+                    isPaymentConfirm: false,
+                    lockedUntil: { $lt: now },
+                });
+
+                if (expiredBookings.length > 0) {
+                    console.log(`Found ${expiredBookings.length} expired bookings. Releasing slots...`);
+
+                    // Delete each expired booking
+                    for (const booking of expiredBookings) {
+                        await Booking.findByIdAndDelete(booking._id);
+                        console.log(`Released slots for booking ${booking._id}`);
+                    }
+                } else {
+                    console.log('No expired bookings found.');
+                }
+            } catch (error) {
+                console.error('Error releasing locked slots:', error);
+            }
+        });
+
         cron.schedule("30 9 * * *", async () => {
             console.log(`[${new Date().toISOString()}] Running payout cron job...`)
             await this.processVenuePayouts()

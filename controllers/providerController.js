@@ -170,119 +170,7 @@ const ProviderController = {
     },
     //#endregion
 
-    async lockSlots(req, res, next) {
-        const validation = Joi.object({
-            venueId: Joi.string().required(),
-            sport: Joi.string().required(),
-            date: Joi.string()
-                .pattern(/^\d{4}-\d{2}-\d{2}$/)
-                .required(),
-            selectedSlots: Joi.array()
-                .items(
-                    Joi.object({
-                        startTime: Joi.string().required(),
-                        endTime: Joi.string().required(),
-                        playableArea: Joi.number().min(1).required(),
-                    }),
-                )
-                .required(),
-            sessionId: Joi.string().required(),
-        })
 
-        const { error } = validation.validate(req.body)
-        if (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
-        }
-
-        try {
-            const userInfo = global.user
-            const result = await ProviderServices.lockSlots({
-                ...req.body,
-                userId: userInfo.userId,
-            })
-
-            return res.json({
-                success: true,
-                message: "Slots locked successfully",
-                data: result,
-            })
-        } catch (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to lock slots: ${error}`))
-        }
-    },
-
-    async releaseLockedSlots(req, res, next) {
-        const validation = Joi.object({
-            venueId: Joi.string().required(),
-            sport: Joi.string().required(),
-            date: Joi.string()
-                .pattern(/^\d{4}-\d{2}-\d{2}$/)
-                .required(),
-            sessionId: Joi.string().required(),
-            selectedSlots: Joi.array()
-                .items(
-                    Joi.object({
-                        startTime: Joi.string().required(),
-                        endTime: Joi.string().required(),
-                        playableArea: Joi.number().min(1).required(),
-                    }),
-                )
-                .required()
-        })
-
-        const { error } = validation.validate(req.body)
-        if (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
-        }
-
-        try {
-            const userInfo = global.user
-            const result = await ProviderServices.releaseLockedSlots({
-                ...req.body,
-                userId: userInfo.userId,
-            })
-
-            return res.json({
-                success: true,
-                message: "Locked slots released successfully",
-                data: result,
-            })
-        } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to release locked slots:", error))
-        }
-    },
-
-    async confirmPayment(req, res, next) {
-        const validation = Joi.object({
-            venueId: Joi.string().required(),
-            sport: Joi.string().required(),
-            date: Joi.string()
-                .pattern(/^\d{4}-\d{2}-\d{2}$/)
-                .required(),
-            paymentId: Joi.string().required(),
-            bookingData: Joi.object().required(),
-        })
-
-        const { error } = validation.validate(req.body)
-        if (error) {
-            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
-        }
-
-        try {
-            const result = await ProviderServices.confirmPayment({
-                ...req.body,
-                userId: req.user.id,
-            })
-
-            return res.json({
-                success: true,
-                message: "Payment confirmed and booking finalized",
-                data: result,
-            })
-        } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to confirm payment:", error))
-        }
-    },
 
     //#region Book Venue 
     async bookVenue(req, res, next) {
@@ -691,7 +579,7 @@ const ProviderController = {
         }
         try {
             const result = await ProviderServices.checkMultipleSlots(req.body);
-            console.log(result);
+
             return res.json({
                 success: true,
                 message: "Booked slots retrieved successfully",
@@ -1168,6 +1056,170 @@ const ProviderController = {
     },
     //#endregion
 
+    //#region Lock Slots
+    async lockSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.string()
+                .pattern(/^\d{4}-\d{2}-\d{2}$/)
+                .required(),
+            startTime: Joi.string().required(),
+            endTime: Joi.string().required(),
+            playableArea: Joi.number().min(1).required(),
+            sessionId: Joi.string().required(),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.lockSlots({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Slots locked successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to lock slots: ${error}`))
+        }
+    },
+
+    //#region ReleaseLockedSlots
+    async releaseLockedSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.string()
+                .pattern(/^\d{4}-\d{2}-\d{2}$/)
+                .required(),
+            startTime: Joi.string().required(),
+            endTime: Joi.string().required(),
+            playableArea: Joi.number().min(1).required(),
+            sessionId: Joi.string().required(),
+        });
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.releaseLockedSlots({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Locked slots released successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to release locked slots:", error))
+        }
+    },
+
+    //#region releaseMultipleSlots
+    async releaseMultipleSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            sessionId: Joi.string().required(),
+        });
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.releaseMultipleSlots({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Locked slots released successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to release locked slots:", error))
+        }
+    },
+    async reserveMultipleSlots(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            date: Joi.array()
+                .items(Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/))
+                .min(1)
+                .required(),
+            playableArea: Joi.number().min(1).required(),
+            sessionId: Joi.string().required(),
+        })
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.reserveMultipleSlots({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Multiple slots reserved successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to reserve multiple slots: ${error}`))
+        }
+    },
+    //#region Confirm Payment
+    async confirmPayment(req, res, next) {
+        const validation = Joi.object({
+            venueId: Joi.string().required(),
+            sport: Joi.string().required(),
+            sessionId: Joi.string().required(),
+            razorpayPaymentId: Joi.string().required(),
+            durationInHours: Joi.number().required(),
+            totalAmount: Joi.number().required(),
+        });
+
+        const { error } = validation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to validate request: ${error}`))
+        }
+
+        try {
+            const userInfo = global.user
+            const result = await ProviderServices.confirmPayment({
+                ...req.body,
+                userId: userInfo.userId,
+            })
+
+            return res.json({
+                success: true,
+                message: "Payment confirmed and booking finalized",
+                data: { updatedbooking: result },
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to confirm payment:", error))
+        }
+    },
     //#region getUserBookings
     async getUserBookings(req, res, next) {
         const validation = Joi.object({

@@ -2,13 +2,7 @@ import { Venue, Booking, User, Package, Individual, Category, Payout } from "../
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
 import mongoose from "mongoose"
-import Razorpay from "razorpay"
-import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/index.js";
 
-var razorpay = new Razorpay({
-  key_id: RAZORPAY_KEY_ID,
-  key_secret: RAZORPAY_KEY_SECRET,
-});
 const ProviderServices = {
 
   async createVenue(data) {
@@ -153,7 +147,7 @@ const ProviderServices = {
   },
 
 
-  async lockSlots({ venueId, sport, date, selectedSlots, userId, sessionId }) {
+  async lockSlots({ venueId, sport, date, startTime, endTime, playableArea, userId, sessionId }) {
     try {
       const venue = await Venue.findById(venueId)
       if (!venue) {
@@ -163,6 +157,13 @@ const ProviderServices = {
       if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
         throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
       }
+      const selectedSlots = [
+        {
+          startTime,
+          endTime,
+          playableArea,
+        },
+      ]
 
       const queryDate = new Date(date + "T00:00:00.000Z")
       const startOfDay = new Date(queryDate)
@@ -170,38 +171,36 @@ const ProviderServices = {
       const endOfDay = new Date(queryDate)
       endOfDay.setUTCHours(23, 59, 59, 999)
 
-      // for (const slot of selectedSlots) {
-      //   const existingBooking = await Booking.findOne({
-      //     venueId,
-      //     sport: sport,
-      //     $or: [
-      //       { bookingStatus: { $in: ["confirmed", "pending", "completed"] } },
-      //       {
-      //         isLocked: true,
-      //         lockedUntil: { $gt: new Date() },
-      //         userId: { $ne: userId },
-      //       },
-      //     ],
-      //     scheduledDates: {
-      //       $elemMatch: {
-      //         date: startOfDay,
-      //         timeSlots: {
-      //           $elemMatch: {
-      //             startTime: slot.startTime,
-      //             endTime: slot.endTime,
-      //             playableArea: slot.playableArea,
-      //           },
-      //         },
-      //       },
-      //     },
-      //   })
+      const existingBooking = await Booking.findOne({
+        venueId,
+        sport: sport,
+        $or: [
+          { bookingStatus: { $in: ["confirmed", "pending", "completed"] } },
+          {
+            isLocked: true,
+            lockedUntil: { $gt: new Date() },
+            userId: { $ne: userId },
+          },
+        ],
+        scheduledDates: {
+          $elemMatch: {
+            date: startOfDay,
+            timeSlots: {
+              $elemMatch: {
+                startTime: startTime,
+                endTime: endTime,
+                playableArea: playableArea,
+              },
+            },
+          },
+        },
+      })
 
-      //   if (existingBooking) {
-      //     throw CustomErrorHandler.badRequest(
-      //       `Slot ${slot.startTime} - ${slot.endTime} on playable area ${slot.playableArea} is not available`,
-      //     )
-      //   }
-      // }
+      if (existingBooking) {
+        throw CustomErrorHandler.badRequest(
+          `Slot ${startTime} - ${endTime} on playable area ${playableArea} is not available`,
+        )
+      }
 
       const lockedUntil = new Date(Date.now() + 5 * 60 * 1000)
       const booking = await Booking.findOne({
@@ -287,15 +286,12 @@ const ProviderServices = {
     }
   },
 
-  async releaseLockedSlots({ venueId, sport, date, userId, selectedSlots, sessionId }) {
+  async releaseLockedSlots({ venueId, sport, date, userId, startTime, endTime, playableArea, sessionId }) {
     try {
-      const queryDate = new Date(date + "T00:00:00.000Z")
-      const startOfDay = new Date(queryDate)
-      startOfDay.setUTCHours(0, 0, 0, 0)
-      const endOfDay = new Date(queryDate)
-      endOfDay.setUTCHours(23, 59, 59, 999)
 
       const booking = await Booking.findOne({
+        venueId: venueId,
+        sport: sport,
         sessionId: sessionId,
         userId: userId,
         isLocked: true,
@@ -306,31 +302,28 @@ const ProviderServices = {
         throw CustomErrorHandler.notFound("No locked booking found for this session")
       }
 
-      // Find the scheduled date entry for the given date
-      const scheduledDateEntry = booking.scheduledDates.find((sched) => sched.date.toISOString().split("T")[0] === date)
+      const scheduledDateEntry = booking.scheduledDates.find(
+        (sched) => sched.date.toISOString().split("T")[0] === date,
+      )
 
       if (!scheduledDateEntry) {
         throw CustomErrorHandler.notFound("No scheduled date entry found for the given date")
       }
 
-      // Remove the specified slots from the scheduled date entry
-      scheduledDateEntry.timeSlots = scheduledDateEntry.timeSlots.filter((slot) => {
-        return !selectedSlots.some(
-          (selectedSlot) =>
-            slot.startTime === selectedSlot.startTime &&
-            slot.endTime === selectedSlot.endTime &&
-            slot.playableArea === selectedSlot.playableArea,
-        )
-      })
-
-      // If all slots for the date are removed, remove the scheduled date entry
+      scheduledDateEntry.timeSlots = scheduledDateEntry.timeSlots.filter(
+        (slot) =>
+          !(
+            slot.startTime === startTime &&
+            slot.endTime === endTime &&
+            slot.playableArea === playableArea
+          )
+      )
       if (scheduledDateEntry.timeSlots.length === 0) {
         booking.scheduledDates = booking.scheduledDates.filter(
           (sched) => sched.date.toISOString().split("T")[0] !== date,
         )
       }
 
-      // If no slots remain across all scheduledDates, delete the booking
       if (booking.scheduledDates.length === 0) {
         await Booking.findByIdAndDelete(booking._id)
         console.log(`🗑️ Deleted booking ${booking._id} as no slots remain`)
@@ -340,67 +333,172 @@ const ProviderServices = {
         }
       }
 
-      // Save the updated booking
       await booking.save()
 
-      console.log(`🔓 Released slots for booking ${booking._id}`)
+      console.log(`🔓 Released 1 slot for booking ${booking._id}`)
 
       return {
-        releasedCount: selectedSlots.length,
-        message: `Released ${selectedSlots.length} locked slots`,
+        releasedCount: 1,
+        message: `Released 1 locked slot`,
       }
     } catch (error) {
-      console.log("Failed to release locked slots:", error)
+      console.log("Failed to release locked slot:", error)
       throw error
     }
   },
-
-  async confirmPayment({ venueId, sport, date, paymentId, bookingData, userId }) {
+  async releaseMultipleSlots({ venueId, sport, userId, sessionId }) {
     try {
-      const queryDate = new Date(date + "T00:00:00.000Z")
-      const startOfDay = new Date(queryDate)
-      startOfDay.setUTCHours(0, 0, 0, 0)
-      const endOfDay = new Date(queryDate)
-      endOfDay.setUTCHours(23, 59, 59, 999)
 
-      // Find and update locked bookings to confirmed
-      const lockedBookings = await Booking.find({
+      const booking = await Booking.findOne({
         venueId: venueId,
-        sport: new RegExp(`^${sport}$`, "i"),
+        sport: sport,
+        sessionId: sessionId,
+        userId: userId,
+        isLocked: true,
+        isPaymentConfirm: false,
+      })
+
+      if (!booking) {
+        throw CustomErrorHandler.notFound("No locked booking found for this session")
+      }
+
+      await Booking.findByIdAndDelete(booking._id);
+      return true
+    } catch (error) {
+      console.log("Failed to release locked slot:", error)
+      throw error
+    }
+  },
+  async reserveMultipleSlots({ venueId, sport, date, playableArea, userId, sessionId }) {
+    try {
+      const venue = await Venue.findById(venueId)
+      if (!venue) {
+        throw CustomErrorHandler.notFound("Venue not found")
+      }
+
+      if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
+        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
+      }
+
+      const reservedUntil = new Date(Date.now() + 5 * 60 * 1000)
+      const scheduledDates = []
+
+      for (const dateString of date) {
+        const queryDate = new Date(dateString + "T00:00:00.000Z")
+        const requestedDate = DateTime.fromJSDate(queryDate)
+        const dayName = requestedDate.toFormat("cccc")
+        const dayTiming = venue.venue_timeslots[dayName]
+
+        if (!dayTiming || !dayTiming.isOpen) {
+          continue
+        }
+        const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime)
+
+        const startOfDay = new Date(queryDate)
+        startOfDay.setUTCHours(0, 0, 0, 0)
+        const endOfDay = new Date(queryDate)
+        endOfDay.setUTCHours(23, 59, 59, 999)
+
+        const existingBookings = await Booking.find({
+          venueId,
+          sport: new RegExp(`^${sport}$`, "i"),
+          $or: [
+            { bookingStatus: { $in: ["confirmed", "pending", "completed"] } },
+            {
+              isLocked: true,
+              lockedUntil: { $gt: new Date() },
+              userId: { $ne: userId },
+            },
+          ],
+          "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
+        })
+
+        const bookedSlots = new Set()
+        existingBookings.forEach((booking) => {
+          booking.scheduledDates.forEach((dateSlot) => {
+            dateSlot.timeSlots.forEach((slot) => {
+              if (slot.playableArea === playableArea) {
+                bookedSlots.add(`${slot.startTime}-${slot.endTime}`)
+              }
+            })
+          })
+        })
+        const availableSlots = allSlots
+          .filter((slot) => !bookedSlots.has(`${slot.startTime}-${slot.endTime}`))
+          .map((slot) => ({
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            playableArea,
+          }))
+
+        if (availableSlots.length > 0) {
+          scheduledDates.push({
+            date: queryDate,
+            timeSlots: availableSlots,
+          })
+        }
+      }
+
+      if (scheduledDates.length === 0) {
+        throw CustomErrorHandler.badRequest("No available slots found for the selected dates")
+      }
+      const reservationBooking = new Booking({
+        venueId,
+        userId,
+        sport,
+        bookingPattern: "multiple_dates",
+        scheduledDates,
+        durationInHours: scheduledDates.reduce((total, dateSlot) => total + dateSlot.timeSlots.length, 0),
+        totalAmount: 0,
+        paymentStatus: "pending",
+        bookingStatus: "pending",
+        isLocked: true,
+        reservedUntil,
+        sessionId: sessionId,
+        isPaymentConfirm: false,
+      });
+
+      await reservationBooking.save()
+
+      return {
+        bookingId: reservationBooking._id,
+        reservedSlots: scheduledDates,
+        reservedUntil,
+        sessionId,
+        message: `${scheduledDates.length} date(s) with available slots reserved successfully for 5 minutes`,
+      }
+    } catch (error) {
+      console.log("Failed to reserve multiple slots:", error)
+      throw error
+    }
+  },
+  async confirmPayment({ venueId, sport, sessionId, razorpayPaymentId, userId, durationInHours, totalAmount }) {
+    try {
+      const lockedBooking = await Booking.findOne({
+        venueId: venueId,
+        sessionId: sessionId,
+        sport: sport,
         lockedBy: userId,
         isLocked: true,
         isPaymentConfirm: false,
-        "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
       })
 
-      if (lockedBookings.length === 0) {
+      if (lockedBooking.length === 0) {
         throw CustomErrorHandler.badRequest("No locked slots found for confirmation")
       }
 
-      // Update all locked bookings with payment information
-      const updatePromises = lockedBookings.map((booking) =>
-        Booking.findByIdAndUpdate(
-          booking._id,
-          {
-            ...bookingData,
-            paymentId,
-            isPaymentConfirm: true,
-            isLocked: false,
-            bookingStatus: "confirmed",
-            paymentStatus: "successful",
-          },
-          { new: true },
-        ),
-      )
 
-      const updatedBookings = await Promise.all(updatePromises)
-
-      console.log(`✅ Confirmed payment for ${updatedBookings.length} bookings`)
-
-      return {
-        confirmedBookings: updatedBookings,
-        message: `Payment confirmed for ${updatedBookings.length} slots`,
-      }
+      lockedBooking.isPaymentConfirm = true;
+      lockedBooking.isLocked = true;
+      lockedBooking.bookingStatus = "confirmed";
+      lockedBooking.lockedUntil = undefined;
+      lockedBooking.paymentStatus = "successful";
+      lockedBooking.razorpayPaymentId = razorpayPaymentId;
+      lockedBooking.durationInHours = durationInHours;
+      lockedBooking.totalAmount = totalAmount;
+      await lockedBooking.save();
+      const updatedBookings = Booking.findById(lockedBooking._id);
+      return updatedBookings;
     } catch (error) {
       console.log("Failed to confirm payment:", error)
       throw error
@@ -2331,8 +2429,6 @@ const ProviderServices = {
             const currentSlotTime = DateTime.fromFormat(currentTime, "h:mm a");
             return slotStartTime >= currentSlotTime;
           });
-
-          console.log(`Time filtering applied for today (${requestedDateStr}). Slots before: ${allSlots.length}, after: ${filteredSlots.length}`);
         }
 
         // Step 3: Check for conflicts with existing bookings

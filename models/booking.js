@@ -48,8 +48,7 @@ const bookingSchema = new mongoose.Schema(
     scheduledDates: [scheduledDateSchema],
     durationInHours: {
       type: Number,
-      required: true,
-      min: 0.5,
+      required: true
     },
     totalAmount: {
       type: Number,
@@ -66,16 +65,12 @@ const bookingSchema = new mongoose.Schema(
       enum: ["pending", "confirmed", "cancelled", "completed"],
       default: "pending",
     },
-    // Time-sensitive booking fields
     isLocked: {
       type: Boolean,
       default: false,
     },
     lockedUntil: {
       type: Date,
-      required: function () {
-        return this.isLocked
-      },
     },
     isPaymentConfirm: {
       type: Boolean,
@@ -87,20 +82,10 @@ const bookingSchema = new mongoose.Schema(
         return this.isLocked
       },
     },
-    // Existing fields
     cancellationReason: {
       type: String,
     },
-    paymentId: {
-      type: String,
-    },
-    razorpayOrderId: {
-      type: String,
-    },
     razorpayPaymentId: {
-      type: String,
-    },
-    razorpaySignature: {
       type: String,
     },
   },
@@ -109,7 +94,6 @@ const bookingSchema = new mongoose.Schema(
   },
 )
 
-// Existing indexes
 bookingSchema.index({ venueId: 1, "scheduledDates.date": 1 })
 bookingSchema.index({ userId: 1, createdAt: -1 })
 bookingSchema.index({ bookingStatus: 1 })
@@ -122,7 +106,6 @@ bookingSchema.index({
   "scheduledDates.timeSlots.playableArea": 1,
 })
 
-// New indexes for time-sensitive booking
 bookingSchema.index({ isLocked: 1, lockedUntil: 1, lockedBy: 1 })
 bookingSchema.index({ sessionId: 1 })
 bookingSchema.index({ lockedUntil: 1 }, { expireAfterSeconds: 0 })

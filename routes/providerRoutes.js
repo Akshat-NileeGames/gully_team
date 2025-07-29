@@ -76,12 +76,9 @@ router.post("/getNearbyindividuals", validateUser, ProviderController.getNearbyI
 router.post("/searchVenues", ProviderController.searchVenuesWithFilters)
 router.post("/searchIndividuals", ProviderController.searchIndividualsWithFilters)
 
-// Combined search with filters
-// router.post("/combinedSearch", ProviderController.combinedSearchWithFilters)
-
-
 router.post("/lockSlots", validateUser, ProviderController.lockSlots)
 router.post("/releaseLockedSlots", validateUser, ProviderController.releaseLockedSlots)
+router.post("/releaseMultipleSlots", validateUser, ProviderController.releaseMultipleSlots)
 router.post("/confirmPayment", validateUser, ProviderController.confirmPayment)
-
+router.post("/reserveMultipleSlots", validateUser, ProviderController.reserveMultipleSlots)
 export default router
