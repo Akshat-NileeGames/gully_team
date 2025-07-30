@@ -1081,7 +1081,7 @@ const ProviderController = {
                 ...req.body,
                 userId: userInfo.userId,
             })
-
+            console.log(result);
             return res.json({
                 success: true,
                 message: "Slots locked successfully",
@@ -1196,7 +1196,11 @@ const ProviderController = {
             sessionId: Joi.string().required(),
             razorpayPaymentId: Joi.string().required(),
             durationInHours: Joi.number().required(),
+            baseAmount: Joi.number().required(),
             totalAmount: Joi.number().required(),
+            processingFee: Joi.number().required(),
+            convenienceFee: Joi.number().required(),
+            gstamount: Joi.number().required(),
         });
 
         const { error } = validation.validate(req.body)

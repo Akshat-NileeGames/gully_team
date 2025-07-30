@@ -170,7 +170,7 @@ const ProviderServices = {
       startOfDay.setUTCHours(0, 0, 0, 0)
       const endOfDay = new Date(queryDate)
       endOfDay.setUTCHours(23, 59, 59, 999)
-
+      var isAlreadyLocked = false;
       const existingBooking = await Booking.findOne({
         venueId,
         sport: sport,
@@ -197,12 +197,16 @@ const ProviderServices = {
       })
 
       if (existingBooking) {
-        throw CustomErrorHandler.badRequest(
-          `Slot ${startTime} - ${endTime} on playable area ${playableArea} is not available`,
-        )
+        isAlreadyLocked = true;
+        return {
+          message: CustomErrorHandler.badRequest(
+            `Slot ${startTime} - ${endTime} on playable area ${playableArea} is not available`,
+          ),
+          isAlreadyLocked: isAlreadyLocked
+        }
       }
 
-      const lockedUntil = new Date(Date.now() + 5 * 60 * 1000)
+      const lockedUntil = new Date(Date.now() + 10 * 60 * 1000)
       const booking = await Booking.findOne({
         sessionId,
         userId,
@@ -240,12 +244,12 @@ const ProviderServices = {
         }
 
         await booking.save()
-
         return {
           bookingId: booking._id,
           lockedSlots: selectedSlots,
           lockedUntil,
           sessionId,
+          isAlreadyLocked,
           message: `${selectedSlots.length} slots added and locked to existing session`,
         }
       }
@@ -262,6 +266,10 @@ const ProviderServices = {
           },
         ],
         durationInHours: 1,
+        baseAmount: 0,
+        processingFee: 0,
+        convenienceFee: 0,
+        gstamount: 0,
         totalAmount: 0,
         paymentStatus: "pending",
         bookingStatus: "pending",
@@ -278,7 +286,7 @@ const ProviderServices = {
         lockedSlots: selectedSlots,
         lockedUntil,
         sessionId,
-        message: `${selectedSlots.length} slots locked successfully for 5 minutes`,
+        message: `${selectedSlots.length} slots locked successfully for 10 minutes`,
       }
     } catch (error) {
       console.log("Failed to lock slots:", error)
@@ -359,7 +367,7 @@ const ProviderServices = {
       })
 
       if (!booking) {
-        throw CustomErrorHandler.notFound("No locked booking found for this session")
+        return CustomErrorHandler.notFound("No locked booking found for this session")
       }
 
       await Booking.findByIdAndDelete(booking._id);
@@ -380,7 +388,7 @@ const ProviderServices = {
         throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
       }
 
-      const reservedUntil = new Date(Date.now() + 5 * 60 * 1000)
+      const reservedUntil = new Date(Date.now() + 10 * 60 * 1000)
       const scheduledDates = []
 
       for (const dateString of date) {
@@ -449,6 +457,10 @@ const ProviderServices = {
         bookingPattern: "multiple_dates",
         scheduledDates,
         durationInHours: scheduledDates.reduce((total, dateSlot) => total + dateSlot.timeSlots.length, 0),
+        baseAmount: 0,
+        processingFee: 0,
+        convenienceFee: 0,
+        gstamount: 0,
         totalAmount: 0,
         paymentStatus: "pending",
         bookingStatus: "pending",
@@ -472,7 +484,7 @@ const ProviderServices = {
       throw error
     }
   },
-  async confirmPayment({ venueId, sport, sessionId, razorpayPaymentId, userId, durationInHours, totalAmount }) {
+  async confirmPayment({ venueId, sport, sessionId, razorpayPaymentId, userId, durationInHours, totalAmount, convenienceFee, processingFee, gstamount, baseAmount }) {
     try {
       const lockedBooking = await Booking.findOne({
         venueId: venueId,
@@ -495,7 +507,19 @@ const ProviderServices = {
       lockedBooking.paymentStatus = "successful";
       lockedBooking.razorpayPaymentId = razorpayPaymentId;
       lockedBooking.durationInHours = durationInHours;
+      lockedBooking.baseAmount = baseAmount;
       lockedBooking.totalAmount = totalAmount;
+      lockedBooking.processingFee = processingFee;
+      lockedBooking.convenienceFee = convenienceFee;
+      lockedBooking.gstamount = gstamount;
+      await Venue.findByIdAndUpdate(venueId, {
+        $inc: {
+          totalBookings: 1,
+          amountNeedToPay: baseAmount,
+          totalAmount: baseAmount,
+        },
+      });
+
       await lockedBooking.save();
       const updatedBookings = Booking.findById(lockedBooking._id);
       return updatedBookings;

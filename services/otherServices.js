@@ -1790,7 +1790,7 @@ const otherServices = {
     const receipt = crypto.randomBytes(10).toString("hex");
 
     const paymentData = {
-      amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
+      amount: data.amount * 100,
       currency: "INR",
       receipt: `order_receipt_${receipt}`,
       payment_capture: 1, // Auto capture payment

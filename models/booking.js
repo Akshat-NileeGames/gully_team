@@ -50,6 +50,26 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       required: true
     },
+    baseAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    processingFee: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    convenienceFee: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    gstamount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
     totalAmount: {
       type: Number,
       required: true,
@@ -65,6 +85,7 @@ const bookingSchema = new mongoose.Schema(
       enum: ["pending", "confirmed", "cancelled", "completed"],
       default: "pending",
     },
+
     isLocked: {
       type: Boolean,
       default: false,
