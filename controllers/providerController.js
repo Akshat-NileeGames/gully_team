@@ -64,10 +64,6 @@ const ProviderController = {
                     }),
                 )
                 .optional(),
-            paymentMethods: Joi.array()
-                .items(Joi.string().valid("Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"))
-                .min(1)
-                .required(),
             upiId: Joi.string()
                 .pattern(/^[\w.-]+@[\w]+$/)
                 .required(),
@@ -108,6 +104,107 @@ const ProviderController = {
         }
     },
     //#endregion
+
+    //#region Edit Venue
+    async editVenue(req, res, next) {
+        const venueValidation = Joi.object({
+            venueId: Joi.string().required(),
+            venue_name: Joi.string().optional(),
+            venue_description: Joi.string().optional(),
+            venue_address: Joi.string().optional(),
+            venue_contact: Joi.string()
+                .pattern(/^[0-9]{10}$/)
+                .optional(),
+            venue_type: Joi.string().valid("Open Venue", "Turf", "Stadium").optional(),
+            venue_timeslots: Joi.object()
+                .keys({
+                    Monday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                    Tuesday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                    Wednesday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                    Thursday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                    Friday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                    Saturday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                    Sunday: Joi.object({
+                        isOpen: Joi.boolean().required(),
+                        openTime: Joi.string().optional(),
+                        closeTime: Joi.string().optional(),
+                    }),
+                })
+                .optional(),
+            venue_sports: Joi.array().items(Joi.string()).min(1).optional(),
+            sportPricing: Joi.array()
+                .items(
+                    Joi.object({
+                        sport: Joi.string().required(),
+                        perHourCharge: Joi.number().min(0).required(),
+                        sports_playable_area: Joi.number().min(0).required(),
+                        venue_surfacetype: Joi.string().required(),
+                    }),
+                )
+                .optional(),
+            upiId: Joi.string()
+                .pattern(/^[\w.-]+@[\w]+$/)
+                .required(),
+            venuefacilities: Joi.object({
+                isWaterAvailable: Joi.boolean(),
+                isParkingAvailable: Joi.boolean(),
+                isEquipmentProvided: Joi.boolean(),
+                isWashroomAvailable: Joi.boolean(),
+                isChangingRoomAvailable: Joi.boolean(),
+                isFloodlightAvailable: Joi.boolean(),
+                isSeatingLoungeAvailable: Joi.boolean(),
+                isFirstAidAvailable: Joi.boolean(),
+                isWalkingTrackAvailable: Joi.boolean(),
+            }),
+            venue_rules: Joi.array().items(Joi.string()).optional(),
+            venueImages: Joi.array().items(Joi.string()).min(1).max(5).required(),
+            selectLocation: Joi.string().required(),
+            longitude: Joi.number().required(),
+            latitude: Joi.number().required(),
+        })
+
+        const { error } = venueValidation.validate(req.body)
+        if (error) {
+            return next(CustomErrorHandler.badRequest(`Failed to Validate request:${error}`))
+        }
+
+        try {
+            const result = await ProviderServices.editVenue(req.body)
+            return res.status(200).json({
+                success: true,
+                message: "Venue created successfully",
+                data: result,
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to create Venue:", error))
+        }
+    },
+
+
     //#region GetAllGrounds
     async getAllGrounds(req, res, next) {
         try {
@@ -912,7 +1009,7 @@ const ProviderController = {
     //#region CreateIndividual
     async createIndividual(req, res, next) {
         const individualValidation = Joi.object({
-            profileImageUrl: Joi.string().optional(),
+            profileImageUrl: Joi.string().required(),
             fullName: Joi.string().required(),
             bio: Joi.string().required(),
             phoneNumber: Joi.string()
@@ -992,6 +1089,88 @@ const ProviderController = {
     },
     //#endregion
 
+    //#region editIndividualService
+    async editIndividualService(req, res, next) {
+        const individualValidation = Joi.object({
+            serviceId: Joi.string().required(),
+            profileImageUrl: Joi.string().optional(),
+            fullName: Joi.string().optional(),
+            bio: Joi.string().optional(),
+            phoneNumber: Joi.string()
+                .pattern(/^[0-9]{10}$/)
+                .optional(),
+            email: Joi.string().email().optional(),
+            panNumber: Joi.string()
+                .pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
+                .optional(),
+            yearOfExperience: Joi.number().min(0).optional(),
+            sportsCategories: Joi.array().items(Joi.string()).min(1).optional(),
+            selectedServiceTypes: Joi.array().items(Joi.string()).min(1).optional(),
+            serviceImageUrls: Joi.array().items(Joi.string()).min(1).optional(),
+            serviceOptions: Joi.object({
+                providesOneOnOne: Joi.boolean().default(false),
+                providesTeamService: Joi.boolean().default(false),
+                providesOnlineService: Joi.boolean().default(false),
+            }).optional(),
+            availableDays: Joi.array().items(Joi.string()).optional(),
+            supportedAgeGroups: Joi.array().items(Joi.string()).min(1).optional(),
+            education: Joi.array()
+                .items(
+                    Joi.object({
+                        degree: Joi.string().required(),
+                        field: Joi.string().required(),
+                        institution: Joi.string().required(),
+                        startDate: Joi.string().required(),
+                        endDate: Joi.string().optional().allow(null),
+                        isCurrently: Joi.boolean().default(false),
+                    }),
+                )
+                .optional(),
+            experience: Joi.array()
+                .items(
+                    Joi.object({
+                        title: Joi.string().required(),
+                        organization: Joi.string().required(),
+                        startDate: Joi.string().required(),
+                        endDate: Joi.string().optional().allow(null),
+                        isCurrently: Joi.boolean().default(false),
+                        description: Joi.string().optional(),
+                    }),
+                )
+                .optional(),
+            certificates: Joi.array()
+                .items(
+                    Joi.object({
+                        name: Joi.string().required(),
+                        issuedBy: Joi.string().required(),
+                        issueDate: Joi.string().required(),
+                    }),
+                )
+                .optional(),
+            selectLocation: Joi.string().optional(),
+            longitude: Joi.number().optional(),
+            latitude: Joi.number().optional(),
+        })
+
+        const { error } = individualValidation.validate(req.body)
+        if (error) {
+            return next(
+                CustomErrorHandler.badRequest(`Failed to Validate request: ${error.details.map((e) => e.message).join(", ")}`),
+            )
+        }
+
+        try {
+            const result = await ProviderServices.editIndividualService(req.body)
+            return res.status(200).json({
+                success: true,
+                message: "Individual service updated successfully",
+                data: { individual: result },
+            })
+        } catch (error) {
+            return next(CustomErrorHandler.badRequest("Failed to update individual service:", error))
+        }
+    },
+    
 
     //#region GetAllIndividual
     async getAllIndividuals(req, res, next) {
@@ -1081,12 +1260,11 @@ const ProviderController = {
                 ...req.body,
                 userId: userInfo.userId,
             })
-            console.log(result);
             return res.json({
                 success: true,
                 message: "Slots locked successfully",
                 data: result,
-            })
+            });
         } catch (error) {
             return next(CustomErrorHandler.badRequest(`Failed to lock slots: ${error}`))
         }

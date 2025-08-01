@@ -6,6 +6,7 @@ import validateUser from "../middlewares/validateUser.js"
 
 
 router.post("/createVenue", validateUser, ProviderController.createVenue)
+router.post("/editVenue", validateUser, ProviderController.editVenue)
 
 // ==================== Venue ROUTES ====================
 router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround)
@@ -38,6 +39,7 @@ router.get("/bookings/:venueId", validateUser, ProviderController.getBookingAnal
 router.get("/performance/:venueId", validateUser, ProviderController.getPerformanceAnalytics)
 // ==================== INDIVIDUAL ROUTES ====================
 router.post("/createIndividualService", validateUser, ProviderController.createIndividual)
+router.post("/editIndividualService", validateUser, ProviderController.editIndividualService)
 router.get("/getUserIndividualRegisteredService", validateUser, ProviderController.getUserIndividualRegisteredGround)
 router.get("/getIndividualById/:id", ProviderController.getIndividualById)
 router.get("/getAllIndividuals", ProviderController.getAllIndividuals)

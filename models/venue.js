@@ -139,12 +139,6 @@ const venueSchema = new mongoose.Schema(
         },
       },
     ],
-    paymentMethods: [
-      {
-        type: String,
-        enum: ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"],
-      },
-    ],
     upiId: {
       type: String,
       required: true,
@@ -198,6 +192,10 @@ const venueSchema = new mongoose.Schema(
       default: 0,
     },
     razorpay_fund_account_id: {
+      type: String,
+      default: ''
+    },
+    razorpaycontactId: {
       type: String,
       default: ''
     }

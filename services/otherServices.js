@@ -1804,7 +1804,12 @@ const otherServices = {
     const user = await User.findById(venue.userId);
     if (!user) return CustomErrorHandler.notFound("User Not Found");
 
-    const booking = await Booking.findById(data.bookingId);
+    const booking = await Booking.findOne({
+      venueId: data.venueId,
+      sport: data.sport,
+      sessionId: data.sessionId,
+      userId: userInfo.userId
+    })
     if (!booking) return CustomErrorHandler.notFound("Booking Not Found");
 
     const gstRate = 18 / 100;
@@ -1815,7 +1820,7 @@ const otherServices = {
       userId: userInfo.userId,
       venueId: data.venueId,
       razorpay_paymentId: data.razorpay_paymentId,
-      bookingId: data.bookingId,
+      bookingId: booking._id,
       amount: result.amount / 100,
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
@@ -2544,6 +2549,8 @@ const otherServices = {
       message: "Shop Order created successfully. Payment is pending.",
     };
   },
+
+
   /**
    * Creates a Razorpay Contact and Fund Account (VPA) for a Venue.
    * Updates the Venue document with the generated Razorpay IDs.
@@ -2555,7 +2562,6 @@ const otherServices = {
   async creatContactonRazorPay(venue) {
     try {
       const endpoint = 'https://api.razorpay.com/v1/contacts';
-      // Razorpay basic auth configuration
       const auth = {
         username: RAZORPAY_KEY_ID,
         password: RAZORPAY_KEY_SECRET
@@ -2564,11 +2570,9 @@ const otherServices = {
       const headers = {
         'Content-Type': 'application/json'
       };
-      // Payload for Razorpay Contact creation
       const payload = {
         name: venue.venue_name || `Venue_${venue._id}`,
         contact: venue.venue_contact || "0000000000",
-        email: venue.venue_email || `venue_${venue._id}@example.com`,
         type: "vendor",
         reference_id: "test",
         notes: {
@@ -2586,7 +2590,7 @@ const otherServices = {
           account_type: "vpa",
           contact_id: contactId,
           vpa: {
-            address: venue.venue_vpa || "demo@upi" // Use actual venue UPI if available
+            address: venue.venue_vpa || "demo@upi"
           }
         },
         { auth, headers }
@@ -2596,7 +2600,7 @@ const otherServices = {
       console.log("✅ Fund account created:", fundAccountId);
 
       await Venue.findByIdAndUpdate(venue._id, {
-        razorpayContactId: contactId,
+        razorpaycontactId: contactId,
         razorpayFundAccountId: fundAccountId
       });
 

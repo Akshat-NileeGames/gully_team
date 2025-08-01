@@ -2,7 +2,13 @@ import { Venue, Booking, User, Package, Individual, Category, Payout } from "../
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
 import mongoose from "mongoose"
+import ImageUploader from '../helpers/ImageUploader.js';
+import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/index.js";
+import axios from "axios";
 
+function isBase64Image(str) {
+  return /^data:image\/[a-zA-Z]+;base64,/.test(str);
+}
 const ProviderServices = {
 
   async createVenue(data) {
@@ -21,6 +27,27 @@ const ProviderServices = {
         }
       }
 
+      let venueImages = [];
+      console.log(data.venueImages);
+      if (Array.isArray(data.venueImages) && data.venueImages.length > 0) {
+        for (const image of data.venueImages) {
+          try {
+            const uploadedUrl = await ImageUploader.Upload(image, "VenueImage");
+
+            if (!uploadedUrl) {
+              throw new Error("Image upload failed or returned empty URL.");
+            }
+
+            venueImages.push(uploadedUrl);
+          } catch (uploadError) {
+            console.error(`Image upload failed:${uploadError}`);
+            throw CustomErrorHandler.serverError("Failed to upload one or more venue images.");
+          }
+        }
+      } else {
+        throw CustomErrorHandler.badRequest("Shop images are required.");
+      }
+
       const venue = new Venue({
         venue_name: data.venue_name,
         venue_description: data.venue_description,
@@ -29,11 +56,10 @@ const ProviderServices = {
         venue_type: data.venue_type,
         venue_sports: data.venue_sports,
         sportPricing: data.sportPricing || [],
-        paymentMethods: data.paymentMethods,
         upiId: data.upiId,
         venuefacilities: data.venuefacilities,
         venue_rules: data.venue_rules || [],
-        venueImages: data.venueImages,
+        venueImages: venueImages,
         venue_timeslots: data.venue_timeslots,
         locationHistory: {
           point: {
@@ -53,6 +79,89 @@ const ProviderServices = {
     } catch (error) {
       console.log("Failed to create Venue:", error)
       throw error
+    }
+  },
+
+  async editVenue(data) {
+    try {
+      const { venueId, ...fieldsToUpdate } = data;
+      const userInfo = global.user
+
+      const user = await User.findById(userInfo.userId)
+      if (!user) throw CustomErrorHandler.notFound("User not found")
+      if (fieldsToUpdate.sportPricing && fieldsToUpdate.sportPricing.length > 0) {
+        const providedSports = fieldsToUpdate.sportPricing.map((sp) => sp.sport)
+        const missingPricing = fieldsToUpdate.venue_sports.filter((sport) => !providedSports.includes(sport))
+        if (missingPricing.length > 0) {
+          throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`)
+        }
+      }
+      console.log(fieldsToUpdate.venueImages);
+      if (fieldsToUpdate.venueImages && Array.isArray(fieldsToUpdate.venueImages)) {
+        const processedImages = [];
+        for (let img of fieldsToUpdate.venueImages) {
+          if (isBase64Image(img)) {
+            const uploadedUrl = await ImageUploader.Upload(img, "VenueImage");
+            processedImages.push(uploadedUrl);
+          } else {
+            processedImages.push(img);
+          }
+        }
+        fieldsToUpdate.venueImages = processedImages;
+      }
+      await Venue.findByIdAndUpdate(
+        venueId,
+        { $set: fieldsToUpdate },
+        { new: true }
+      );
+
+      const venue = await Venue.findById(venueId, {
+        updatedAt: 0,
+        createdAt: 0,
+        __v: 0,
+      });
+      await this.editContactOnRazorPay(venue, venue.razorpaycontactId)
+      return venue
+    } catch (error) {
+      console.log("Failed to create Venue:", error)
+      throw error
+    }
+  },
+  //#endregion
+  async editContactOnRazorPay(venue, contactId) {
+    try {
+      const endpoint = `https://api.razorpay.com/v1/contacts/${contactId}`;
+
+      const auth = {
+        username: RAZORPAY_KEY_ID,
+        password: RAZORPAY_KEY_SECRET
+      };
+
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+
+      const payload = {
+        name: venue.venue_name || `Venue_${venue._id}`,
+        contact: venue.venue_contact || "0000000000",
+        type: "vendor",
+        reference_id: "test",
+        notes: {
+          source: "Venue Registration Update",
+          venueId: venue._id.toString()
+        }
+      };
+
+      const contactResponse = await axios.patch(endpoint, payload, { auth, headers });
+      console.log("✅ Razorpay contact updated:", contactResponse.data.id);
+      await Venue.findByIdAndUpdate(venue._id, {
+        razorpaycontactId: contactResponse.data.id
+      });
+
+      return true;
+    } catch (error) {
+      console.error("❌ Failed to update Razorpay contact:", error.response?.data || error.message);
+      throw new Error("Could not update contact on Razorpay");
     }
   },
 
@@ -307,7 +416,7 @@ const ProviderServices = {
       })
 
       if (!booking) {
-        throw CustomErrorHandler.notFound("No locked booking found for this session")
+        return CustomErrorHandler.notFound("No locked booking found for this session");
       }
 
       const scheduledDateEntry = booking.scheduledDates.find(
@@ -334,7 +443,7 @@ const ProviderServices = {
 
       if (booking.scheduledDates.length === 0) {
         await Booking.findByIdAndDelete(booking._id)
-        console.log(`🗑️ Deleted booking ${booking._id} as no slots remain`)
+        console.log(`Deleted booking ${booking._id} as no slots remain`)
         return {
           releasedCount: 1,
           message: "Booking deleted as no slots remain",
@@ -343,7 +452,7 @@ const ProviderServices = {
 
       await booking.save()
 
-      console.log(`🔓 Released 1 slot for booking ${booking._id}`)
+      console.log(`Released 1 slot for booking ${booking._id}`)
 
       return {
         releasedCount: 1,
@@ -354,6 +463,7 @@ const ProviderServices = {
       throw error
     }
   },
+
   async releaseMultipleSlots({ venueId, sport, userId, sessionId }) {
     try {
 
@@ -1122,7 +1232,6 @@ const ProviderServices = {
             venue_sports: 1,
             sportPricing: 1,
             perHourCharge: 1,
-            paymentMethods: 1,
             upiId: 1,
             venuefacilities: 1,
             venue_rules: 1,
@@ -2879,8 +2988,6 @@ const ProviderServices = {
         endDate: edu.endDate || null,
         isCurrently: edu.isCurrently || false,
       }))
-
-      // Process experience data
       const processedExperience = (data.experience || []).map((exp) => ({
         title: exp.title,
         organization: exp.organization,
@@ -2890,15 +2997,45 @@ const ProviderServices = {
         description: exp.description || "",
       }))
 
-      // Process certificates data
       const processedCertificates = (data.certificates || []).map((cert) => ({
         name: cert.name,
         issuedBy: cert.issuedBy,
         issueDate: cert.issueDate,
       }))
+      let serviceImages = [];
+      let profileImages = '';
+      if (Array.isArray(data.serviceImageUrls) && data.serviceImageUrls.length > 0) {
+        for (const image of data.serviceImageUrls) {
+          try {
+            const uploadedUrl = await ImageUploader.Upload(image, "IndividualServiceImage");
 
+            if (!uploadedUrl) {
+              throw new Error("Image upload failed or returned empty URL.");
+            }
+
+            serviceImages.push(uploadedUrl);
+          } catch (uploadError) {
+            console.error(`Image upload failed:${uploadError}`);
+            throw CustomErrorHandler.serverError("Failed to upload one or more venue images.");
+          }
+        }
+      } else {
+        throw CustomErrorHandler.badRequest("Shop images are required.");
+      }
+      if (data.profileImageUrl && data.profileImageUrl != null) {
+        try {
+          const uploadedUrl = await ImageUploader.Upload(data.profileImageUrl, "IndividualProfileImage");
+          if (!uploadedUrl) {
+            throw new Error("Image upload failed or returned empty URL.");
+          }
+          profileImages = uploadedUrl;
+        } catch (error) {
+          console.error(`Image upload failed:${error}`);
+          throw CustomErrorHandler.serverError("Failed to upload one or more Individual images.");
+        }
+      }
       const individual = new Individual({
-        profileImageUrl: data.profileImageUrl || "",
+        profileImageUrl: profileImages,
         fullName: data.fullName,
         bio: data.bio,
         phoneNumber: data.phoneNumber,
@@ -2907,7 +3044,7 @@ const ProviderServices = {
         yearOfExperience: data.yearOfExperience,
         sportsCategories: data.sportsCategories,
         selectedServiceTypes: data.selectedServiceTypes,
-        serviceImageUrls: data.serviceImageUrls,
+        serviceImageUrls: serviceImages,
         serviceOptions: data.serviceOptions,
         availableDays: data.availableDays,
         supportedAgeGroups: data.supportedAgeGroups,
@@ -2931,6 +3068,104 @@ const ProviderServices = {
       return individual;
     } catch (error) {
       console.log("Failed to create individual:", error)
+      throw error
+    }
+  },
+  async editIndividualService(data) {
+    try {
+      const { serviceId, ...fieldsToUpdate } = data
+      const userInfo = global.user
+      const user = await User.findById(userInfo.userId)
+      if (!user) throw CustomErrorHandler.notFound("User not found")
+
+      // Process education data
+      if (fieldsToUpdate.education) {
+        fieldsToUpdate.education = fieldsToUpdate.education.map((edu) => ({
+          degree: edu.degree,
+          field: edu.field,
+          institution: edu.institution,
+          startDate: edu.startDate,
+          endDate: edu.endDate || null,
+          isCurrently: edu.isCurrently || false,
+        }))
+      }
+
+      // Process experience data
+      if (fieldsToUpdate.experience) {
+        fieldsToUpdate.experience = fieldsToUpdate.experience.map((exp) => ({
+          title: exp.title,
+          organization: exp.organization,
+          startDate: exp.startDate,
+          endDate: exp.endDate || null,
+          isCurrently: exp.isCurrently || false,
+          description: exp.description || "",
+        }))
+      }
+
+      // Process certificates data
+      if (fieldsToUpdate.certificates) {
+        fieldsToUpdate.certificates = fieldsToUpdate.certificates.map((cert) => ({
+          name: cert.name,
+          issuedBy: cert.issuedBy,
+          issueDate: cert.issueDate,
+        }))
+      }
+
+      // Handle service images
+      if (fieldsToUpdate.serviceImageUrls && Array.isArray(fieldsToUpdate.serviceImageUrls)) {
+        const processedImages = []
+        for (const img of fieldsToUpdate.serviceImageUrls) {
+          if (isBase64Image(img)) {
+            const uploadedUrl = await ImageUploader.Upload(img, "IndividualServiceImage")
+            processedImages.push(uploadedUrl)
+          } else {
+            processedImages.push(img)
+          }
+        }
+        fieldsToUpdate.serviceImageUrls = processedImages
+      }
+
+      // Handle profile image
+      if (fieldsToUpdate.profileImageUrl && isBase64Image(fieldsToUpdate.profileImageUrl)) {
+        try {
+          const uploadedUrl = await ImageUploader.Upload(fieldsToUpdate.profileImageUrl, "IndividualProfileImage")
+          if (!uploadedUrl) {
+            throw new Error("Profile image upload failed or returned empty URL.")
+          }
+          fieldsToUpdate.profileImageUrl = uploadedUrl
+        } catch (error) {
+          console.error(`Profile image upload failed: ${error}`)
+          throw CustomErrorHandler.serverError("Failed to upload profile image.")
+        }
+      }
+
+      // Update location history if coordinates are provided
+      if (fieldsToUpdate.longitude && fieldsToUpdate.latitude) {
+        fieldsToUpdate.locationHistory = {
+          point: {
+            type: "Point",
+            coordinates: [Number.parseFloat(fieldsToUpdate.longitude), Number.parseFloat(fieldsToUpdate.latitude)],
+            selectLocation: fieldsToUpdate.selectLocation,
+          },
+        }
+
+        // Remove individual coordinate fields as they're now in locationHistory
+        delete fieldsToUpdate.longitude
+        delete fieldsToUpdate.latitude
+        delete fieldsToUpdate.selectLocation
+      }
+
+      await Individual.findByIdAndUpdate(serviceId, { $set: fieldsToUpdate }, { new: true })
+
+      const individual = await Individual.findById(serviceId, {
+        updatedAt: 0,
+        createdAt: 0,
+        __v: 0,
+      })
+
+      return individual
+    } catch (error) {
+      console.log("Failed to update individual service:", error)
       throw error
     }
   },
