@@ -754,11 +754,6 @@ class EmailTemplateService {
                   ${daysUntilExpiration <= 1 ? "Don't let your shop go offline tomorrow!" : "Secure your shop's future on our platform."}
                   Renew your subscription now to maintain uninterrupted service.
                 </p>
-                <a href="mailto:${this.companyInfo.supportEmail}?subject=Shop Package Renewal - ${shop.shopName}&body=Hello, I would like to renew my shop package for ${shop.shopName}. My current package expires on ${formattedDate}." 
-                   class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}"
-                   style="background-color: ${colors.text};">
-                  ${daysUntilExpiration <= 1 ? "🚨 Renew Immediately" : "🔄 Renew Package Now"}
-                </a>
               </div>
 
               <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 20px;">
@@ -1082,11 +1077,7 @@ class EmailTemplateService {
                   ${daysUntilExpiration <= 1 ? "Don't let your profile go offline tomorrow!" : "Continue building your coaching career with us."}
                   Renew your subscription now to maintain your professional presence.
                 </p>
-                <a href="mailto:${this.companyInfo.supportEmail}?subject=Service Provider Package Renewal - ${individual.fullName}&body=Hello, I would like to renew my service provider package. My current package expires on ${formattedDate}." 
-                   class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}"
-                   style="background-color: ${colors.text};">
-                  ${daysUntilExpiration <= 1 ? "🚨 Renew Immediately" : "🔄 Renew Package Now"}
-                </a>
+                
               </div>
 
               <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 20px;">
@@ -1363,16 +1354,6 @@ class EmailTemplateService {
                     <td class="label">Address:</td>
                     <td class="value">${venue.venue_address}</td>
                   </tr>
-                  ${
-                    venue.perHourCharge
-                      ? `
-                  <tr>
-                    <td class="label">Hourly Rate:</td>
-                    <td class="value">₹${venue.perHourCharge}/hour</td>
-                  </tr>
-                  `
-                      : ""
-                  }
                 </table>
               </div>
 
@@ -1420,11 +1401,6 @@ class EmailTemplateService {
                   ${daysUntilExpiration <= 1 ? "Don't let your venue go offline tomorrow!" : "Keep your venue visible to sports enthusiasts."}
                   Renew your subscription now to maintain uninterrupted bookings.
                 </p>
-                <a href="mailto:${this.companyInfo.supportEmail}?subject=Venue Package Renewal - ${venue.venue_name}&body=Hello, I would like to renew my venue package for ${venue.venue_name}. My current package expires on ${formattedDate}." 
-                   class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}"
-                   style="background-color: ${colors.text};">
-                  ${daysUntilExpiration <= 1 ? "🚨 Renew Immediately" : "🔄 Renew Package Now"}
-                </a>
               </div>
 
               <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 20px;">

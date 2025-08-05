@@ -32,6 +32,7 @@ import {
 import crypto from "crypto";
 
 import RazorpayHandler from "../helpers/RazorPayHandler.js";
+import path from "path";
 
 const otherServices = {
   async addhelpDesk(data) {
@@ -746,6 +747,35 @@ const otherServices = {
     const totalCount = await OrderHistory.countDocuments({ userId });
     const history = await OrderHistory.find({ userId: userId })
       .populate('PackageId')
+      .populate('individualId')
+      .populate({
+        path: "individualId",
+        populate: {
+          path: "packageRef"
+        }
+      })
+      .populate({
+        path: "venueId",
+        populate: {
+          path: "packageRef",
+        }
+
+      })
+      .populate({
+        path: "bookingId",
+        populate: [
+          {
+            path: "venueId",
+            populate: {
+              path: "packageRef"
+            }
+          },
+          {
+            path: "userId"
+          }
+        ]
+      })
+
       .populate({
         path: 'shopId',
         populate: [
@@ -753,21 +783,6 @@ const otherServices = {
           { path: 'AdditionalPackages' }
         ]
       })
-      // .populate({
-      //   path: 'tournamentId',
-      //   populate: [
-      //     { path: 'ballType', select: 'name' },
-      //     { path: 'gameType', select: 'name' },
-      //     { path: 'pitchType', select: 'name' },
-      //     { path: 'matchType', select: 'name' },
-      //     { path: 'tournamentCategory', select: 'name' },
-      //     { path: 'tournamentPrize', select: 'name' },
-      //     {
-      //       path: 'user',
-      //       select: 'email phoneNumber fullName locations.placeName',
-      //     },
-      //   ]
-      // })
       .populate({
         path: 'bannerId',
         select: '-locationHistory',
@@ -1017,22 +1032,17 @@ const otherServices = {
     if (!purchasedPackage) {
       return CustomErrorHandler.notFound("Package Not Found");
     }
-
-    const gstRate = 18 / 100;
-    const gstAmount = (result.amount / 100) * gstRate;
-    const amountBeforeGST = (result.amount / 100) - gstAmount;
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
       shopId: data.shopId,
       razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
-      amount: result.amount / 100,
-      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
-      coupon: data.coupon ?? "",
-      totalAmountWithGST: result.amount / 100,
-      gstAmount: gstAmount,
-      amountbeforegst: amountBeforeGST,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
@@ -1047,7 +1057,11 @@ const otherServices = {
       shopId: data.shopId,
       razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
-      amountPaid: 0,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
@@ -1065,7 +1079,15 @@ const otherServices = {
         purchasedPackage,
         result.id,
         orderHistory.receipt,
-        data.status
+        data.status,
+        {
+          baseAmount: data.baseAmount,
+          convenienceFee: data.convenienceFee,
+          processingFee: data.processingFee,
+          gstAmount: data.gstAmount,
+          totalAmount: data.totalAmount,
+          paymentMode: data.paymentMode || "Online Payment"
+        }
       );
     }, 10000);
     return {
@@ -1074,7 +1096,8 @@ const otherServices = {
     };
   },
 
-  async sendpaymentMail(userFor = "", user, shop, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS) {
+
+  async sendpaymentMail(userFor = "", user, shop, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS, paymentDetails = {}) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
@@ -1086,15 +1109,24 @@ const otherServices = {
       },
     });
 
-    if (!user || !user.email || !purchasedPackage || typeof purchasedPackage.price !== "number") {
+    if (!user || !user.email || !purchasedPackage) {
       console.error("Missing or invalid user/purchasedPackage info.");
       return;
     }
 
-    // Price breakdown with fallback
-    const baseAmount = (purchasedPackage.price * 0.82).toFixed(2);
-    const gstAmount = (purchasedPackage.price * 0.18).toFixed(2);
-    const totalAmount = purchasedPackage.price.toFixed(2);
+    // Use payment details from parameters or calculate from package price
+    const baseAmount = paymentDetails.baseAmount || (purchasedPackage.price / 1.18).toFixed(2);
+    const convenienceFee = paymentDetails.convenienceFee || 0;
+    const processingFee = paymentDetails.processingFee || 0;
+    const gstAmount = paymentDetails.gstAmount || (purchasedPackage.price * 0.18).toFixed(2);
+    const totalAmount = paymentDetails.totalAmount || purchasedPackage.price.toFixed(2);
+    const paymentMode = paymentDetails.paymentMode || "Online Payment";
+
+    // Helper function to format currency
+    const formatCurrency = (amount) => {
+      const num = parseFloat(amount) || 0;
+      return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
 
     // Determine status-specific content
     let headerTitle, headerColor, statusBadgeColor, statusMessage, introText, ctaText, ctaButtons;
@@ -1105,78 +1137,84 @@ const otherServices = {
       headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)";
       statusBadgeColor = "#fee2e2";
       statusMessage = `
-        <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
-          <p style="color: #b91c1c; margin: 0; font-size: 14px;">
-            We were unable to process your payment for the subscription package. Please check your payment details and try again.
-          </p>
-        </div>
-      `;
+      <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">❌ Payment Failed</p>
+        <p style="color: #b91c1c; margin: 0; font-size: 14px;">
+          We were unable to process your payment for the subscription package. No charges have been made to your account.
+        </p>
+      </div>
+    `;
       introText = `
-        We regret to inform you that your payment for the ${purchasedPackage.name} subscription package could not be processed. 
-        This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
-      `;
+      We regret to inform you that your payment for the ${purchasedPackage.name} subscription package could not be processed. 
+      This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
+    `;
       ctaText = "Please retry your payment to activate your subscription and access all features.";
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `;
+      <a href="#" class="cta-button" style="background-color: #2563eb;">
+        🔄 Retry Payment
+      </a>
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #059669;">
+        📧 Contact Support
+      </a>
+    `;
     } else if (PAYMENT_STATUS === "Pending") {
       headerTitle = "Payment Pending - Verification in Progress";
       headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)";
       statusBadgeColor = "#fef3c7";
       statusMessage = `
-        <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Pending</p>
-          <p style="color: #92400e; margin: 0; font-size: 14px;">
-            Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
-          </p>
-        </div>
-      `;
+      <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏳ Payment Pending</p>
+        <p style="color: #92400e; margin: 0; font-size: 14px;">
+          Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
+        </p>
+      </div>
+    `;
       introText = `
-        Thank you for purchasing the ${purchasedPackage.name} subscription package. Your payment is currently being processed.
-        You will receive a confirmation email once the payment is successfully verified.
-      `;
+      Thank you for purchasing the ${purchasedPackage.name} subscription package. Your payment is currently being processed.
+      You will receive a confirmation email once the payment is successfully verified.
+    `;
       ctaText = "You can check the status of your payment in your Transaction History.";
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `;
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        📧 Contact Support
+      </a>
+    `;
     } else {
       // Success or any other status
       headerTitle = "Subscription Package Successfully Purchased";
-      headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)";
-      statusBadgeColor = "#fef3c7"; // Keep the same for transaction ID
+      headerColor = "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)";
+      statusBadgeColor = "#dcfce7";
       statusMessage = `
-        <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
-          <p style="color: #166534; margin: 0; font-size: 14px;">
-            Your payment has been successfully processed and your subscription is now active.
-          </p>
-        </div>
-      `;
+      <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">✅ Payment Successful</p>
+        <p style="color: #166534; margin: 0; font-size: 14px;">
+          Your payment has been successfully processed and your subscription is now active.
+        </p>
+      </div>
+    `;
       introText = `
-        We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully Team — 
-        We're excited to have you onboard and look forward to supporting your business growth through the Gully Team.
-      `;
+      We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully Team — 
+      We're excited to have you onboard and look forward to supporting your business growth.
+    `;
       ctaText = "Thank you for joining us and trusting Gully Team with your business growth. We look forward to building something amazing together!";
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `;
+      <a href="#" class="cta-button" style="background-color: #16a34a;">
+        🏪 Access Dashboard
+      </a>
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        📧 Contact Support
+      </a>
+    `;
     }
 
     // Dynamic title & subject based on payment status
     let subject;
     if (PAYMENT_STATUS === "Failed") {
-      subject = "Payment Failed - Action Required for Your Gully Team Subscription";
+      subject = `Payment Failed - Action Required for Your Gully Team Shop Subscription`;
     } else if (PAYMENT_STATUS === "Pending") {
-      subject = "Payment Pending - Your Gully Team Subscription";
+      subject = `Payment Pending - Your Gully Team Shop Subscription`;
     } else {
-      subject = "Payment Confirmation – Gully Team Subscription";
+      subject = `Payment Confirmation – Gully Team Shop Subscription Activated`;
     }
 
     const mailOptions = {
@@ -1188,7 +1226,7 @@ const otherServices = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Status – Gully Team</title>
+  <title>Payment Status – Gully Team Shop Subscription</title>
   <style>
     body, table, td, p, a, li, blockquote {
       -webkit-text-size-adjust: 100%;
@@ -1249,7 +1287,7 @@ const otherServices = {
 
     .header p {
       margin: 8px 0 0 0;
-      color: #bfdbfe;
+      color: rgba(255, 255, 255, 0.8);
       font-size: 16px;
     }
 
@@ -1282,10 +1320,6 @@ const otherServices = {
       display: flex;
       align-items: center;
       gap: 8px;
-    }
-
-    .section-icon {
-      font-size: 20px;
     }
 
     .details-table {
@@ -1330,8 +1364,8 @@ const otherServices = {
 
     /* Payment Summary Styles */
     .payment-summary {
-      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-      border: 2px solid #0ea5e9;
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 2px solid #f59e0b;
       border-radius: 12px;
       padding: 25px;
       margin: 30px 0;
@@ -1340,7 +1374,7 @@ const otherServices = {
     .payment-title {
       font-size: 20px;
       font-weight: bold;
-      color: #0c4a6e;
+      color: #92400e;
       margin: 0 0 20px 0;
       text-align: center;
     }
@@ -1355,8 +1389,8 @@ const otherServices = {
     }
 
     .payment-table td {
-      padding: 14px 18px;
-      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6;
     }
 
     .payment-table tr:last-child td {
@@ -1365,25 +1399,20 @@ const otherServices = {
 
     .payment-table .payment-label {
       font-weight: 600;
-      color: #1e40af;
-      width: 45%;
-      font-size: 15px;
+      color: #92400e;
+      width: 60%;
+      font-size: 14px;
     }
 
     .payment-table .payment-value {
-      color: #374151;
-      font-size: 15px;
+      color: #92400e;
+      font-size: 14px;
       font-weight: 500;
-    }
-
-    .payment-table .status-${PAYMENT_STATUS.toLowerCase()} {
-      color: ${PAYMENT_STATUS === "Failed" ? "#dc2626" :
-          PAYMENT_STATUS === "Pending" ? "#92400e" : "#16a34a"};
-      font-weight: bold;
+      text-align: right;
     }
 
     .payment-table .total-row {
-      background-color: #1e40af;
+      background-color: #92400e;
       color: #ffffff;
       font-weight: bold;
       font-size: 16px;
@@ -1396,7 +1425,7 @@ const otherServices = {
 
     .transaction-id {
       background-color: ${statusBadgeColor};
-      border: 1px solid #f59e0b;
+      border: 1px solid ${PAYMENT_STATUS === "Failed" ? "#f87171" : PAYMENT_STATUS === "Pending" ? "#fbbf24" : "#86efac"};
       border-radius: 6px;
       padding: 12px 16px;
       margin: 20px 0;
@@ -1405,7 +1434,7 @@ const otherServices = {
 
     .transaction-id .label {
       font-size: 12px;
-      color: #92400e;
+      color: ${PAYMENT_STATUS === "Failed" ? "#b91c1c" : PAYMENT_STATUS === "Pending" ? "#92400e" : "#166534"};
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -1413,7 +1442,7 @@ const otherServices = {
 
     .transaction-id .value {
       font-size: 16px;
-      color: #92400e;
+      color: ${PAYMENT_STATUS === "Failed" ? "#b91c1c" : PAYMENT_STATUS === "Pending" ? "#92400e" : "#166534"};
       font-weight: bold;
       font-family: 'Courier New', monospace;
     }
@@ -1499,10 +1528,6 @@ const otherServices = {
       margin: 0 10px 10px 0;
     }
 
-    .cta-button.secondary {
-      background-color: #059669;
-    }
-
     .footer {
       background-color: #f9fafb;
       padding: 30px;
@@ -1585,7 +1610,7 @@ const otherServices = {
             <!-- Header -->
             <div class="header">
               <h1>${headerTitle}</h1>
-              <p>Gully Team Subscription</p>
+              <p>Gully Team Shop Subscription</p>
             </div>
 
             <!-- Content -->
@@ -1597,13 +1622,15 @@ const otherServices = {
               <!-- Status Message -->
               ${statusMessage}
 
+              <!-- Transaction ID -->
               <div class="transaction-id">
                 <div class="label">Transaction ID:</div>
                 <div class="value">${TRANSACTION_ID}</div>
               </div>
 
+              <!-- Payment Summary -->
               <div class="payment-summary">
-                <h3 class="payment-title">Payment Summary</h3>
+                <h3 class="payment-title">💰 Payment Breakdown</h3>
                 <table class="payment-table" role="presentation">
                   <tr>
                     <td class="payment-label">Package Name:</td>
@@ -1611,28 +1638,77 @@ const otherServices = {
                   </tr>
                   <tr>
                     <td class="payment-label">Base Amount:</td>
-                    <td class="payment-value">₹${baseAmount}</td>
+                    <td class="payment-value">₹${formatCurrency(baseAmount)}</td>
                   </tr>
+                  ${convenienceFee > 0 ? `
+                  <tr>
+                    <td class="payment-label">Convenience Fee (2.5%):</td>
+                    <td class="payment-value">₹${formatCurrency(convenienceFee)}</td>
+                  </tr>
+                  ` : ''}
+                  ${processingFee > 0 ? `
+                  <tr>
+                    <td class="payment-label">Processing Fee:</td>
+                    <td class="payment-value">₹${formatCurrency(processingFee)}</td>
+                  </tr>
+                  ` : ''}
                   <tr>
                     <td class="payment-label">GST (18%):</td>
-                    <td class="payment-value">₹${gstAmount}</td>
+                    <td class="payment-value">₹${formatCurrency(gstAmount)}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Payment Method:</td>
+                    <td class="payment-value">${paymentMode}</td>
                   </tr>
                   <tr>
                     <td class="payment-label">Payment Status:</td>
-                    <td class="payment-value status-${PAYMENT_STATUS.toLowerCase()}">${PAYMENT_STATUS}</td>
+                    <td class="payment-value" style="color: ${PAYMENT_STATUS === "Failed" ? "#dc2626" : PAYMENT_STATUS === "Pending" ? "#92400e" : "#16a34a"}; font-weight: bold;">
+                      ${PAYMENT_STATUS}
+                    </td>
                   </tr>
                   <tr>
                     <td class="payment-label">Receipt Number:</td>
                     <td class="payment-value">${RECEIPT_NUMBER}</td>
                   </tr>
                   <tr class="total-row">
-                    <td class="payment-label">Total Amount:</td>
-                    <td class="payment-value">₹${totalAmount}</td>
+                    <td class="payment-label">Total Amount ${PAYMENT_STATUS === "Failed" ? "Attempted" : PAYMENT_STATUS === "Pending" ? "Processing" : "Paid"}:</td>
+                    <td class="payment-value">₹${formatCurrency(totalAmount)}</td>
                   </tr>
                 </table>
               </div>
+
+              <!-- Package Details -->
               <h3 class="section-title">
-                Shop Information
+                📦 Package Information
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Package Name:</td>
+                  <td class="value">${purchasedPackage.name}</td>
+                </tr>
+                <tr>
+                  <td class="label">Duration:</td>
+                  <td class="value">${purchasedPackage.duration || 'N/A'} month${purchasedPackage.duration > 1 ? 's' : ''}</td>
+                </tr>
+                <tr>
+                  <td class="label">Max Media Allowed:</td>
+                  <td class="value">${purchasedPackage.maxMedia || 'Unlimited'}</td>
+                </tr>
+                <tr>
+                  <td class="label">Max Videos Allowed:</td>
+                  <td class="value">${purchasedPackage.maxVideos || 'Unlimited'}</td>
+                </tr>
+                ${purchasedPackage.features && purchasedPackage.features.length > 0 ? `
+                <tr>
+                  <td class="label">Features:</td>
+                  <td class="value">${purchasedPackage.features.join(', ')}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              <!-- Shop Information -->
+              <h3 class="section-title">
+                🏪 Shop Information
               </h3>
               <table class="details-table" role="presentation">
                 <tr>
@@ -1659,7 +1735,7 @@ const otherServices = {
 
               <!-- Owner Information -->
               <h3 class="section-title">
-                Owner Information
+                👤 Owner Information
               </h3>
               <table class="details-table" role="presentation">
                 <tr>
@@ -1683,42 +1759,68 @@ const otherServices = {
                   <td class="value">${shop.ownerPanNumber}</td>
                 </tr>
               </table>
+
+              <!-- Additional Details -->
               <h3 class="section-title">
-                Additional Details
+                📋 Additional Details
               </h3>
               <table class="details-table" role="presentation">
-               ${shop.LicenseNumber ? `<tr><td class="label">License Number:</td><td class="value">${shop.LicenseNumber}</td></tr>` : ''}
-                ${shop.GstNumber ? `<tr><td class="label">GST Number:</td><td class="value">${shop.GstNumber}</td></tr>` : ''}
+                ${shop.businesslicenseNumber ? `
+                <tr>
+                  <td class="label">License Number:</td>
+                  <td class="value">${shop.businesslicenseNumber}</td>
+                </tr>
+                ` : ''}
+                ${shop.gstNumber ? `
+                <tr>
+                  <td class="label">GST Number:</td>
+                  <td class="value">${shop.gstNumber}</td>
+                </tr>
+                ` : ''}
                 <tr>
                   <td class="label">Registered On:</td>
-                  <td class="value">${new Date(shop.joinedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                  <td class="value">${new Date(shop.joinedAt).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}</td>
+                </tr>
+                <tr>
+                  <td class="label">Payment Date:</td>
+                  <td class="value">${new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}</td>
                 </tr>
               </table>
 
               ${PAYMENT_STATUS !== "Failed" ? `
               <!-- Getting Started -->
               <div class="highlight-section">
-                <h3 class="highlight-title">Start with the basics:</h3>
+                <h3 class="highlight-title">🚀 Getting Started with Your Subscription:</h3>
                 <ul class="task-list">
                   <li class="task-item">
                     <span class="checkmark">✓</span>
-                    Log into your account and view your dashboard
+                    Log into your Gully Team dashboard to access your shop management tools
                   </li>
                   <li class="task-item">
                     <span class="checkmark">✓</span>
-                    Add your first product or update shop details
+                    Upload high-quality images of your shop and products (up to ${purchasedPackage.maxMedia || 'unlimited'} images)
                   </li>
                   <li class="task-item">
                     <span class="checkmark">✓</span>
-                    Explore the shop timing settings and customize your hours
+                    Update your shop timings and availability settings
                   </li>
                   <li class="task-item">
                     <span class="checkmark">✓</span>
-                    Upload high-quality images of your shop and products
+                    Add detailed product descriptions and pricing information
                   </li>
                   <li class="task-item">
                     <span class="checkmark">✓</span>
-                    Track your subscription and analytics from the dashboard
+                    Monitor your shop analytics and customer engagement metrics
                   </li>
                 </ul>
               </div>
@@ -1726,19 +1828,40 @@ const otherServices = {
 
               <!-- Info Section -->
               <div class="info-section">
-                <h3 class="info-title">${PAYMENT_STATUS === "Failed" ? "Payment Failed - What to Do Next" : "What's Included in Your Subscription"}</h3>
+                <h3 class="info-title">
+                  ${PAYMENT_STATUS === "Failed" ? "❌ Payment Failed - What to Do Next" :
+          PAYMENT_STATUS === "Pending" ? "⏳ Payment Processing Information" :
+            "✅ What's Included in Your Subscription"}
+                </h3>
                 <p class="info-text">
                   ${PAYMENT_STATUS === "Failed" ? `
                     Your payment could not be processed. This might be due to:
                     <br><br>
                     • Insufficient funds in your account<br>
-                    • Incorrect card details<br>
+                    • Incorrect card details or expired card<br>
                     • Bank declined the transaction<br>
-                    • Temporary issue with the payment gateway
+                    • Temporary issue with the payment gateway<br>
+                    • Network connectivity issues
                     <br><br>
-                    Please try again with a different payment method or contact your bank for more information.
+                    <strong>Don't worry - no charges have been made to your account.</strong> Please try again with a different payment method or contact your bank for more information.
+                  ` : PAYMENT_STATUS === "Pending" ? `
+                    Your payment is currently being processed by our payment gateway. Here's what you need to know:
+                    <br><br>
+                    • Processing usually takes 2-5 minutes<br>
+                    • In rare cases, it may take up to 24 hours<br>
+                    • You'll receive an email confirmation once completed<br>
+                    • Your subscription will be activated automatically upon successful payment<br>
+                    • You can check the status in your Transaction History
+                    <br><br>
+                    If your payment isn't confirmed within 30 minutes, please contact our support team.
                   ` : `
-                    Your subscription gives you access to essential tools to manage and grow your business. This includes the ability to list and manage products, edit your shop details, and monitor performance through the analytics dashboard.
+                    Your subscription gives you access to essential tools to manage and grow your business:
+                    <br><br>
+                    • Professional shop listing with up to ${purchasedPackage.maxMedia || 'unlimited'} images<br>
+                    • Advanced shop management dashboard<br>
+                    • Customer analytics and insights<br>
+                    • Priority customer support<br>
+                    • Mobile app access for on-the-go management
                     <br><br>
                     Log in to your Gully Team dashboard to get started and make the most of these features.
                   `}
@@ -1757,10 +1880,11 @@ const otherServices = {
             <!-- Footer -->
             <div class="footer">
               <p class="footer-text">
-                © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
+                <strong>© ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.</strong>
               </p>
               <p class="footer-text">
-                Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
+                📧 Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
+                🌐 Website: <a href="#" class="footer-link">www.gullyteam.com</a>
               </p>
               <p class="footer-text">
                 For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
@@ -1772,99 +1896,100 @@ const otherServices = {
     </table>
   </div>
 </body>
-</html>
-`
+</html>`
     };
 
     transporter.sendMail(mailOptions, function (error, info) {
       if (error) {
-        console.log("Error sending email:", error);
+        console.log("Error sending shop subscription email:", error);
       } else {
-        console.log("Subscription/extension email sent:", info.response);
+        console.log("Shop subscription email sent successfully:", info.response);
       }
     });
   },
+
   async createBookingOrder(data) {
-    const userInfo = global.user;
-
-    const receipt = crypto.randomBytes(10).toString("hex");
-
+    const userInfo = global.user
+    const receipt = crypto.randomBytes(10).toString("hex")
+    console.log("These api is called");
     const paymentData = {
       amount: data.amount * 100,
       currency: "INR",
       receipt: `order_receipt_${receipt}`,
-      payment_capture: 1, // Auto capture payment
-    };
+      payment_capture: 1,
+    }
 
-    const result = await RazorpayHandler.createOrder(paymentData);
-    // const shopId = mongoose.Types.ObjectId.isValid(data.shopId) ? data.shopId : null;
-    const venue = await Venue.findById(data.venueId);
-    if (!venue) throw CustomErrorHandler.notFound("Venue Not Found");
+    const result = await RazorpayHandler.createOrder(paymentData)
 
-    const user = await User.findById(venue.userId);
-    if (!user) return CustomErrorHandler.notFound("User Not Found");
+
+    const venue = await Venue.findById(data.venueId)
+    if (!venue) throw CustomErrorHandler.notFound("Venue Not Found")
+
+    const user = await User.findById(venue.userId)
+    if (!user) throw CustomErrorHandler.notFound("User Not Found")
 
     const booking = await Booking.findOne({
       venueId: data.venueId,
       sport: data.sport,
       sessionId: data.sessionId,
-      userId: userInfo.userId
+      userId: userInfo.userId,
     })
-    if (!booking) return CustomErrorHandler.notFound("Booking Not Found");
+    if (!booking) throw CustomErrorHandler.notFound("Booking Not Found")
 
-    const gstRate = 18 / 100;
-    const gstAmount = (result.amount / 100) * gstRate;
-    const amountBeforeGST = (result.amount / 100) - gstAmount;
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
-      venueId: data.venueId,
       razorpay_paymentId: data.razorpay_paymentId,
       bookingId: booking._id,
-      amount: result.amount / 100,
-      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
-      coupon: data.coupon ?? "",
-      totalAmountWithGST: result.amount / 100,
-      gstAmount: gstAmount,
-      amountbeforegst: amountBeforeGST,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
-      ordertype: "Shop",
-    });
+      ordertype: "booking",
+    })
 
-    await orderHistory.save();
-
+    await orderHistory.save()
     const payment = new Payment({
       orderId: result.id,
       userId: userInfo.userId,
-      venueId: data.venueId,
       razorpay_paymentId: data.razorpay_paymentId,
-      bookingId: data.bookingId,
-      amountPaid: 0,
+      bookingId: booking._id,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
+      paymentfor: "booking",
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
-    });
+    })
 
-    await payment.save();
+    await payment.save()
 
     setTimeout(async () => {
-
-      console.log("Sending email after 10 seconds...",);
-      await otherServices.sendBookingConfirmation(
-        user,
-        venue,
-        purchasedPackage,
-        result.id,
-        orderHistory.receipt,
-        data.status
-      );
+      console.log("Sending booking confirmation email...")
+      await this.sendBookingConfirmation(booking, user, venue, {
+        transactionId: result.id,
+        paymentMethod: data.paymentMode || "Online Payment",
+        receipt: result.receipt,
+        paymentStatus: data.status || "Pending",
+        bookingStatus: booking.bookingStatus,
+        baseAmount: data.baseAmount || 0,
+        processingFee: data.processingFee || 0,
+        convenienceFee: data.convenienceFee || 0,
+        gstamount: data.gstamount || 0,
+        totalAmount: data.totalAmount || 0,
+      })
     }, 10000);
     return {
       order: result,
-      message: "Shop Order created successfully. Payment is pending.",
-    };
+      message: "Booking order created successfully.",
+    }
   },
 
   async sendBookingConfirmation(booking, user, venue, paymentDetails) {
@@ -1879,7 +2004,6 @@ const otherServices = {
       },
     })
 
-    // Helper function to format booking dates and times
     const formatBookingSchedule = (scheduledDates) => {
       return scheduledDates
         .map((schedule) => {
@@ -1889,13 +2013,25 @@ const otherServices = {
             month: "long",
             day: "numeric",
           })
-          const timeSlots = schedule.timeSlots.map((slot) => `${slot.startTime} - ${slot.endTime}`).join(", ")
-          return `${date}: ${timeSlots}`
+          const timeSlots = schedule.timeSlots
+            .map(
+              (slot) => `
+          <div style="background-color: #f8fafc; padding: 8px 12px; margin: 4px 0; border-radius: 4px; border-left: 3px solid #2563eb;">
+            <strong>${slot.startTime} - ${slot.endTime}</strong> (Area ${slot.playableArea})
+          </div>
+        `,
+            )
+            .join("")
+          return `
+        <div style="margin-bottom: 20px; padding: 15px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <h4 style="margin: 0 0 10px 0; color: #1f2937; font-size: 16px;">${date}</h4>
+          ${timeSlots}
+        </div>
+      `
         })
-        .join("<br>")
+        .join("")
     }
 
-    // Helper function to format booking pattern
     const formatBookingPattern = (pattern) => {
       const patterns = {
         single_slots: "Single Time Slot",
@@ -1906,48 +2042,244 @@ const otherServices = {
       return patterns[pattern] || pattern
     }
 
-    // Helper function to format payment status
     const getPaymentStatusBadge = (status) => {
       const statusConfig = {
-        successful: { color: "#16a34a", bg: "#dcfce7", border: "#86efac", text: "✅ Payment Successful" },
-        pending: { color: "#92400e", bg: "#fef3c7", border: "#fbbf24", text: "⏳ Payment Pending" },
-        failed: { color: "#dc2626", bg: "#fee2e2", border: "#f87171", text: "❌ Payment Failed" },
-        refunded: { color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db", text: "💰 Payment Refunded" },
+        successful: {
+          color: "#16a34a",
+          bg: "#dcfce7",
+          border: "#86efac",
+          text: "✅ Payment Successful",
+        },
+        pending: {
+          color: "#92400e",
+          bg: "#fef3c7",
+          border: "#fbbf24",
+          text: "⏳ Payment Pending",
+        },
+        failed: {
+          color: "#dc2626",
+          bg: "#fee2e2",
+          border: "#f87171",
+          text: "❌ Payment Failed",
+        },
       }
-      const config = statusConfig[status] || statusConfig.pending
+      const config = statusConfig[status?.toLowerCase()] || statusConfig.pending
       return `
-        <div style="background-color: ${config.bg}; border: 1px solid ${config.border}; border-radius: 6px; padding: 12px; margin: 15px 0; text-align: center;">
-          <span style="color: ${config.color}; font-weight: bold; font-size: 14px;">${config.text}</span>
-        </div>
-      `
+    <div style="background-color: ${config.bg}; border: 1px solid ${config.border}; border-radius: 6px; padding: 12px; margin: 15px 0; text-align: center;">
+      <span style="color: ${config.color}; font-weight: bold; font-size: 14px;">${config.text}</span>
+    </div>
+  `
     }
 
-    // Helper function to format booking status
     const getBookingStatusBadge = (status) => {
       const statusConfig = {
-        confirmed: { color: "#16a34a", bg: "#dcfce7", border: "#86efac", text: "✅ Booking Confirmed" },
-        pending: { color: "#92400e", bg: "#fef3c7", border: "#fbbf24", text: "⏳ Booking Pending" },
-        cancelled: { color: "#dc2626", bg: "#fee2e2", border: "#f87171", text: "❌ Booking Cancelled" },
-        completed: { color: "#059669", bg: "#d1fae5", border: "#6ee7b7", text: "🎉 Booking Completed" },
+        confirmed: {
+          color: "#16a34a",
+          bg: "#dcfce7",
+          border: "#86efac",
+          text: "✅ Booking Confirmed",
+        },
+        pending: {
+          color: "#92400e",
+          bg: "#fef3c7",
+          border: "#fbbf24",
+          text: "⏳ Booking Pending",
+        },
+        cancelled: {
+          color: "#dc2626",
+          bg: "#fee2e2",
+          border: "#f87171",
+          text: "❌ Booking Cancelled",
+        },
       }
-      const config = statusConfig[status] || statusConfig.pending
+      const config = statusConfig[status?.toLowerCase()] || statusConfig.pending
       return `
-        <div style="background-color: ${config.bg}; border: 1px solid ${config.border}; border-radius: 6px; padding: 12px; margin: 15px 0; text-align: center;">
-          <span style="color: ${config.color}; font-weight: bold; font-size: 14px;">${config.text}</span>
-        </div>
-      `
+    <div style="background-color: ${config.bg}; border: 1px solid ${config.border}; border-radius: 6px; padding: 12px; margin: 15px 0; text-align: center;">
+      <span style="color: ${config.color}; font-weight: bold; font-size: 14px;">${config.text}</span>
+    </div>
+  `
     }
+
+    // Determine if transaction is successful or failed
+    const isSuccessful = paymentDetails.paymentStatus?.toLowerCase() === 'successful'
+    const isPending = paymentDetails.paymentStatus?.toLowerCase() === 'pending'
+    const isFailed = paymentDetails.paymentStatus?.toLowerCase() === 'failed'
+
+    // Helper function to format currency with fallback
+    const formatCurrency = (amount) => {
+      const numAmount = Number(amount) || 0;
+      return numAmount.toLocaleString('en-IN');
+    }
+
+    // Dynamic content based on transaction status
+    const getEmailSubject = () => {
+      if (isSuccessful) {
+        return `Booking Confirmed - ${venue.venue_name} | Gully Team`
+      } else if (isPending) {
+        return `Booking Pending - ${venue.venue_name} | Gully Team`
+      } else {
+        return `Booking Failed - ${venue.venue_name} | Gully Team`
+      }
+    }
+
+    const getHeaderContent = () => {
+      if (isSuccessful) {
+        return {
+          title: "Booking Confirmed!",
+          subtitle: "Your venue has been successfully booked",
+          gradient: "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)",
+          subtitleColor: "#bbf7d0"
+        }
+      } else if (isPending) {
+        return {
+          title: "Booking Pending",
+          subtitle: "Your booking is being processed",
+          gradient: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)",
+          subtitleColor: "#fef3c7"
+        }
+      } else {
+        return {
+          title: "Booking Failed",
+          subtitle: "There was an issue with your booking",
+          gradient: "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)",
+          subtitleColor: "#fecaca"
+        }
+      }
+    }
+
+    const getWelcomeMessage = () => {
+      if (isSuccessful) {
+        return {
+          greeting: `Hello ${user.fullName || user.name}! 🎉`,
+          message: "Great news! Your venue booking has been confirmed. We're excited to help you enjoy your sports session. Below are all the details of your booking."
+        }
+      } else if (isPending) {
+        return {
+          greeting: `Hello ${user.fullName || user.name}! ⏳`,
+          message: "Your booking request has been received and is currently being processed. We'll notify you once the payment is confirmed. Below are the details of your booking request."
+        }
+      } else {
+        return {
+          greeting: `Hello ${user.fullName || user.name}! ❌`,
+          message: "Unfortunately, there was an issue processing your booking payment. Don't worry - no charges have been made to your account. You can try booking again or contact our support team for assistance."
+        }
+      }
+    }
+
+    const getNextSteps = () => {
+      if (isSuccessful) {
+        return `
+      <div class="next-steps">
+        <h3 class="next-steps-title">📋 What's Next?</h3>
+        <ul class="steps-list">
+          <li class="step-item">
+            <span class="checkmark">✓</span>
+            Save this confirmation email for your records
+          </li>
+          <li class="step-item">
+            <span class="checkmark">✓</span>
+            Arrive at the venue 15 minutes before your scheduled time
+          </li>
+          <li class="step-item">
+            <span class="checkmark">✓</span>
+            Contact the venue directly if you need to make any changes
+          </li>
+          <li class="step-item">
+            <span class="checkmark">✓</span>
+            Enjoy your sports session and have a great time!
+          </li>
+        </ul>
+      </div>
+    `
+      } else if (isPending) {
+        return `
+      <div class="next-steps" style="background-color: #fef3c7; border: 1px solid #fbbf24;">
+        <h3 class="next-steps-title" style="color: #92400e;">⏳ What Happens Next?</h3>
+        <ul class="steps-list">
+          <li class="step-item" style="color: #92400e;">
+            <span class="checkmark" style="color: #f59e0b;">⏳</span>
+            We're processing your payment - this usually takes a few minutes
+          </li>
+          <li class="step-item" style="color: #92400e;">
+            <span class="checkmark" style="color: #f59e0b;">📧</span>
+            You'll receive a confirmation email once payment is successful
+          </li>
+          <li class="step-item" style="color: #92400e;">
+            <span class="checkmark" style="color: #f59e0b;">📱</span>
+            Check your app for real-time booking status updates
+          </li>
+          <li class="step-item" style="color: #92400e;">
+            <span class="checkmark" style="color: #f59e0b;">🤝</span>
+            Contact support if payment isn't confirmed within 30 minutes
+          </li>
+        </ul>
+      </div>
+    `
+      } else {
+        return `
+      <div class="next-steps" style="background-color: #fee2e2; border: 1px solid #f87171;">
+        <h3 class="next-steps-title" style="color: #991b1b;">🔄 What You Can Do Next</h3>
+        <ul class="steps-list">
+          <li class="step-item" style="color: #991b1b;">
+            <span class="checkmark" style="color: #dc2626;">🔄</span>
+            Try booking again - the time slot is still available
+          </li>
+          <li class="step-item" style="color: #991b1b;">
+            <span class="checkmark" style="color: #dc2626;">💳</span>
+            Check your payment method and try a different card if needed
+          </li>
+          <li class="step-item" style="color: #991b1b;">
+            <span class="checkmark" style="color: #dc2626;">🤝</span>
+            Contact our support team for assistance with your booking
+          </li>
+          <li class="step-item" style="color: #991b1b;">
+            <span class="checkmark" style="color: #dc2626;">💰</span>
+            Rest assured - no charges were made to your account
+          </li>
+        </ul>
+      </div>
+    `
+      }
+    }
+
+    const getClosingMessage = () => {
+      if (isSuccessful) {
+        return `
+      <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
+        Thank you for choosing Gully Team! 🏆<br>
+        <em>We hope you have an amazing sports experience!</em>
+      </p>
+    `
+      } else if (isPending) {
+        return `
+      <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
+        Thank you for your patience! ⏳<br>
+        <em>We'll update you as soon as your booking is confirmed.</em>
+      </p>
+    `
+      } else {
+        return `
+      <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
+        We apologize for the inconvenience! 🙏<br>
+        <em>Our support team is here to help you complete your booking.</em>
+      </p>
+    `
+      }
+    }
+
+    const headerContent = getHeaderContent()
+    const welcomeMessage = getWelcomeMessage()
 
     const mailOptions = {
       from: "gullyteam33@gmail.com",
       to: user.email,
-      subject: "Your Venue Booking Confirmation",
+      subject: getEmailSubject(),
       html: `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Venue Booking Confirmation – Gully Team</title>
+  <title>Venue Booking ${isSuccessful ? 'Confirmation' : isPending ? 'Pending' : 'Failed'} - Gully Team</title>
   <style>
     body, table, td, p, a, li, blockquote {
       -webkit-text-size-adjust: 100%;
@@ -1984,7 +2316,7 @@ const otherServices = {
     }
     
     .email-container {
-      max-width: 650px;
+      max-width: 700px;
       margin: 0 auto;
       background-color: #ffffff;
       border-radius: 12px;
@@ -1993,7 +2325,7 @@ const otherServices = {
     }
     
     .header {
-      background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+      background: ${headerContent.gradient};
       padding: 40px 30px;
       text-align: center;
     }
@@ -2008,7 +2340,7 @@ const otherServices = {
     
     .header p {
       margin: 8px 0 0 0;
-      color: #bbf7d0;
+      color: ${headerContent.subtitleColor};
       font-size: 16px;
     }
     
@@ -2122,10 +2454,70 @@ const otherServices = {
       font-size: 14px;
       word-break: break-word;
     }
-    
-    .amount-highlight {
+
+    .payment-breakdown {
       background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
       border: 2px solid #f59e0b;
+      border-radius: 12px;
+      padding: 25px;
+      margin: 30px 0;
+    }
+
+    .payment-breakdown-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #92400e;
+      margin: 0 0 20px 0;
+      text-align: center;
+    }
+
+    .payment-breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .payment-breakdown-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .payment-breakdown-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .payment-breakdown-table .payment-label {
+      font-weight: 600;
+      color: #92400e;
+      width: 60%;
+      font-size: 14px;
+    }
+
+    .payment-breakdown-table .payment-value {
+      color: #92400e;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: right;
+    }
+
+    .payment-breakdown-table .total-row {
+      background-color: #92400e;
+      color: #ffffff;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .payment-breakdown-table .total-row .payment-label,
+    .payment-breakdown-table .total-row .payment-value {
+      color: #ffffff;
+    }
+    
+    .amount-highlight {
+      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+      border: 2px solid #16a34a;
       border-radius: 8px;
       padding: 20px;
       margin: 25px 0;
@@ -2135,13 +2527,13 @@ const otherServices = {
     .amount-value {
       font-size: 32px;
       font-weight: bold;
-      color: #92400e;
+      color: #166534;
       margin: 0 0 5px 0;
     }
     
     .amount-label {
       font-size: 14px;
-      color: #92400e;
+      color: #166534;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -2225,6 +2617,26 @@ const otherServices = {
     .footer-link:hover {
       color: #1d4ed8;
     }
+
+    .schedule-container {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+
+    .retry-booking {
+      background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+      color: white;
+      padding: 15px 30px;
+      border-radius: 8px;
+      text-decoration: none;
+      display: inline-block;
+      font-weight: bold;
+      margin: 20px 0;
+      text-align: center;
+    }
     
     /* Mobile responsiveness */
     @media only screen and (max-width: 600px) {
@@ -2255,7 +2667,8 @@ const otherServices = {
       
       .booking-summary,
       .next-steps,
-      .contact-section {
+      .contact-section,
+      .payment-breakdown {
         padding: 20px;
       }
       
@@ -2279,17 +2692,16 @@ const otherServices = {
           <div class="email-container">
             <!-- Header -->
             <div class="header">
-              <h1>🎉 Booking Confirmed!</h1>
-              <p>Your venue has been successfully booked</p>
+              <h1>${headerContent.title}</h1>
+              <p>${headerContent.subtitle}</p>
             </div>
             
             <!-- Content -->
             <div class="content">
               <!-- Welcome Message -->
-              <p class="welcome-text">Hello ${user.fullName || user.name}! 🏟️</p>
+              <p class="welcome-text">${welcomeMessage.greeting}</p>
               <p class="intro-text">
-                Great news! Your venue booking has been confirmed. We're excited to help you enjoy your sports session. 
-                Below are all the details of your booking.
+                ${welcomeMessage.message}
               </p>
 
               <!-- Booking ID -->
@@ -2303,7 +2715,7 @@ const otherServices = {
 
               <!-- Booking Summary -->
               <div class="booking-summary">
-                <h3 class="booking-title">Booking Summary</h3>
+                <h3 class="booking-title">Booking ${isSuccessful ? 'Summary' : isPending ? 'Request Details' : 'Attempt Details'}</h3>
                 <table class="details-table" role="presentation">
                   <tr>
                     <td class="label">Venue Name:</td>
@@ -2325,17 +2737,44 @@ const otherServices = {
                     <td class="label">Duration:</td>
                     <td class="value">${booking.durationInHours} hour${booking.durationInHours > 1 ? "s" : ""}</td>
                   </tr>
-                  <tr>
-                    <td class="label">Scheduled Date(s) & Time(s):</td>
-                    <td class="value">${formatBookingSchedule(booking.scheduledDates)}</td>
-                  </tr>
                 </table>
               </div>
 
-              <!-- Total Amount -->
-              <div class="amount-highlight">
-                <div class="amount-value">₹${booking.totalAmount.toLocaleString()}</div>
-                <div class="amount-label">Total Amount</div>
+              ${isSuccessful ? `
+              <!-- Scheduled Dates & Time Slots -->
+              <h3 class="section-title">
+                📅 Scheduled Dates & Time Slots
+              </h3>
+              <div class="schedule-container">
+                ${formatBookingSchedule(booking.scheduledDates)}
+              </div>
+              ` : ''}
+
+              <!-- Payment Breakdown -->
+              <div class="payment-breakdown">
+                <h3 class="payment-breakdown-title">💰 Payment ${isSuccessful ? 'Breakdown' : isFailed ? 'Attempt Details' : 'Processing'}</h3>
+                <table class="payment-breakdown-table" role="presentation">
+                  <tr>
+                    <td class="payment-label">Base Amount:</td>
+                    <td class="payment-value">₹${formatCurrency(paymentDetails.baseAmount)}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Processing Fee:</td>
+                    <td class="payment-value">₹${formatCurrency(paymentDetails.processingFee)}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Convenience Fee:</td>
+                    <td class="payment-value">₹${formatCurrency(paymentDetails.convenienceFee)}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">GST Amount (18%):</td>
+                    <td class="payment-value">₹${formatCurrency(paymentDetails.gstamount)}</td>
+                  </tr>
+                  <tr class="total-row">
+                    <td class="payment-label">Total Amount ${isSuccessful ? 'Paid' : isFailed ? 'Attempted' : 'Processing'}:</td>
+                    <td class="payment-value">₹${formatCurrency(paymentDetails.totalAmount)}</td>
+                  </tr>
+                </table>
               </div>
 
               <!-- Payment Details -->
@@ -2343,7 +2782,7 @@ const otherServices = {
                 💳 Payment Details
               </h3>
               
-              ${getPaymentStatusBadge(booking.paymentStatus)}
+              ${getPaymentStatusBadge(paymentDetails.paymentStatus)}
               
               <table class="details-table" role="presentation">
                 <tr>
@@ -2352,10 +2791,14 @@ const otherServices = {
                 </tr>
                 <tr>
                   <td class="label">Transaction ID:</td>
-                  <td class="value">${paymentDetails.transactionId || "N/A"}</td>
+                  <td class="value">${booking.razorpayPaymentId || paymentDetails.transactionId || "N/A"}</td>
                 </tr>
                 <tr>
-                  <td class="label">Payment Date:</td>
+                  <td class="label">Session ID:</td>
+                  <td class="value">${booking.sessionId}</td>
+                </tr>
+                <tr>
+                  <td class="label">${isSuccessful ? 'Payment' : 'Attempt'} Date:</td>
                   <td class="value">${new Date(booking.createdAt).toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
@@ -2366,90 +2809,49 @@ const otherServices = {
                 </tr>
               </table>
 
-              <!-- Venue Contact Information -->
-              <h3 class="section-title">
-                📞 Venue Contact Information
-              </h3>
-              <table class="details-table" role="presentation">
-                <tr>
-                  <td class="label">Contact Number:</td>
-                  <td class="value">${venue.venue_contact}</td>
-                </tr>
-                <tr>
-                  <td class="label">Venue Type:</td>
-                  <td class="value">${venue.venue_type}</td>
-                </tr>
-                <tr>
-                  <td class="label">Surface Type:</td>
-                  <td class="value">${venue.venue_surfacetype}</td>
-                </tr>
-                ${venue.upiId
-          ? `
-                <tr>
-                  <td class="label">UPI ID:</td>
-                  <td class="value">${venue.upiId}</td>
-                </tr>
-                `
-          : ""
-        }
-              </table>
+              ${isFailed ? `
+              <!-- Retry Booking Section -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="#" class="retry-booking">
+                  🔄 Try Booking Again
+                </a>
+                <p style="color: #6b7280; font-size: 14px; margin-top: 10px;">
+                  The time slot is still available for booking
+                </p>
+              </div>
+              ` : ''}
 
               <!-- Next Steps -->
-              <div class="next-steps">
-                <h3 class="next-steps-title">📋 What's Next?</h3>
-                <ul class="steps-list">
-                  <li class="step-item">
-                    <span class="checkmark">✓</span>
-                    Save this confirmation email for your records
-                  </li>
-                  <li class="step-item">
-                    <span class="checkmark">✓</span>
-                    Arrive at the venue 15 minutes before your scheduled time
-                  </li>
-                  <li class="step-item">
-                    <span class="checkmark">✓</span>
-                    Bring a valid ID and this booking confirmation
-                  </li>
-                  <li class="step-item">
-                    <span class="checkmark">✓</span>
-                    Contact the venue directly if you need to make any changes
-                  </li>
-                  <li class="step-item">
-                    <span class="checkmark">✓</span>
-                    Enjoy your sports session and have a great time!
-                  </li>
-                </ul>
-              </div>
+              ${getNextSteps()}
 
               <!-- Contact Support -->
               <div class="contact-section">
-                <h3 class="contact-title">🤝 Need Help?</h3>
-                <p class="contact-text">
-                  If you have any questions about your booking or need assistance, our support team is here to help:
-                  <br><br>
-                  📧 Email: <a href="mailto:gullyteam33@gmail.com" style="color: #1e40af; text-decoration: none;">gullyteam33@gmail.com</a><br>
-                  📱 Include your Booking ID: <strong>${booking._id}</strong> in any correspondence
-                  <br><br>
-                  For immediate venue-related queries, contact the venue directly at <strong>${venue.venue_contact}</strong>
-                </p>
-              </div>
+  <h3 class="contact-title">🤝 Need Help?</h3>
+  <p class="contact-text">
+    ${isSuccessful
+          ? 'If you have any questions about your booking or need assistance, our support team is here to help:'
+          : isPending
+            ? 'If your payment is taking longer than expected or you have questions, our support team is ready to assist:'
+            : 'Having trouble with your booking? Our support team is here to help you complete your reservation:'
+        }
+    <br><br>
+    📧 Email: <a href="mailto:gullyteam33@gmail.com" style="color: #1e40af; text-decoration: none;">gullyteam33@gmail.com</a><br>
+    <br>
+    For immediate venue-related queries, contact the venue directly at <strong>${venue.venue_contact}</strong>
+  </p>
+</div>
 
-              <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
-                Thank you for choosing Gully Team! 🏆<br>
-                <em>We hope you have an amazing sports experience!</em>
-              </p>
+
+              ${getClosingMessage()}
             </div>
-            
-            <!-- Footer -->
+
             <div class="footer">
               <p class="footer-text">
-                © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
+                <strong>© ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.</strong>
               </p>
               <p class="footer-text">
-                Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
-              </p>
-              <p class="footer-text">
-                This is an automated email. Please do not reply directly to this email.
+                📧 Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
+                🌐 Website: <a href="#" class="footer-link">www.gullyteam.com</a>
               </p>
             </div>
           </div>
@@ -2463,91 +2865,968 @@ const otherServices = {
 
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
-        console.log("Error sending booking confirmation:", error)
+        console.log(`Error sending booking ${isSuccessful ? 'confirmation' : isPending ? 'pending notification' : 'failure notification'}:`, error)
       } else {
-        console.log("Booking confirmation email sent:", info.response)
+        console.log(`Booking ${isSuccessful ? 'confirmation' : isPending ? 'pending notification' : 'failure notification'} email sent:`, info.response)
       }
     })
   },
   async createVenueOrder(data) {
     const userInfo = global.user;
-
     const receipt = crypto.randomBytes(10).toString("hex");
-
     const paymentData = {
-      amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
+      amount: Math.round(data.amount * 100),
       currency: "INR",
       receipt: `order_receipt_${receipt}`,
-      payment_capture: 1, // Auto capture payment
+      payment_capture: 1,
     };
-
     const result = await RazorpayHandler.createOrder(paymentData);
-    // const shopId = mongoose.Types.ObjectId.isValid(data.shopId) ? data.shopId : null;
-    const venue = await Venue.findById(data.venueId);
-    if (!venue) throw CustomErrorHandler.notFound("Venue Not Found");
 
-    const user = await User.findById(venue.userId);
-    if (!user) return CustomErrorHandler.notFound("User Not Found");
+    let venue = null;
+    if (data.venueId) {
+      venue = await Venue.findById(data.venueId);
+      if (!venue) throw CustomErrorHandler.notFound("Venue Not Found");
+    }
+
+    const user = venue ? await User.findById(venue.userId) : await User.findById(userInfo.userId);
+    if (!user) throw CustomErrorHandler.notFound("User Not Found");
 
     const purchasedPackage = await Package.findById(data.PackageId);
-    if (!purchasedPackage) return CustomErrorHandler.notFound("Package Not Found");
+    if (!purchasedPackage) throw CustomErrorHandler.notFound("Package Not Found");
 
-    const gstRate = 18 / 100;
-    const gstAmount = (result.amount / 100) * gstRate;
-    const amountBeforeGST = (result.amount / 100) - gstAmount;
-    const orderHistory = new OrderHistory({
+    const orderHistoryData = {
       orderId: result.id,
       userId: userInfo.userId,
-      venueId: data.venueId,
       razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
-      amount: result.amount / 100,
-      amountPaid: 0,
-      amountDue: result.amount / 100,
-      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
-      coupon: data.coupon ?? "",
-      totalAmountWithGST: result.amount / 100,
-      gstAmount: gstAmount,
-      amountbeforegst: amountBeforeGST,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
       ordertype: "venue",
-    });
+    };
 
+    if (data.venueId) {
+      orderHistoryData.venueId = data.venueId;
+    }
+
+    const orderHistory = new OrderHistory(orderHistoryData);
     await orderHistory.save();
 
-    const payment = new Payment({
+    const paymentDataObj = {
       orderId: result.id,
       userId: userInfo.userId,
-      venueId: data.venueId,
       razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
-      amountPaid: 0,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
-    });
+    };
 
+    if (data.venueId) {
+      paymentDataObj.venueId = data.venueId;
+    }
+
+    const payment = new Payment(paymentDataObj);
     await payment.save();
 
-    setTimeout(async () => {
-      console.log("Sending email after 10 seconds...",);
-      await otherServices.sendvenuepaymentMail(
-        "shop-subscription",
-        user,
-        venue,
-        purchasedPackage,
-        result.id,
-        orderHistory.receipt,
-        data.status
-      );
-    }, 10000);
-    await otherServices.creatContactonRazorPay(venue);
+    if (venue) {
+      setTimeout(async () => {
+        console.log("Sending email after 10 seconds...");
+        await otherServices.sendvenuepaymentMail(
+          "shop-subscription",
+          user,
+          venue,
+          purchasedPackage,
+          result.id,
+          orderHistory.receipt,
+          data.status,
+          data.baseAmount,
+          data.processingFee,
+          data.convenienceFee,
+          data.gstamount,
+          data.totalAmount
+        );
+      }, 10000);
+      await otherServices.creatContactonRazorPay(venue);
+    } else if (data.status === "Failed" && data.venueData) {
+      // For failed payments, send email with venue data from frontend
+      setTimeout(async () => {
+        console.log("Sending failed payment email...");
+        await otherServices.sendvenuepaymentMail(
+          "shop-subscription",
+          user,
+          null, // No venue from DB
+          purchasedPackage,
+          result.id,
+          orderHistory.receipt,
+          data.status,
+          data.baseAmount,
+          data.processingFee,
+          data.convenienceFee,
+          data.gstamount,
+          data.totalAmount,
+          data.venueData // Pass venue data from frontend
+        );
+      }, 10000);
+    }
+
     return {
       order: result,
       message: "Shop Order created successfully. Payment is pending.",
     };
+  },
+  async sendvenuepaymentMail(
+    userFor = "",
+    user,
+    venue,
+    purchasedPackage,
+    TRANSACTION_ID,
+    RECEIPT_NUMBER,
+    PAYMENT_STATUS,
+    baseAmount,
+    processingFee,
+    convenienceFee,
+    gstAmount,
+    totalAmount,
+    venueDataFromFrontend = null
+  ) {
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      auth: {
+        user: "gullyteam33@gmail.com",
+        pass: "iaur qnaj ocsq jyvq",
+      },
+    });
+
+    if (!user || !user.email || !purchasedPackage || typeof purchasedPackage.price !== "number") {
+      console.error("Missing or invalid user/purchasedPackage info.");
+      return;
+    }
+
+    // Use venue from DB if available, otherwise use data from frontend
+    const venueData = venue || venueDataFromFrontend;
+
+    if (!venueData) {
+      console.error("No venue data available for email");
+      return;
+    }
+
+    // Price breakdown - use passed parameters instead of calculating
+    const baseAmountFormatted = baseAmount.toFixed(2);
+    const gstAmountFormatted = gstAmount.toFixed(2);
+    const totalAmountFormatted = totalAmount.toFixed(2);
+    const convenienceFeeFormatted = convenienceFee.toFixed(2);
+    const processingFeeFormatted = processingFee.toFixed(2);
+
+    // Determine status-specific content
+    let headerTitle, headerColor, statusBadgeColor, statusMessage, introText, ctaText, ctaButtons;
+
+    // Set content based on payment status
+    if (PAYMENT_STATUS === "Failed") {
+      headerTitle = "Payment Failed - Action Required";
+      headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)";
+      statusBadgeColor = "#fee2e2";
+      statusMessage = `
+      <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
+        <p style="color: #b91c1c; margin: 0; font-size: 14px;">
+          We were unable to process your payment for the venue subscription package. Please check your payment details and try again.
+        </p>
+      </div>
+    `;
+      introText = `
+      We regret to inform you that your payment for the ${purchasedPackage.name} venue subscription package could not be processed. 
+      This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
+    `;
+      ctaText = "Please retry your payment to activate your venue subscription and start accepting bookings.";
+      ctaButtons = `
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        Contact Support
+      </a>
+    `;
+    } else if (PAYMENT_STATUS === "Pending") {
+      headerTitle = "Payment Pending - Verification in Progress";
+      headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)";
+      statusBadgeColor = "#fef3c7";
+      statusMessage = `
+      <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Pending</p>
+        <p style="color: #92400e; margin: 0; font-size: 14px;">
+          Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
+        </p>
+      </div>
+    `;
+      introText = `
+      Thank you for purchasing the ${purchasedPackage.name} venue subscription package. Your payment is currently being processed.
+      You will receive a confirmation email once the payment is successfully verified.
+    `;
+      ctaText = "You can check the status of your payment in your Transaction History.";
+      ctaButtons = `
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        Contact Support
+      </a>
+    `;
+    } else {
+      // Success or any other status
+      headerTitle = "Venue Subscription Successfully Activated";
+      headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)";
+      statusBadgeColor = "#fef3c7";
+      statusMessage = `
+      <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
+        <p style="color: #166534; margin: 0; font-size: 14px;">
+          Your payment has been successfully processed and your venue subscription is now active.
+        </p>
+      </div>
+    `;
+      introText = `
+      We are pleased to confirm that your venue subscription payment has been successfully processed. Thank you for choosing Gully Team —
+      We're excited to have you onboard and look forward to helping you manage your venue bookings and grow your sports business.
+    `;
+      ctaText = "Thank you for joining us and trusting Gully Team with your venue management. We look forward to helping you connect with sports enthusiasts!";
+      ctaButtons = `
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        Contact Support
+      </a>
+    `;
+    }
+
+    // Dynamic title & subject based on payment status
+    let subject;
+    if (PAYMENT_STATUS === "Failed") {
+      subject = "Payment Failed - Action Required for Your Gully Team Venue Subscription";
+    } else if (PAYMENT_STATUS === "Pending") {
+      subject = "Payment Pending - Your Gully Team Venue Subscription";
+    } else {
+      subject = "Payment Confirmation – Gully Team Venue Subscription";
+    }
+
+    // Helper function to format sports pricing
+    const formatSportsPricing = (venueData) => {
+      if (venueData.sportPricing && venueData.sportPricing.length > 0) {
+        return venueData.sportPricing.map((sp) => `${sp.sport}: ₹${sp.perHourCharge}/hour`).join("<br>");
+      }
+      return `Default Rate: ₹${venueData.perHourCharge || 0}/hour`;
+    };
+
+    // Helper function to format venue timeslots
+    const formatVenueTimings = (timeslots) => {
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      return days
+        .map((day) => {
+          const slot = timeslots[day];
+          if (slot && slot.isOpen) {
+            return `${day}: ${slot.openTime} - ${slot.closeTime}`;
+          }
+          return `${day}: Closed`;
+        })
+        .join("<br>");
+    };
+
+    // Helper function to format facilities
+    const formatFacilities = (facilities) => {
+      const facilityNames = {
+        isWaterAvailable: "Water",
+        isParkingAvailable: "Parking",
+        isEquipmentProvided: "Equipment",
+        isWashroomAvailable: "Washroom",
+        isChangingRoomAvailable: "Changing Room",
+        isFloodlightAvailable: "Floodlight",
+        isSeatingLoungeAvailable: "Seating Lounge",
+        isFirstAidAvailable: "First Aid",
+        isWalkingTrackAvailable: "Walking Track",
+      };
+
+      const availableFacilities = Object.keys(facilities)
+        .filter((key) => facilities[key] === true)
+        .map((key) => facilityNames[key])
+        .filter(Boolean);
+
+      return availableFacilities.length > 0 ? availableFacilities.join(", ") : "Basic facilities available";
+    };
+
+    const mailOptions = {
+      from: "gullyteam33@gmail.com",
+      to: user.email,
+      subject: subject,
+      html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Status – Gully Team Venue</title>
+  <style>
+    body, table, td, p, a, li, blockquote {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    
+    table, td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+    
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+    }
+
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background-color: #f4f6f8 !important;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .email-wrapper {
+      width: 100% !important;
+      background-color: #f4f6f8;
+      padding: 20px 0;
+    }
+
+    .email-container {
+      max-width: 650px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .header {
+      background: ${headerColor};
+      padding: 40px 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: bold;
+      line-height: 1.2;
+    }
+
+    .header p {
+      margin: 8px 0 0 0;
+      color: #bfdbfe;
+      font-size: 16px;
+    }
+
+    .content {
+      padding: 40px 30px;
+    }
+
+    .welcome-text {
+      font-size: 20px;
+      font-weight: bold;
+      color: #1f2937;
+      margin: 0 0 20px 0;
+      line-height: 1.3;
+    }
+
+    .intro-text {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0 0 30px 0;
+      line-height: 1.6;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2563eb;
+      margin: 30px 0 20px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-icon {
+      font-size: 20px;
+    }
+
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .details-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: top;
+    }
+
+    .details-table tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    .details-table tr:nth-child(odd) {
+      background-color: #ffffff;
+    }
+
+    .details-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .details-table td.label {
+      font-weight: 600;
+      color: #374151;
+      width: 35%;
+      font-size: 14px;
+    }
+
+    .details-table td.value {
+      color: #6b7280;
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    /* Payment Summary Styles */
+    .payment-summary {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border: 2px solid #0ea5e9;
+      border-radius: 12px;
+      padding: 25px;
+      margin: 30px 0;
+    }
+
+    .payment-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #0c4a6e;
+      margin: 0 0 20px 0;
+      text-align: center;
+    }
+
+    .payment-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .payment-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .payment-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .payment-table .payment-label {
+      font-weight: 600;
+      color: #1e40af;
+      width: 45%;
+      font-size: 15px;
+    }
+
+    .payment-table .payment-value {
+      color: #374151;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .payment-table .status-${PAYMENT_STATUS.toLowerCase()} {
+      color: ${PAYMENT_STATUS === "Failed" ? "#dc2626" : PAYMENT_STATUS === "Pending" ? "#92400e" : "#16a34a"};
+      font-weight: bold;
+    }
+
+    .payment-table .total-row {
+      background-color: #1e40af;
+      color: #ffffff;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .payment-table .total-row .payment-label,
+    .payment-table .total-row .payment-value {
+      color: #ffffff;
+    }
+
+    .transaction-id {
+      background-color: ${statusBadgeColor};
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    .transaction-id .label {
+      font-size: 12px;
+      color: #92400e;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .transaction-id .value {
+      font-size: 16px;
+      color: #92400e;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+    }
+
+    .highlight-section {
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 30px 0;
+    }
+
+    .highlight-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #166534;
+      margin: 0 0 15px 0;
+    }
+
+    .task-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .task-item {
+      margin: 8px 0;
+      color: #166534;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .checkmark {
+      color: #16a34a;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    .info-section {
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 20px 0;
+    }
+
+    .info-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1e40af;
+      margin: 0 0 15px 0;
+    }
+
+    .info-text {
+      color: #1e40af;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .cta-section {
+      text-align: center;
+      margin: 40px 0 20px 0;
+    }
+
+    .cta-text {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0 0 25px 0;
+      line-height: 1.6;
+    }
+
+    .cta-button {
+      display: inline-block;
+      padding: 14px 28px;
+      background-color: #2563eb;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      line-height: 1;
+      margin: 0 10px 10px 0;
+    }
+
+    .cta-button.secondary {
+      background-color: #059669;
+    }
+
+    .footer {
+      background-color: #f9fafb;
+      padding: 30px;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .footer-text {
+      font-size: 13px;
+      color: #6b7280;
+      margin: 0 0 8px 0;
+      line-height: 1.5;
+    }
+
+    .footer-link {
+      color: #2563eb;
+      text-decoration: none;
+    }
+
+    .footer-link:hover {
+      color: #1d4ed8;
+    }
+
+    /* Mobile responsiveness */
+    @media only screen and (max-width: 600px) {
+      .email-wrapper {
+        padding: 10px 0;
+      }
+      
+      .email-container {
+        margin: 0 10px;
+        border-radius: 8px;
+      }
+      
+      .header {
+        padding: 30px 20px;
+      }
+      
+      .header h1 {
+        font-size: 24px;
+      }
+      
+      .content {
+        padding: 30px 20px;
+      }
+      
+      .details-table td.label {
+        width: 40%;
+      }
+      
+      .payment-table .payment-label {
+        width: 50%;
+      }
+      
+      .highlight-section,
+      .info-section,
+      .payment-summary {
+        padding: 20px;
+      }
+      
+      .cta-button {
+        display: block;
+        margin: 10px 0;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .email-container {
+        background-color: #ffffff !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+      <tr>
+        <td align="center">
+          <div class="email-container">
+            <!-- Header -->
+            <div class="header">
+              <h1>${headerTitle}</h1>
+              <p>Gully Team Venue Subscription</p>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+              <!-- Welcome Message -->
+              <p class="welcome-text">Hello ${user.fullName}! 🏟️</p>
+              <p class="intro-text">${introText}</p>
+
+              <!-- Status Message -->
+              ${statusMessage}
+
+              <div class="transaction-id">
+                <div class="label">Transaction ID:</div>
+                <div class="value">${TRANSACTION_ID}</div>
+              </div>
+
+              <div class="payment-summary">
+                <h3 class="payment-title">Payment Summary</h3>
+                <table class="payment-table" role="presentation">
+                  <tr>
+                    <td class="payment-label">Package Name:</td>
+                    <td class="payment-value">${purchasedPackage.name}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Base Amount:</td>
+                    <td class="payment-value">₹${baseAmountFormatted}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Convenience Fee:</td>
+                    <td class="payment-value">₹${convenienceFeeFormatted}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Processing Fee:</td>
+                    <td class="payment-value">₹${processingFeeFormatted}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">GST (18%):</td>
+                    <td class="payment-value">₹${gstAmountFormatted}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Payment Status:</td>
+                    <td class="payment-value status-${PAYMENT_STATUS.toLowerCase()}">${PAYMENT_STATUS}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Receipt Number:</td>
+                    <td class="payment-value">${RECEIPT_NUMBER}</td>
+                  </tr>
+                  <tr class="total-row">
+                    <td class="payment-label">Total Amount:</td>
+                    <td class="payment-value">₹${totalAmountFormatted}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <h3 class="section-title">
+                Venue Information
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Venue Name:</td>
+                  <td class="value">${venueData.venue_name || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td class="label">Description:</td>
+                  <td class="value">${venueData.venue_description || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td class="label">Address:</td>
+                  <td class="value">${venueData.venue_address || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td class="label">Contact Number:</td>
+                  <td class="value">${venueData.venue_contact || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td class="label">Venue Type:</td>
+                  <td class="value">${venueData.venue_type || 'N/A'}</td>
+                </tr>
+                ${venueData.venue_surfacetype ? `
+                <tr>
+                  <td class="label">Surface Type:</td>
+                  <td class="value">${venueData.venue_surfacetype}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              <!-- Sports & Pricing Information -->
+              <h3 class="section-title">
+                Sports & Pricing
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Available Sports:</td>
+                  <td class="value">${venueData.venue_sports ? venueData.venue_sports.join(", ") : "Not specified"}</td>
+                </tr>
+                <tr>
+                  <td class="label">Pricing:</td>
+                  <td class="value">${formatSportsPricing(venueData)}</td>
+                </tr>
+                ${venueData.upiId ? `
+                <tr>
+                  <td class="label">UPI ID:</td>
+                  <td class="value">${venueData.upiId}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              <!-- Venue Timings -->
+              ${venueData.venue_timeslots ? `
+              <h3 class="section-title">
+                Venue Timings
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Operating Hours:</td>
+                  <td class="value">${formatVenueTimings(venueData.venue_timeslots)}</td>
+                </tr>
+              </table>
+              ` : ''}
+
+              <!-- Facilities -->
+              ${venueData.venuefacilities ? `
+              <h3 class="section-title">
+                Facilities & Amenities
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Available Facilities:</td>
+                  <td class="value">${formatFacilities(venueData.venuefacilities)}</td>
+                </tr>
+                ${venueData.venue_rules && venueData.venue_rules.length > 0 ? `
+                <tr>
+                  <td class="label">Venue Rules:</td>
+                  <td class="value">${venueData.venue_rules.join("<br>")}</td>
+                </tr>
+                ` : ''}
+              </table>
+              ` : ''}
+
+              <!-- Owner Information -->
+              <h3 class="section-title">
+                Owner Information
+              </h3>
+              <table class="details-table" role="presentation">
+                <tr>
+                  <td class="label">Owner Name:</td>
+                  <td class="value">${user.fullName}</td>
+                </tr>
+                <tr>
+                  <td class="label">Email:</td>
+                  <td class="value">${user.email}</td>
+                </tr>
+                <tr>
+                  <td class="label">Phone:</td>
+                  <td class="value">${user.phoneNumber || "Not provided"}</td>
+                </tr>
+                ${venue && venue.createdAt ? `
+                <tr>
+                  <td class="label">Registered On:</td>
+                  <td class="value">${new Date(venue.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              ${PAYMENT_STATUS !== "Failed" ? `
+              <!-- Getting Started -->
+              <div class="highlight-section">
+                <h3 class="highlight-title">Start with the basics:</h3>
+                <ul class="task-list">
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Log into your venue dashboard and review your listing
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Upload high-quality images of your venue and facilities
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Set up your sports offerings and per-hour pricing
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Configure your venue timings and availability
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Monitor incoming bookings and manage your calendar
+                  </li>
+                  <li class="task-item">
+                    <span class="checkmark">✓</span>
+                    Track your venue analytics and booking performance
+                  </li>
+                </ul>
+              </div>
+              ` : ''}
+
+              <!-- Info Section -->
+              <div class="info-section">
+                <h3 class="info-title">${PAYMENT_STATUS === "Failed" ? "Payment Failed - What to Do Next" : "What's Included in Your Venue Subscription"}</h3>
+                <p class="info-text">
+                  ${PAYMENT_STATUS === "Failed" ? `
+                    Your payment could not be processed. This might be due to:
+                    <br><br>
+                    • Insufficient funds in your account<br>
+                    • Incorrect card details<br>
+                    • Bank declined the transaction<br>
+                    • Temporary issue with the payment gateway
+                    <br><br>
+                    Please try again with a different payment method or contact your bank for more information.
+                  ` : `
+                    Your venue subscription gives you access to powerful tools to manage your sports facility and grow your booking business. This includes:
+                    <br><br>
+                    • <strong>Venue Listing:</strong> Showcase your Venue/turf on our platform with photos and detailed information<br>
+                    • <strong>Multi-Sport Management:</strong> Add multiple sports with individual pricing for each<br>
+                    • <strong>Booking Management:</strong> Accept and manage slot bookings from sports enthusiasts<br>
+                    • <strong>Flexible Pricing:</strong> Set per-hour charges for different sports and time slots<br>
+                    • <strong>Analytics Dashboard:</strong> Track bookings, revenue, and venue performance<br>
+                    • <strong>Payment Integration:</strong> Secure payment processing with multiple payment options<br>
+                    • <strong>Calendar Management:</strong> Manage availability and time slots efficiently
+                    <br><br>
+                    Log in to your Gully Team venue dashboard to start accepting bookings and connecting with sports enthusiasts in your area.
+                  `}
+                </p>
+              </div>
+
+              <!-- Call to Action -->
+              <div class="cta-section">
+                <p class="cta-text">
+                  ${ctaText}
+                </p>
+                ${ctaButtons}
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <p class="footer-text">
+                © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
+              </p>
+              <p class="footer-text">
+                Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
+              </p>
+              <p class="footer-text">
+                For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
+              </p>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log("Error sending email:", error);
+      } else {
+        console.log("Venue subscription email sent:", info.response);
+      }
+    });
   },
 
 
@@ -2610,853 +3889,126 @@ const otherServices = {
       throw new Error("Could not create contact on Razorpay");
     }
   },
-  async sendvenuepaymentMail(userFor = "", user, venue, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS) {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      auth: {
-        user: "gullyteam33@gmail.com",
-        pass: "iaur qnaj ocsq jyvq",
-      },
-    })
-
-    if (!user || !user.email || !purchasedPackage || typeof purchasedPackage.price !== "number") {
-      console.error("Missing or invalid user/purchasedPackage info.")
-      return
-    }
-
-    // Price breakdown with fallback
-    const baseAmount = (purchasedPackage.price * 0.82).toFixed(2)
-    const gstAmount = (purchasedPackage.price * 0.18).toFixed(2)
-    const totalAmount = purchasedPackage.price.toFixed(2)
-
-    // Determine status-specific content
-    let headerTitle, headerColor, statusBadgeColor, statusMessage, introText, ctaText, ctaButtons
-
-    // Set content based on payment status
-    if (PAYMENT_STATUS === "Failed") {
-      headerTitle = "Payment Failed - Action Required"
-      headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)"
-      statusBadgeColor = "#fee2e2"
-      statusMessage = `
-        <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
-          <p style="color: #b91c1c; margin: 0; font-size: 14px;">
-            We were unable to process your payment for the venue subscription package. Please check your payment details and try again.
-          </p>
-        </div>
-      `
-      introText = `
-        We regret to inform you that your payment for the ${purchasedPackage.name} venue subscription package could not be processed. 
-        This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
-      `
-      ctaText = "Please retry your payment to activate your venue subscription and start accepting bookings."
-      ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `
-    } else if (PAYMENT_STATUS === "Pending") {
-      headerTitle = "Payment Pending - Verification in Progress"
-      headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)"
-      statusBadgeColor = "#fef3c7"
-      statusMessage = `
-        <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Pending</p>
-          <p style="color: #92400e; margin: 0; font-size: 14px;">
-            Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
-          </p>
-        </div>
-      `
-      introText = `
-        Thank you for purchasing the ${purchasedPackage.name} venue subscription package. Your payment is currently being processed.
-        You will receive a confirmation email once the payment is successfully verified.
-      `
-      ctaText = "You can check the status of your payment in your Transaction History."
-      ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `
-    } else {
-      // Success or any other status
-      headerTitle = "Venue Subscription Successfully Activated"
-      headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)"
-      statusBadgeColor = "#fef3c7"
-      statusMessage = `
-        <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
-          <p style="color: #166534; margin: 0; font-size: 14px;">
-            Your payment has been successfully processed and your venue subscription is now active.
-          </p>
-        </div>
-      `
-      introText = `
-        We are pleased to confirm that your venue subscription payment has been successfully processed. Thank you for choosing Gully Team — 
-        We're excited to have you onboard and look forward to helping you manage your venue bookings and grow your sports business.
-      `
-      ctaText =
-        "Thank you for joining us and trusting Gully Team with your venue management. We look forward to helping you connect with sports enthusiasts!"
-      ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `
-    }
-
-    // Dynamic title & subject based on payment status
-    let subject
-    if (PAYMENT_STATUS === "Failed") {
-      subject = "Payment Failed - Action Required for Your Gully Team Venue Subscription"
-    } else if (PAYMENT_STATUS === "Pending") {
-      subject = "Payment Pending - Your Gully Team Venue Subscription"
-    } else {
-      subject = "Payment Confirmation – Gully Team Venue Subscription"
-    }
-
-    // Helper function to format sports pricing
-    const formatSportsPricing = (venue) => {
-      if (venue.sportPricing && venue.sportPricing.length > 0) {
-        return venue.sportPricing.map((sp) => `${sp.sport}: ₹${sp.perHourCharge}/hour`).join("<br>")
-      }
-      return `Default Rate: ₹${venue.perHourCharge}/hour`
-    }
-
-    // Helper function to format venue timeslots
-    const formatVenueTimings = (timeslots) => {
-      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-      return days
-        .map((day) => {
-          const slot = timeslots[day]
-          if (slot && slot.isOpen) {
-            return `${day}: ${slot.openTime} - ${slot.closeTime}`
-          }
-          return `${day}: Closed`
-        })
-        .join("<br>")
-    }
-
-    // Helper function to format facilities
-    const formatFacilities = (facilities) => {
-      const facilityNames = {
-        isWaterAvailable: "Water",
-        isParkingAvailable: "Parking",
-        isEquipmentProvided: "Equipment",
-        isWashroomAvailable: "Washroom",
-        isChangingRoomAvailable: "Changing Room",
-        isFloodlightAvailable: "Floodlight",
-        isSeatingLoungeAvailable: "Seating Lounge",
-        isFirstAidAvailable: "First Aid",
-        isWalkingTrackAvailable: "Walking Track",
-      }
-
-      const availableFacilities = Object.keys(facilities)
-        .filter((key) => facilities[key] === true)
-        .map((key) => facilityNames[key])
-        .filter(Boolean)
-
-      return availableFacilities.length > 0 ? availableFacilities.join(", ") : "Basic facilities available"
-    }
-
-    const mailOptions = {
-      from: "gullyteam33@gmail.com",
-      to: user.email, // Changed from shop.ownerEmail to user.email
-      subject: subject,
-      html: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Status – Gully Team Venue</title>
-  <style>
-    body, table, td, p, a, li, blockquote {
-      -webkit-text-size-adjust: 100%;
-      -ms-text-size-adjust: 100%;
-    }
-    
-    table, td {
-      mso-table-lspace: 0pt;
-      mso-table-rspace: 0pt;
-    }
-    
-    img {
-      -ms-interpolation-mode: bicubic;
-      border: 0;
-      height: auto;
-      line-height: 100%;
-      outline: none;
-      text-decoration: none;
-    }
-    body {
-      margin: 0 !important;
-      padding: 0 !important;
-      background-color: #f4f6f8 !important;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-    .email-wrapper {
-      width: 100% !important;
-      background-color: #f4f6f8;
-      padding: 20px 0;
-    }
-    .email-container {
-      max-width: 650px;
-      margin: 0 auto;
-      background-color: #ffffff;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    }
-    .header {
-      background: ${headerColor};
-      padding: 40px 30px;
-      text-align: center;
-    }
-    .header h1 {
-      margin: 0;
-      color: #ffffff;
-      font-size: 28px;
-      font-weight: bold;
-      line-height: 1.2;
-    }
-    .header p {
-      margin: 8px 0 0 0;
-      color: #bfdbfe;
-      font-size: 16px;
-    }
-    .content {
-      padding: 40px 30px;
-    }
-    .welcome-text {
-      font-size: 20px;
-      font-weight: bold;
-      color: #1f2937;
-      margin: 0 0 20px 0;
-      line-height: 1.3;
-    }
-    .intro-text {
-      font-size: 16px;
-      color: #6b7280;
-      margin: 0 0 30px 0;
-      line-height: 1.6;
-    }
-    .section-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: #2563eb;
-      margin: 30px 0 20px 0;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #e5e7eb;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .section-icon {
-      font-size: 20px;
-    }
-    .details-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 20px 0;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-    .details-table td {
-      padding: 14px 16px;
-      border-bottom: 1px solid #f3f4f6;
-      vertical-align: top;
-    }
-    .details-table tr:nth-child(even) {
-      background-color: #f8fafc;
-    }
-    .details-table tr:nth-child(odd) {
-      background-color: #ffffff;
-    }
-    .details-table tr:last-child td {
-      border-bottom: none;
-    }
-    .details-table td.label {
-      font-weight: 600;
-      color: #374151;
-      width: 35%;
-      font-size: 14px;
-    }
-    .details-table td.value {
-      color: #6b7280;
-      font-size: 14px;
-      word-break: break-word;
-    }
-    /* Payment Summary Styles */
-    .payment-summary {
-      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-      border: 2px solid #0ea5e9;
-      border-radius: 12px;
-      padding: 25px;
-      margin: 30px 0;
-    }
-    .payment-title {
-      font-size: 20px;
-      font-weight: bold;
-      color: #0c4a6e;
-      margin: 0 0 20px 0;
-      text-align: center;
-    }
-    .payment-table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #ffffff;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-    .payment-table td {
-      padding: 14px 18px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .payment-table tr:last-child td {
-      border-bottom: none;
-    }
-    .payment-table .payment-label {
-      font-weight: 600;
-      color: #1e40af;
-      width: 45%;
-      font-size: 15px;
-    }
-    .payment-table .payment-value {
-      color: #374151;
-      font-size: 15px;
-      font-weight: 500;
-    }
-    .payment-table .status-${PAYMENT_STATUS.toLowerCase()} {
-      color: ${PAYMENT_STATUS === "Failed" ? "#dc2626" : PAYMENT_STATUS === "Pending" ? "#92400e" : "#16a34a"};
-      font-weight: bold;
-    }
-    .payment-table .total-row {
-      background-color: #1e40af;
-      color: #ffffff;
-      font-weight: bold;
-      font-size: 16px;
-    }
-    .payment-table .total-row .payment-label,
-    .payment-table .total-row .payment-value {
-      color: #ffffff;
-    }
-    .transaction-id {
-      background-color: ${statusBadgeColor};
-      border: 1px solid #f59e0b;
-      border-radius: 6px;
-      padding: 12px 16px;
-      margin: 20px 0;
-      text-align: center;
-    }
-    .transaction-id .label {
-      font-size: 12px;
-      color: #92400e;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .transaction-id .value {
-      font-size: 16px;
-      color: #92400e;
-      font-weight: bold;
-      font-family: 'Courier New', monospace;
-    }
-    .highlight-section {
-      background-color: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-radius: 8px;
-      padding: 25px;
-      margin: 30px 0;
-    }
-    .highlight-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: #166534;
-      margin: 0 0 15px 0;
-    }
-    .task-list {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .task-item {
-      margin: 8px 0;
-      color: #166534;
-      font-size: 15px;
-      line-height: 1.5;
-    }
-    .checkmark {
-      color: #16a34a;
-      font-weight: bold;
-      margin-right: 8px;
-    }
-    .info-section {
-      background-color: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 8px;
-      padding: 25px;
-      margin: 20px 0;
-    }
-    .info-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: #1e40af;
-      margin: 0 0 15px 0;
-    }
-    .info-text {
-      color: #1e40af;
-      font-size: 15px;
-      line-height: 1.6;
-      margin: 0;
-    }
-    .cta-section {
-      text-align: center;
-      margin: 40px 0 20px 0;
-    }
-    .cta-text {
-      font-size: 16px;
-      color: #6b7280;
-      margin: 0 0 25px 0;
-      line-height: 1.6;
-    }
-    .cta-button {
-      display: inline-block;
-      padding: 14px 28px;
-      background-color: #2563eb;
-      color: #ffffff !important;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 16px;
-      line-height: 1;
-      margin: 0 10px 10px 0;
-    }
-    .cta-button.secondary {
-      background-color: #059669;
-    }
-    .footer {
-      background-color: #f9fafb;
-      padding: 30px;
-      text-align: center;
-      border-top: 1px solid #e5e7eb;
-    }
-    .footer-text {
-      font-size: 13px;
-      color: #6b7280;
-      margin: 0 0 8px 0;
-      line-height: 1.5;
-    }
-    .footer-link {
-      color: #2563eb;
-      text-decoration: none;
-    }
-    .footer-link:hover {
-      color: #1d4ed8;
-    }
-    /* Mobile responsiveness */
-    @media only screen and (max-width: 600px) {
-      .email-wrapper {
-        padding: 10px 0;
-      }
-      
-      .email-container {
-        margin: 0 10px;
-        border-radius: 8px;
-      }
-      
-      .header {
-        padding: 30px 20px;
-      }
-      
-      .header h1 {
-        font-size: 24px;
-      }
-      
-      .content {
-        padding: 30px 20px;
-      }
-      
-      .details-table td.label {
-        width: 40%;
-      }
-      
-      .payment-table .payment-label {
-        width: 50%;
-      }
-      
-      .highlight-section,
-      .info-section,
-      .payment-summary {
-        padding: 20px;
-      }
-      
-      .cta-button {
-        display: block;
-        margin: 10px 0;
-      }
-    }
-    @media (prefers-color-scheme: dark) {
-      .email-container {
-        background-color: #ffffff !important;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="email-wrapper">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-      <tr>
-        <td align="center">
-          <div class="email-container">
-            <!-- Header -->
-            <div class="header">
-              <h1>${headerTitle}</h1>
-              <p>Gully Team Venue Subscription</p>
-            </div>
-            <!-- Content -->
-            <div class="content">
-              <!-- Welcome Message -->
-              <p class="welcome-text">Hello ${user.fullName}! 🏟️</p>
-              <p class="intro-text">${introText}</p>
-
-              <!-- Status Message -->
-              ${statusMessage}
-
-              <div class="transaction-id">
-                <div class="label">Transaction ID:</div>
-                <div class="value">${TRANSACTION_ID}</div>
-              </div>
-
-              <div class="payment-summary">
-                <h3 class="payment-title">Payment Summary</h3>
-                <table class="payment-table" role="presentation">
-                  <tr>
-                    <td class="payment-label">Package Name:</td>
-                    <td class="payment-value">${purchasedPackage.name}</td>
-                  </tr>
-                  <tr>
-                    <td class="payment-label">Base Amount:</td>
-                    <td class="payment-value">₹${baseAmount}</td>
-                  </tr>
-                  <tr>
-                    <td class="payment-label">GST (18%):</td>
-                    <td class="payment-value">₹${gstAmount}</td>
-                  </tr>
-                  <tr>
-                    <td class="payment-label">Payment Status:</td>
-                    <td class="payment-value status-${PAYMENT_STATUS.toLowerCase()}">${PAYMENT_STATUS}</td>
-                  </tr>
-                  <tr>
-                    <td class="payment-label">Receipt Number:</td>
-                    <td class="payment-value">${RECEIPT_NUMBER}</td>
-                  </tr>
-                  <tr class="total-row">
-                    <td class="payment-label">Total Amount:</td>
-                    <td class="payment-value">₹${totalAmount}</td>
-                  </tr>
-                </table>
-              </div>
-
-              <h3 class="section-title">
-                Venue Information
-              </h3>
-              <table class="details-table" role="presentation">
-                <tr>
-                  <td class="label">Venue Name:</td>
-                  <td class="value">${venue.venue_name}</td>
-                </tr>
-                <tr>
-                  <td class="label">Description:</td>
-                  <td class="value">${venue.venue_description}</td>
-                </tr>
-                <tr>
-                  <td class="label">Address:</td>
-                  <td class="value">${venue.venue_address}</td>
-                </tr>
-                <tr>
-                  <td class="label">Contact Number:</td>
-                  <td class="value">${venue.venue_contact}</td>
-                </tr>
-                <tr>
-                  <td class="label">Venue Type:</td>
-                  <td class="value">${venue.venue_type}</td>
-                </tr>
-                <tr>
-                  <td class="label">Surface Type:</td>
-                  <td class="value">${venue.venue_surfacetype}</td>
-                </tr>
-              </table>
-
-              <!-- Sports & Pricing Information -->
-              <h3 class="section-title">
-                Sports & Pricing
-              </h3>
-              <table class="details-table" role="presentation">
-                <tr>
-                  <td class="label">Available Sports:</td>
-                  <td class="value">${venue.venue_sports ? venue.venue_sports.join(", ") : "Not specified"}</td>
-                </tr>
-                <tr>
-                  <td class="label">Pricing:</td>
-                  <td class="value">${formatSportsPricing(venue)}</td>
-                </tr>
-                <tr>
-                  <td class="label">Payment Methods:</td>
-                  <td class="value">${venue.paymentMethods ? venue.paymentMethods.join(", ") : "Cash, UPI"}</td>
-                </tr>
-                <tr>
-                  <td class="label">UPI ID:</td>
-                  <td class="value">${venue.upiId}</td>
-                </tr>
-              </table>
-
-              <!-- Venue Timings -->
-              <h3 class="section-title">
-                Venue Timings
-              </h3>
-              <table class="details-table" role="presentation">
-                <tr>
-                  <td class="label">Operating Hours:</td>
-                  <td class="value">${formatVenueTimings(venue.venue_timeslots)}</td>
-                </tr>
-              </table>
-
-              <!-- Facilities -->
-              <h3 class="section-title">
-                Facilities & Amenities
-              </h3>
-              <table class="details-table" role="presentation">
-                <tr>
-                  <td class="label">Available Facilities:</td>
-                  <td class="value">${formatFacilities(venue.venuefacilities)}</td>
-                </tr>
-                ${venue.venue_rules && venue.venue_rules.length > 0
-          ? `
-                <tr>
-                  <td class="label">Venue Rules:</td>
-                  <td class="value">${venue.venue_rules.join("<br>")}</td>
-                </tr>
-                `
-          : ""
-        }
-              </table>
-
-              <!-- Owner Information -->
-              <h3 class="section-title">
-                Owner Information
-              </h3>
-              <table class="details-table" role="presentation">
-                <tr>
-                  <td class="label">Owner Name:</td>
-                  <td class="value">${user.fullName}</td>
-                </tr>
-                <tr>
-                  <td class="label">Email:</td>
-                  <td class="value">${user.email}</td>
-                </tr>
-                <tr>
-                  <td class="label">Phone:</td>
-                  <td class="value">${user.phoneNumber || "Not provided"}</td>
-                </tr>
-                <tr>
-                  <td class="label">Registered On:</td>
-                  <td class="value">${new Date(venue.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</td>
-                </tr>
-              </table>
-
-              ${PAYMENT_STATUS !== "Failed"
-          ? `
-              <!-- Getting Started -->
-              <div class="highlight-section">
-                <h3 class="highlight-title">Start with the basics:</h3>
-                <ul class="task-list">
-                  <li class="task-item">
-                    <span class="checkmark">✓</span>
-                    Log into your venue dashboard and review your listing
-                  </li>
-                  <li class="task-item">
-                    <span class="checkmark">✓</span>
-                    Upload high-quality images of your venue and facilities
-                  </li>
-                  <li class="task-item">
-                    <span class="checkmark">✓</span>
-                    Set up your sports offerings and per-hour pricing
-                  </li>
-                  <li class="task-item">
-                    <span class="checkmark">✓</span>
-                    Configure your venue timings and availability
-                  </li>
-                  <li class="task-item">
-                    <span class="checkmark">✓</span>
-                    Monitor incoming bookings and manage your calendar
-                  </li>
-                  <li class="task-item">
-                    <span class="checkmark">✓</span>
-                    Track your venue analytics and booking performance
-                  </li>
-                </ul>
-              </div>
-              `
-          : ""
-        }
-
-              <!-- Info Section -->
-              <div class="info-section">
-                <h3 class="info-title">${PAYMENT_STATUS === "Failed" ? "Payment Failed - What to Do Next" : "What's Included in Your Venue Subscription"}</h3>
-                <p class="info-text">
-                  ${PAYMENT_STATUS === "Failed"
-          ? `
-                    Your payment could not be processed. This might be due to:
-                    <br><br>
-                    • Insufficient funds in your account<br>
-                    • Incorrect card details<br>
-                    • Bank declined the transaction<br>
-                    • Temporary issue with the payment gateway
-                    <br><br>
-                    Please try again with a different payment method or contact your bank for more information.
-                  `
-          : `
-                    Your venue subscription gives you access to powerful tools to manage your sports facility and grow your booking business. This includes:
-                    <br><br>
-                    • <strong>Venue Listing:</strong> Showcase your Venue/turf on our platform with photos and detailed information<br>
-                    • <strong>Multi-Sport Management:</strong> Add multiple sports with individual pricing for each<br>
-                    • <strong>Booking Management:</strong> Accept and manage slot bookings from sports enthusiasts<br>
-                    • <strong>Flexible Pricing:</strong> Set per-hour charges for different sports and time slots<br>
-                    • <strong>Analytics Dashboard:</strong> Track bookings, revenue, and venue performance<br>
-                    • <strong>Payment Integration:</strong> Secure payment processing with multiple payment options<br>
-                    • <strong>Calendar Management:</strong> Manage availability and time slots efficiently
-                    <br><br>
-                    Log in to your Gully Team venue dashboard to start accepting bookings and connecting with sports enthusiasts in your area.
-                  `
-        }
-                </p>
-              </div>
-
-              <!-- Call to Action -->
-              <div class="cta-section">
-                <p class="cta-text">
-                  ${ctaText}
-                </p>
-                ${ctaButtons}
-              </div>
-            </div>
-            <!-- Footer -->
-            <div class="footer">
-              <p class="footer-text">
-                © ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.
-              </p>
-              <p class="footer-text">
-                Email: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a>
-              </p>
-              <p class="footer-text">
-                For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
-              </p>
-            </div>
-          </div>
-        </td>
-      </tr>
-    </table>
-  </div>
-</body>
-</html>
-`,
-    }
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log("Error sending email:", error)
-      } else {
-        console.log("Venue subscription email sent:", info.response)
-      }
-    })
-  },
 
   async createIndividualOrder(data) {
-    const userInfo = global.user
-    const receipt = crypto.randomBytes(10).toString("hex")
+    try {
+      const userInfo = global.user
+      const receipt = crypto.randomBytes(10).toString("hex")
+      const paymentData = {
+        amount: data.amount * 100,
+        currency: "INR",
+        receipt: `order_receipt_${receipt}`,
+        payment_capture: 1,
+      }
+      const result = await RazorpayHandler.createOrder(paymentData)
 
-    const paymentData = {
-      amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
-      currency: "INR",
-      receipt: `order_receipt_${receipt}`,
-      payment_capture: 1, // Auto capture payment
-    }
+      let individual = null
+      if (data.individualId) {
+        individual = await Individual.findById(data.individualId)
+        if (!individual) throw CustomErrorHandler.notFound("Individual Not Found")
+      }
 
-    const result = await RazorpayHandler.createOrder(paymentData)
+      const user = individual ? await User.findById(individual.userId) : await User.findById(userInfo.userId)
+      if (!user) throw CustomErrorHandler.notFound("User Not Found")
 
-    const individual = await Individual.findById(data.individualId)
-    if (!individual) throw CustomErrorHandler.notFound("Individual Not Found")
+      const purchasedPackage = await Package.findById(data.PackageId)
+      if (!purchasedPackage) throw CustomErrorHandler.notFound("Package Not Found")
 
-    const user = await User.findById(individual.userId)
-    if (!user) throw CustomErrorHandler.notFound("User Not Found")
+      console.log(data.ordertype)
 
-    const purchasedPackage = await Package.findById(data.PackageId)
-    if (!purchasedPackage) throw CustomErrorHandler.notFound("Package Not Found")
+      const orderHistoryData = {
+        orderId: result.id,
+        userId: userInfo.userId,
+        razorpay_paymentId: data.razorpay_paymentId,
+        PackageId: data.PackageId,
+        baseAmount: data.baseAmount,
+        processingFee: data.processingFee,
+        convenienceFee: data.convenienceFee,
+        gstamount: data.gstamount,
+        totalAmount: data.totalAmount,
+        currency: result.currency,
+        receipt: result.receipt,
+        status: data.status || "Pending",
+        ordertype: "individual",
+      }
 
-    const gstRate = 18 / 100
-    const gstAmount = (result.amount / 100) * gstRate
-    const amountBeforeGST = result.amount / 100 - gstAmount
-    console.log(data.ordertype);
-    const orderHistory = new OrderHistory({
-      orderId: result.id,
-      userId: userInfo.userId,
-      individualId: data.individualId,
-      razorpay_paymentId: data.razorpay_paymentId,
-      PackageId: data.PackageId,
-      amount: result.amount / 100,
-      amountPaid: 0,
-      amountDue: result.amount / 100,
-      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
-      coupon: data.coupon ?? "",
-      totalAmountWithGST: result.amount / 100,
-      gstAmount: gstAmount,
-      amountbeforegst: amountBeforeGST,
-      currency: result.currency,
-      receipt: result.receipt,
-      status: data.status || "Pending",
-      ordertype: data.ordertype,
-    })
+      if (data.individualId) {
+        orderHistoryData.individualId = data.individualId
+      }
 
-    await orderHistory.save()
+      const orderHistory = new OrderHistory(orderHistoryData)
+      await orderHistory.save()
 
-    const payment = new Payment({
-      orderId: result.id,
-      userId: userInfo.userId,
-      individualId: data.individualId,
-      razorpay_paymentId: data.razorpay_paymentId,
-      PackageId: data.PackageId,
-      amountPaid: 0,
-      paymentStatus: data.status || "Pending",
-      paymentMode: data.paymentMode || "Card",
-      transactionId: result.id,
-    })
+      const paymentDataObj = {
+        orderId: result.id,
+        userId: userInfo.userId,
+        razorpay_paymentId: data.razorpay_paymentId,
+        PackageId: data.PackageId,
+        baseAmount: data.baseAmount,
+        processingFee: data.processingFee,
+        convenienceFee: data.convenienceFee,
+        gstamount: data.gstamount,
+        totalAmount: data.totalAmount,
+        paymentfor: "individual",
+        paymentStatus: data.status || "Pending",
+        paymentMode: data.paymentMode || "Card",
+        transactionId: result.id,
+      }
 
-    await payment.save()
+      if (data.individualId) {
+        paymentDataObj.individualId = data.individualId
+      }
 
-    setTimeout(async () => {
-      console.log("Sending email after 10 seconds...")
-      await this.sendIndividualpaymentMail(
-        "individual-subscription",
-        user,
-        individual,
-        purchasedPackage,
-        result.id,
-        orderHistory.receipt,
-        data.status,
-      )
-    }, 10000)
+      const payment = new Payment(paymentDataObj)
+      await payment.save()
 
-    return {
-      order: result,
-      message: "Individual Service Provider Order created successfully. Payment is pending.",
+      if (individual) {
+        setTimeout(async () => {
+          console.log("Sending email after 10 seconds...")
+          await this.sendIndividualpaymentMail(
+            "individual-subscription",
+            user,
+            individual,
+            purchasedPackage,
+            result.id,
+            orderHistory.receipt,
+            data.status,
+            data.baseAmount,
+            data.processingFee,
+            data.convenienceFee,
+            data.gstamount,
+            data.totalAmount,
+          )
+        }, 10000)
+      } else if (data.status === "Failed" && data.individualData) {
+        setTimeout(async () => {
+          console.log("Sending failed payment email...")
+          await this.sendIndividualpaymentMail(
+            "individual-subscription",
+            user,
+            null,
+            purchasedPackage,
+            result.id,
+            orderHistory.receipt,
+            data.status,
+            data.baseAmount,
+            data.processingFee,
+            data.convenienceFee,
+            data.gstamount,
+            data.totalAmount,
+            data.individualData, // Pass individual data from frontend
+          )
+        }, 10000)
+      }
+
+      return {
+        order: result,
+        message: "Individual Service Provider Order created successfully. Payment is pending.",
+      }
+    } catch (error) {
+      console.log(`The error is :${error}`)
     }
   },
-
   async sendIndividualpaymentMail(
     userFor = "",
     user,
@@ -3465,6 +4017,12 @@ const otherServices = {
     TRANSACTION_ID,
     RECEIPT_NUMBER,
     PAYMENT_STATUS,
+    baseAmount,
+    processingFee,
+    convenienceFee,
+    gstAmount,
+    totalAmount,
+    individualDataFromFrontend = null,
   ) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -3482,10 +4040,20 @@ const otherServices = {
       return
     }
 
-    // Price breakdown with fallback
-    const baseAmount = (purchasedPackage.price * 0.82).toFixed(2)
-    const gstAmount = (purchasedPackage.price * 0.18).toFixed(2)
-    const totalAmount = purchasedPackage.price.toFixed(2)
+    // Use individual from DB if available, otherwise use data from frontend
+    const individualData = individual || individualDataFromFrontend
+
+    if (!individualData) {
+      console.error("No individual data available for email")
+      return
+    }
+
+    // Price breakdown - use passed parameters instead of calculating
+    const baseAmountFormatted = baseAmount.toFixed(2)
+    const gstAmountFormatted = gstAmount.toFixed(2)
+    const totalAmountFormatted = totalAmount.toFixed(2)
+    const convenienceFeeFormatted = convenienceFee.toFixed(2)
+    const processingFeeFormatted = processingFee.toFixed(2)
 
     // Determine status-specific content
     let headerTitle, headerColor, statusBadgeColor, statusMessage, introText, ctaText, ctaButtons
@@ -3496,69 +4064,69 @@ const otherServices = {
       headerColor = "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)"
       statusBadgeColor = "#fee2e2"
       statusMessage = `
-        <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
-          <p style="color: #b91c1c; margin: 0; font-size: 14px;">
-            We were unable to process your payment for the sports service provider subscription. Please check your payment details and try again.
-          </p>
-        </div>
-      `
+      <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
+        <p style="color: #b91c1c; margin: 0; font-size: 14px;">
+          We were unable to process your payment for the sports service provider subscription. Please check your payment details and try again.
+        </p>
+      </div>
+    `
       introText = `
-        We regret to inform you that your payment for the ${purchasedPackage.name} subscription package could not be processed. 
-        This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
-      `
+      We regret to inform you that your payment for the ${purchasedPackage.name} subscription package could not be processed. 
+      This could be due to insufficient funds, expired card details, or a temporary issue with the payment gateway.
+    `
       ctaText = "Please retry your payment to activate your subscription and start offering your sports services."
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        Contact Support
+      </a>
+    `
     } else if (PAYMENT_STATUS === "Pending") {
       headerTitle = "Payment Pending - Verification in Progress"
       headerColor = "linear-gradient(135deg, #eab308 0%, #facc15 100%)"
       statusBadgeColor = "#fef3c7"
       statusMessage = `
-        <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Pending</p>
-          <p style="color: #92400e; margin: 0; font-size: 14px;">
-            Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
-          </p>
-        </div>
-      `
+      <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Pending</p>
+        <p style="color: #92400e; margin: 0; font-size: 14px;">
+          Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
+        </p>
+      </div>
+    `
       introText = `
-        Thank you for purchasing the ${purchasedPackage.name} subscription package. Your payment is currently being processed.
-        You will receive a confirmation email once the payment is successfully verified.
-      `
+      Thank you for purchasing the ${purchasedPackage.name} subscription package. Your payment is currently being processed.
+      You will receive a confirmation email once the payment is successfully verified.
+    `
       ctaText = "You can check the status of your payment in your Transaction History."
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        Contact Support
+      </a>
+    `
     } else {
       // Success or any other status
       headerTitle = "Sports Service Provider Subscription Activated"
       headerColor = "linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)"
       statusBadgeColor = "#fef3c7"
       statusMessage = `
-        <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
-          <p style="color: #166534; margin: 0; font-size: 14px;">
-            Your payment has been successfully processed and your subscription is now active.
-          </p>
-        </div>
-      `
+      <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
+        <p style="color: #166534; margin: 0; font-size: 14px;">
+          Your payment has been successfully processed and your subscription is now active.
+        </p>
+      </div>
+    `
       introText = `
-        We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully Team — 
-        We're excited to have you onboard and look forward to helping you connect with sports enthusiasts seeking your expertise.
-      `
+      We are pleased to confirm that your subscription payment has been successfully processed. Thank you for choosing Gully Team —
+      We're excited to have you onboard and look forward to helping you connect with sports enthusiasts seeking your expertise.
+    `
       ctaText =
         "Thank you for joining us and trusting Gully Team with your sports service business. We look forward to helping you share your expertise with enthusiasts!"
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-          Contact Support
-        </a>
-      `
+      <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
+        Contact Support
+      </a>
+    `
     }
 
     // Dynamic title & subject based on payment status
@@ -3585,8 +4153,7 @@ const otherServices = {
       if (!education || education.length === 0) return "Not provided"
       return education
         .map(
-          (edu) =>
-            `${edu.degree} from ${edu.institution} (${edu.year})${edu.description ? `: ${edu.description}` : ""}`,
+          (edu) => `${edu.degree} from ${edu.institution} (${edu.year})${edu.description ? `: ${edu.description}` : ""}`,
         )
         .join("<br>")
     }
@@ -3644,6 +4211,7 @@ const otherServices = {
       outline: none;
       text-decoration: none;
     }
+
     body {
       margin: 0 !important;
       padding: 0 !important;
@@ -3652,11 +4220,13 @@ const otherServices = {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
+
     .email-wrapper {
       width: 100% !important;
       background-color: #f4f6f8;
       padding: 20px 0;
     }
+
     .email-container {
       max-width: 650px;
       margin: 0 auto;
@@ -3665,11 +4235,13 @@ const otherServices = {
       overflow: hidden;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
+
     .header {
       background: ${headerColor};
       padding: 40px 30px;
       text-align: center;
     }
+
     .header h1 {
       margin: 0;
       color: #ffffff;
@@ -3677,14 +4249,17 @@ const otherServices = {
       font-weight: bold;
       line-height: 1.2;
     }
+
     .header p {
       margin: 8px 0 0 0;
       color: #bfdbfe;
       font-size: 16px;
     }
+
     .content {
       padding: 40px 30px;
     }
+
     .welcome-text {
       font-size: 20px;
       font-weight: bold;
@@ -3692,12 +4267,14 @@ const otherServices = {
       margin: 0 0 20px 0;
       line-height: 1.3;
     }
+
     .intro-text {
       font-size: 16px;
       color: #6b7280;
       margin: 0 0 30px 0;
       line-height: 1.6;
     }
+
     .section-title {
       font-size: 18px;
       font-weight: bold;
@@ -3709,9 +4286,11 @@ const otherServices = {
       align-items: center;
       gap: 8px;
     }
+
     .section-icon {
       font-size: 20px;
     }
+
     .details-table {
       width: 100%;
       border-collapse: collapse;
@@ -3720,31 +4299,38 @@ const otherServices = {
       overflow: hidden;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
+
     .details-table td {
       padding: 14px 16px;
       border-bottom: 1px solid #f3f4f6;
       vertical-align: top;
     }
+
     .details-table tr:nth-child(even) {
       background-color: #f8fafc;
     }
+
     .details-table tr:nth-child(odd) {
       background-color: #ffffff;
     }
+
     .details-table tr:last-child td {
       border-bottom: none;
     }
+
     .details-table td.label {
       font-weight: 600;
       color: #374151;
       width: 35%;
       font-size: 14px;
     }
+
     .details-table td.value {
       color: #6b7280;
       font-size: 14px;
       word-break: break-word;
     }
+
     /* Payment Summary Styles */
     .payment-summary {
       background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -3753,6 +4339,7 @@ const otherServices = {
       padding: 25px;
       margin: 30px 0;
     }
+
     .payment-title {
       font-size: 20px;
       font-weight: bold;
@@ -3760,6 +4347,7 @@ const otherServices = {
       margin: 0 0 20px 0;
       text-align: center;
     }
+
     .payment-table {
       width: 100%;
       border-collapse: collapse;
@@ -3768,38 +4356,46 @@ const otherServices = {
       overflow: hidden;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
+
     .payment-table td {
       padding: 14px 18px;
       border-bottom: 1px solid #e2e8f0;
     }
+
     .payment-table tr:last-child td {
       border-bottom: none;
     }
+
     .payment-table .payment-label {
       font-weight: 600;
       color: #1e40af;
       width: 45%;
       font-size: 15px;
     }
+
     .payment-table .payment-value {
       color: #374151;
       font-size: 15px;
       font-weight: 500;
     }
+
     .payment-table .status-${PAYMENT_STATUS.toLowerCase()} {
       color: ${PAYMENT_STATUS === "Failed" ? "#dc2626" : PAYMENT_STATUS === "Pending" ? "#92400e" : "#16a34a"};
       font-weight: bold;
     }
+
     .payment-table .total-row {
       background-color: #1e40af;
       color: #ffffff;
       font-weight: bold;
       font-size: 16px;
     }
+
     .payment-table .total-row .payment-label,
     .payment-table .total-row .payment-value {
       color: #ffffff;
     }
+
     .transaction-id {
       background-color: ${statusBadgeColor};
       border: 1px solid #f59e0b;
@@ -3808,6 +4404,7 @@ const otherServices = {
       margin: 20px 0;
       text-align: center;
     }
+
     .transaction-id .label {
       font-size: 12px;
       color: #92400e;
@@ -3815,12 +4412,14 @@ const otherServices = {
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
+
     .transaction-id .value {
       font-size: 16px;
       color: #92400e;
       font-weight: bold;
       font-family: 'Courier New', monospace;
     }
+
     .highlight-section {
       background-color: #f0fdf4;
       border: 1px solid #bbf7d0;
@@ -3828,38 +4427,67 @@ const otherServices = {
       padding: 25px;
       margin: 30px 0;
     }
+
     .highlight-title {
       font-size: 18px;
       font-weight: bold;
       color: #166534;
       margin: 0 0 15px 0;
     }
+
     .task-list {
       margin: 0;
       padding: 0;
       list-style: none;
     }
+
     .task-item {
       margin: 8px 0;
       color: #166534;
       font-size: 15px;
       line-height: 1.5;
     }
+
     .checkmark {
       color: #16a34a;
       font-weight: bold;
       margin-right: 8px;
     }
+
+    .info-section {
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 20px 0;
+    }
+
+    .info-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1e40af;
+      margin: 0 0 15px 0;
+    }
+
+    .info-text {
+      color: #1e40af;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
     .cta-section {
       text-align: center;
       margin: 40px 0 20px 0;
     }
+
     .cta-text {
       font-size: 16px;
       color: #6b7280;
       margin: 0 0 25px 0;
       line-height: 1.6;
     }
+
     .cta-button {
       display: inline-block;
       padding: 14px 28px;
@@ -3872,28 +4500,34 @@ const otherServices = {
       line-height: 1;
       margin: 0 10px 10px 0;
     }
+
     .cta-button.secondary {
       background-color: #059669;
     }
+
     .footer {
       background-color: #f9fafb;
       padding: 30px;
       text-align: center;
       border-top: 1px solid #e5e7eb;
     }
+
     .footer-text {
       font-size: 13px;
       color: #6b7280;
       margin: 0 0 8px 0;
       line-height: 1.5;
     }
+
     .footer-link {
       color: #2563eb;
       text-decoration: none;
     }
+
     .footer-link:hover {
       color: #1d4ed8;
     }
+
     /* Mobile responsiveness */
     @media only screen and (max-width: 600px) {
       .email-wrapper {
@@ -3926,6 +4560,7 @@ const otherServices = {
       }
       
       .highlight-section,
+      .info-section,
       .payment-summary {
         padding: 20px;
       }
@@ -3935,6 +4570,7 @@ const otherServices = {
         margin: 10px 0;
       }
     }
+
     @media (prefers-color-scheme: dark) {
       .email-container {
         background-color: #ffffff !important;
@@ -3953,10 +4589,11 @@ const otherServices = {
               <h1>${headerTitle}</h1>
               <p>Gully Team Sports Service Provider</p>
             </div>
+
             <!-- Content -->
             <div class="content">
               <!-- Welcome Message -->
-              <p class="welcome-text">Hello ${individual.fullName}! 🏆</p>
+              <p class="welcome-text">Hello ${individualData.fullName || user.fullName}! 🏆</p>
               <p class="intro-text">${introText}</p>
 
               <!-- Status Message -->
@@ -3976,11 +4613,19 @@ const otherServices = {
                   </tr>
                   <tr>
                     <td class="payment-label">Base Amount:</td>
-                    <td class="payment-value">₹${baseAmount}</td>
+                    <td class="payment-value">₹${baseAmountFormatted}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Convenience Fee:</td>
+                    <td class="payment-value">₹${convenienceFeeFormatted}</td>
+                  </tr>
+                  <tr>
+                    <td class="payment-label">Processing Fee:</td>
+                    <td class="payment-value">₹${processingFeeFormatted}</td>
                   </tr>
                   <tr>
                     <td class="payment-label">GST (18%):</td>
-                    <td class="payment-value">₹${gstAmount}</td>
+                    <td class="payment-value">₹${gstAmountFormatted}</td>
                   </tr>
                   <tr>
                     <td class="payment-label">Payment Status:</td>
@@ -3992,7 +4637,7 @@ const otherServices = {
                   </tr>
                   <tr class="total-row">
                     <td class="payment-label">Total Amount:</td>
-                    <td class="payment-value">₹${totalAmount}</td>
+                    <td class="payment-value">₹${totalAmountFormatted}</td>
                   </tr>
                 </table>
               </div>
@@ -4003,23 +4648,23 @@ const otherServices = {
               <table class="details-table" role="presentation">
                 <tr>
                   <td class="label">Full Name:</td>
-                  <td class="value">${individual.fullName}</td>
+                  <td class="value">${individualData.fullName || "N/A"}</td>
                 </tr>
                 <tr>
                   <td class="label">Email:</td>
-                  <td class="value">${individual.email}</td>
+                  <td class="value">${individualData.email || user.email}</td>
                 </tr>
                 <tr>
                   <td class="label">Phone Number:</td>
-                  <td class="value">${individual.phoneNumber}</td>
+                  <td class="value">${individualData.phoneNumber || "N/A"}</td>
                 </tr>
                 <tr>
                   <td class="label">PAN Number:</td>
-                  <td class="value">${individual.panNumber}</td>
+                  <td class="value">${individualData.panNumber || "N/A"}</td>
                 </tr>
                 <tr>
                   <td class="label">Years of Experience:</td>
-                  <td class="value">${individual.yearOfExperience} years</td>
+                  <td class="value">${individualData.yearOfExperience || 0} years</td>
                 </tr>
               </table>
 
@@ -4030,54 +4675,79 @@ const otherServices = {
               <table class="details-table" role="presentation">
                 <tr>
                   <td class="label">Sports Categories:</td>
-                  <td class="value">${individual.sportsCategories.join(", ")}</td>
+                  <td class="value">${individualData.sportsCategories ? individualData.sportsCategories.join(", ") : "Not specified"}</td>
                 </tr>
                 <tr>
                   <td class="label">Service Types:</td>
-                  <td class="value">${individual.selectedServiceTypes.join(", ")}</td>
+                  <td class="value">${individualData.selectedServiceTypes ? individualData.selectedServiceTypes.join(", ") : "Not specified"}</td>
                 </tr>
                 <tr>
                   <td class="label">Service Options:</td>
-                  <td class="value">${formatServiceOptions(individual.serviceOptions)}</td>
+                  <td class="value">${individualData.serviceOptions ? formatServiceOptions(individualData.serviceOptions) : "Not specified"}</td>
                 </tr>
                 <tr>
                   <td class="label">Available Days:</td>
-                  <td class="value">${individual.availableDays.join(", ")}</td>
+                  <td class="value">${individualData.availableDays ? individualData.availableDays.join(", ") : "Not specified"}</td>
                 </tr>
                 <tr>
                   <td class="label">Age Groups Supported:</td>
-                  <td class="value">${individual.supportedAgeGroups.join(", ")}</td>
+                  <td class="value">${individualData.supportedAgeGroups ? individualData.supportedAgeGroups.join(", ") : "Not specified"}</td>
                 </tr>
               </table>
 
               <!-- Qualifications -->
+              ${individualData.education || individualData.experience || individualData.certificates
+          ? `
               <h3 class="section-title">
                 Qualifications & Experience
               </h3>
               <table class="details-table" role="presentation">
+                ${individualData.education
+            ? `
                 <tr>
                   <td class="label">Education:</td>
-                  <td class="value">${formatEducation(individual.education)}</td>
+                  <td class="value">${formatEducation(individualData.education)}</td>
                 </tr>
+                `
+            : ""
+          }
+                ${individualData.experience
+            ? `
                 <tr>
                   <td class="label">Experience:</td>
-                  <td class="value">${formatExperience(individual.experience)}</td>
+                  <td class="value">${formatExperience(individualData.experience)}</td>
                 </tr>
+                `
+            : ""
+          }
+                ${individualData.certificates
+            ? `
                 <tr>
                   <td class="label">Certificates:</td>
-                  <td class="value">${formatCertificates(individual.certificates)}</td>
+                  <td class="value">${formatCertificates(individualData.certificates)}</td>
                 </tr>
+                `
+            : ""
+          }
               </table>
+              `
+          : ""
+        }
 
               <!-- Bio -->
+              ${individualData.bio
+          ? `
               <h3 class="section-title">
                 Professional Bio
               </h3>
               <table class="details-table" role="presentation">
                 <tr>
-                  <td class="value" colspan="2">${individual.bio}</td>
+                  <td class="value" colspan="2">${individualData.bio}</td>
                 </tr>
               </table>
+              `
+          : ""
+        }
 
               ${PAYMENT_STATUS !== "Failed"
           ? `
@@ -4115,6 +4785,38 @@ const otherServices = {
           : ""
         }
 
+              <!-- Info Section -->
+              <div class="info-section">
+                <h3 class="info-title">${PAYMENT_STATUS === "Failed" ? "Payment Failed - What to Do Next" : "What's Included in Your Service Provider Subscription"}</h3>
+                <p class="info-text">
+                  ${PAYMENT_STATUS === "Failed"
+          ? `
+                    Your payment could not be processed. This might be due to:
+                    <br><br>
+                    • Insufficient funds in your account<br>
+                    • Incorrect card details<br>
+                    • Bank declined the transaction<br>
+                    • Temporary issue with the payment gateway
+                    <br><br>
+                    Please try again with a different payment method or contact your bank for more information.
+                  `
+          : `
+                    Your service provider subscription gives you access to powerful tools to manage your sports services and connect with enthusiasts. This includes:
+                    <br><br>
+                    • <strong>Profile Listing:</strong> Showcase your expertise and services on our platform<br>
+                    • <strong>Multi-Sport Services:</strong> Offer training in multiple sports categories<br>
+                    • <strong>Booking Management:</strong> Accept and manage service bookings from clients<br>
+                    • <strong>Flexible Service Options:</strong> Offer one-on-one, team, and online training<br>
+                    • <strong>Calendar Management:</strong> Manage your availability and schedule efficiently<br>
+                    • <strong>Client Communication:</strong> Direct communication with your clients<br>
+                    • <strong>Performance Analytics:</strong> Track your bookings and client feedback
+                    <br><br>
+                    Log in to your Gully Team dashboard to start accepting bookings and connecting with sports enthusiasts in your area.
+                  `
+        }
+                </p>
+              </div>
+
               <!-- Call to Action -->
               <div class="cta-section">
                 <p class="cta-text">
@@ -4123,6 +4825,7 @@ const otherServices = {
                 ${ctaButtons}
               </div>
             </div>
+
             <!-- Footer -->
             <div class="footer">
               <p class="footer-text">
@@ -4141,8 +4844,7 @@ const otherServices = {
     </table>
   </div>
 </body>
-</html>
-`,
+</html>`,
     }
 
     transporter.sendMail(mailOptions, (error, info) => {

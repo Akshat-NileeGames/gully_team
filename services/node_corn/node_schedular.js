@@ -1,12 +1,12 @@
 import cron from "node-cron"
 import { Venue, Shop, Individual, Payout, Booking } from "../../models/index.js"
-
 import EmailReminderService from "./reminder.js"
 import axios from "axios"
 import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_ACCOUNT_NUMBER } from "../../config/index.js"
 import { randomUUID } from "crypto"
 
-class EmailReminderScheduler {
+class PayoutService {
+    // Class name changed back to PayoutService
     constructor() {
         this.emailService = new EmailReminderService()
         this.batchSize = 100
@@ -17,12 +17,22 @@ class EmailReminderScheduler {
         this.isProcessingPayouts = false
         this.isProcessingPayoutSync = false
 
-        // Razorpay API configuration
         this.razorpayAuth = {
             username: RAZORPAY_KEY_ID,
             password: RAZORPAY_KEY_SECRET,
         }
         this.razorpayBaseURL = "https://api.razorpay.com/v1"
+
+        // Payment mode limits (in paise)
+        this.paymentLimits = {
+            UPI: 10000000, // ₹1,00,000
+            IMPS: 50000000, // ₹5,00,000
+            NEFT: 10000000000, // ₹1,00,00,000 (1 crore)
+            RTGS: 20000000, // ₹2,00,000 minimum for RTGS
+        }
+
+        // Fund account type cache
+        this.fundAccountCache = new Map()
 
         this.healthStatus = {
             lastReminderRun: null,
@@ -39,6 +49,246 @@ class EmailReminderScheduler {
             payoutSyncProcessedCount: 0,
             payoutSyncUpdatedCount: 0,
             payoutSyncErrorCount: 0,
+            splitPayoutsCreated: 0,
+        }
+    }
+
+    /**
+     * Fetches fund account details from Razorpay API
+     * @param {string} fundAccountId - Fund account ID
+     * @returns {Promise<object>} Fund account details
+     */
+    async getFundAccountDetails(fundAccountId) {
+        // Check cache first
+        if (this.fundAccountCache.has(fundAccountId)) {
+            return this.fundAccountCache.get(fundAccountId)
+        }
+
+        try {
+            console.log(`[${new Date().toISOString()}] Fetching fund account details for ${fundAccountId}`)
+
+            const response = await axios.get(`${this.razorpayBaseURL}/fund_accounts/${fundAccountId}`, {
+                auth: this.razorpayAuth,
+                timeout: 30000,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            })
+
+            const fundAccount = response.data
+
+            // Cache the result for 1 hour
+            this.fundAccountCache.set(fundAccountId, fundAccount)
+            setTimeout(
+                () => {
+                    this.fundAccountCache.delete(fundAccountId)
+                },
+                60 * 60 * 1000,
+            )
+
+            console.log(`[${new Date().toISOString()}] Fund account ${fundAccountId} type: ${fundAccount.account_type}`)
+
+            return fundAccount
+        } catch (error) {
+            console.error(
+                `[${new Date().toISOString()}] Failed to fetch fund account ${fundAccountId}:`,
+                error.response?.data || error.message,
+            )
+            throw error
+        }
+    }
+
+    /**
+     * Determines the appropriate payment mode based on amount and fund account type
+     * @param {number} amountInPaise - Amount in paise
+     * @param {object} fundAccount - Fund account details
+     * @returns {object} Payment mode and split info
+     */
+    getPaymentModeForFundAccount(amountInPaise, fundAccount) {
+        const accountType = fundAccount.account_type
+
+        switch (accountType) {
+            case "vpa": // UPI
+                if (amountInPaise <= this.paymentLimits.UPI) {
+                    return {
+                        mode: "UPI",
+                        canProcess: true,
+                        needsSplit: false,
+                    }
+                } else {
+                    // Need to split into multiple UPI transactions
+                    return {
+                        mode: "UPI",
+                        canProcess: true,
+                        needsSplit: true,
+                        maxAmount: this.paymentLimits.UPI,
+                        splitCount: Math.ceil(amountInPaise / this.paymentLimits.UPI),
+                    }
+                }
+
+            case "bank_account": // Bank account - can use IMPS, NEFT, RTGS
+                if (amountInPaise <= this.paymentLimits.UPI) {
+                    return { mode: "UPI", canProcess: true, needsSplit: false }
+                } else if (amountInPaise <= this.paymentLimits.IMPS) {
+                    return { mode: "IMPS", canProcess: true, needsSplit: false }
+                } else if (amountInPaise >= this.paymentLimits.RTGS) {
+                    return { mode: "RTGS", canProcess: true, needsSplit: false }
+                } else {
+                    return { mode: "NEFT", canProcess: true, needsSplit: false }
+                }
+
+            default:
+                console.warn(
+                    `[${new Date().toISOString()}] Unknown account type: ${accountType} for fund account ${fundAccount.id}`,
+                )
+                return {
+                    mode: "UPI",
+                    canProcess: false,
+                    error: `Unsupported account type: ${accountType}`,
+                }
+        }
+    }
+
+    /**
+     * Creates multiple payout records for split payments
+     * @param {object} venue - Venue details
+     * @param {number} totalAmountInRupees - Total amount in rupees
+     * @param {number} maxAmountInPaise - Maximum amount per transaction in paise
+     * @param {string} mode - Payment mode
+     * @returns {Promise<Array>} Array of payout records
+     */
+    async createSplitPayouts(venue, totalAmountInRupees, maxAmountInPaise, mode) {
+        const payouts = []
+        let remainingAmountInPaise = Math.round(totalAmountInRupees * 100)
+        let splitIndex = 1
+
+        while (remainingAmountInPaise > 0) {
+            const currentAmountInPaise = Math.min(remainingAmountInPaise, maxAmountInPaise)
+            const currentAmountInRupees = currentAmountInPaise / 100 // Store in rupees in DB
+            const referenceId = `gully_payout_${venue._id.toString().slice(-8)}_${Date.now()}_${splitIndex}`
+            const idempotencyKey = randomUUID()
+
+            const payoutRecord = new Payout({
+                fundAccountId: venue.razorpay_fund_account_id,
+                userId: venue.userId._id,
+                venueId: venue._id,
+                amount: currentAmountInRupees, // Store in rupees
+                currency: "INR",
+                mode: mode,
+                purpose: "payout",
+                referenceId,
+                narration: `Payout ${venue.venue_name} (${splitIndex}/${Math.ceil((totalAmountInRupees * 100) / maxAmountInPaise)})`,
+                notes: {
+                    venueId: venue._id.toString(),
+                    venueName: venue.venue_name,
+                    originalAmount: venue.amountNeedToPay,
+                    paymentMode: mode,
+                    splitIndex: splitIndex,
+                    totalSplits: Math.ceil((totalAmountInRupees * 100) / maxAmountInPaise),
+                    isSplitPayout: true,
+                },
+                idempotencyKey,
+                isSplitPayout: true,
+                splitIndex: splitIndex,
+                totalSplits: Math.ceil((totalAmountInRupees * 100) / maxAmountInPaise),
+            })
+
+            await payoutRecord.save()
+            payouts.push(payoutRecord)
+
+            console.log(
+                `[${new Date().toISOString()}] Created split payout ${splitIndex}/${Math.ceil((totalAmountInRupees * 100) / maxAmountInPaise)}: ${payoutRecord._id} for ₹${currentAmountInRupees}`,
+            )
+
+            remainingAmountInPaise -= currentAmountInPaise
+            splitIndex++
+        }
+
+        this.healthStatus.splitPayoutsCreated += payouts.length
+        return payouts
+    }
+
+    /**
+     * Updates venue with successful payout information
+     * @param {string} venueId - Venue ID
+     * @param {number} paidAmount - Amount paid in rupees
+     * @param {object} payoutData - Payout data from Razorpay
+     * @param {boolean} isSplitPayout - Whether this is part of a split payout
+     */
+    async updateVenuePayoutSuccess(venueId, paidAmount, payoutData, isSplitPayout = false) {
+        try {
+            const venue = await Venue.findById(venueId)
+            if (!venue) {
+                console.error(`[${new Date().toISOString()}] Venue ${venueId} not found for payout update`)
+                return
+            }
+
+            // For split payouts, we need to check if all splits are completed
+            if (isSplitPayout) {
+                // Find all split payouts for this venue
+                const allSplitPayouts = await Payout.find({
+                    venueId: venueId,
+                    isSplitPayout: true,
+                    createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+                }).lean()
+
+                const processedSplits = allSplitPayouts.filter((p) => p.status === "processed")
+                const totalSplits = allSplitPayouts.length > 0 ? allSplitPayouts[0].totalSplits : 1
+
+                console.log(
+                    `[${new Date().toISOString()}] Split payout progress for venue ${venueId}: ${processedSplits.length}/${totalSplits} completed`,
+                )
+
+                // Only update venue totals when all splits are completed
+                if (processedSplits.length === totalSplits) {
+                    const totalPaidAmount = processedSplits.reduce((sum, p) => sum + p.amount, 0) // Payout.amount is now in rupees
+
+                    const updateData = {
+                        amountNeedToPay: 0,
+                        totalAmountPaid: (venue.totalAmountPaid || 0) + totalPaidAmount,
+                        $push: {
+                            payoutHistory: {
+                                amount: totalPaidAmount,
+                                paidAt: new Date(),
+                                payoutId: `split_${allSplitPayouts[0].referenceId}`,
+                                razorpayPayoutId: processedSplits.map((p) => p.razorpayPayoutId).join(","),
+                                status: "processed",
+                                isSplitPayout: true,
+                                splitCount: totalSplits,
+                            },
+                        },
+                    }
+
+                    await Venue.findByIdAndUpdate(venueId, updateData)
+
+                    console.log(
+                        `[${new Date().toISOString()}] All split payouts completed for venue ${venueId}: Total paid ₹${totalPaidAmount}`,
+                    )
+                }
+            } else {
+                // Regular single payout
+                const updateData = {
+                    amountNeedToPay: 0,
+                    totalAmountPaid: (venue.totalAmountPaid || 0) + paidAmount,
+                    $push: {
+                        payoutHistory: {
+                            amount: paidAmount,
+                            paidAt: new Date(),
+                            payoutId: payoutData.id,
+                            razorpayPayoutId: payoutData.id,
+                            status: payoutData.status,
+                        },
+                    },
+                }
+
+                await Venue.findByIdAndUpdate(venueId, updateData)
+
+                console.log(
+                    `[${new Date().toISOString()}] Updated venue ${venueId}: Paid ₹${paidAmount}, Total paid: ₹${updateData.totalAmountPaid}`,
+                )
+            }
+        } catch (error) {
+            console.error(`[${new Date().toISOString()}] Failed to update venue ${venueId} payout success:`, error.message)
         }
     }
 
@@ -112,8 +362,8 @@ class EmailReminderScheduler {
     async updatePayoutWithRazorpayData(payoutId, razorpayData, previousStatus) {
         const updateData = {
             status: razorpayData.status,
-            fees: razorpayData.fees || 0,
-            tax: razorpayData.tax || 0,
+            fees: (razorpayData.fees || 0) / 100, // Convert from paise to rupees
+            tax: (razorpayData.tax || 0) / 100, // Convert from paise to rupees
             utr: razorpayData.utr,
             batchId: razorpayData.batch_id,
             feeType: razorpayData.fee_type,
@@ -144,8 +394,14 @@ class EmailReminderScheduler {
             `[${new Date().toISOString()}] Updated payout ${payoutId} status: ${previousStatus} -> ${razorpayData.status}`,
         )
 
-        // Log additional details for important status changes
-        if (razorpayData.status === "processed") {
+        // Update venue if payout is processed successfully
+        if (razorpayData.status === "processed" && previousStatus !== "processed") {
+            const payout = await Payout.findById(payoutId).lean()
+            if (payout && payout.venueId) {
+                const paidAmount = payout.amount // Payout.amount is now in rupees
+                await this.updateVenuePayoutSuccess(payout.venueId, paidAmount, razorpayData, payout.isSplitPayout)
+            }
+
             console.log(
                 `[${new Date().toISOString()}] Payout ${payoutId} successfully processed. UTR: ${razorpayData.utr || "N/A"}, Fees: ₹${(razorpayData.fees || 0) / 100}`,
             )
@@ -321,6 +577,265 @@ class EmailReminderScheduler {
         }
     }
 
+    /**
+     * Processes venue payout with fund account type checking and splitting
+     */
+    async processVenuePayout(venue) {
+        const payoutAmountInRupees = venue.amountNeedToPay
+        const payoutAmountInPaise = Math.round(payoutAmountInRupees * 100)
+
+        console.log(
+            `[${new Date().toISOString()}] Processing payout for venue ${venue._id}: ₹${payoutAmountInRupees} (${payoutAmountInPaise} paise)`,
+        )
+
+        if (payoutAmountInPaise < 100) {
+            console.warn(
+                `[${new Date().toISOString()}] Skipping venue ${venue._id}: amount below minimum (₹${payoutAmountInRupees})`,
+            )
+            return
+        }
+
+        // Check for existing pending payout
+        const existingPayout = await Payout.findOne({
+            venueId: venue._id,
+            status: { $in: ["queued", "pending", "processing"] },
+        })
+
+        if (existingPayout) {
+            console.log(
+                `[${new Date().toISOString()}] Skipping venue ${venue._id}: existing pending payout ${existingPayout._id}`,
+            )
+            return
+        }
+
+        try {
+            // Get fund account details
+            const fundAccount = await this.getFundAccountDetails(venue.razorpay_fund_account_id)
+
+            // Determine payment mode based on fund account type
+            const paymentInfo = this.getPaymentModeForFundAccount(payoutAmountInPaise, fundAccount)
+
+            if (!paymentInfo.canProcess) {
+                console.error(
+                    `[${new Date().toISOString()}] Cannot process payout for venue ${venue._id}: ${paymentInfo.error}`,
+                )
+                return
+            }
+
+            console.log(
+                `[${new Date().toISOString()}] Determined mode for venue ${venue._id}: ${paymentInfo.mode} (Account type: ${fundAccount.account_type})`,
+            )
+
+            if (paymentInfo.needsSplit) {
+                console.log(
+                    `[${new Date().toISOString()}] Amount exceeds ${paymentInfo.mode} limit, splitting into ${paymentInfo.splitCount} transactions`,
+                )
+
+                // Create split payouts
+                const splitPayouts = await this.createSplitPayouts(
+                    venue,
+                    payoutAmountInRupees,
+                    paymentInfo.maxAmount,
+                    paymentInfo.mode,
+                )
+
+                // Execute each split payout
+                for (const splitPayout of splitPayouts) {
+                    await this.executePayoutWithRetry(splitPayout, venue, Math.round(splitPayout.amount * 100), true) // Pass amount in paise for API
+                    // Add small delay between split payouts
+                    await this.delay(1000)
+                }
+            } else {
+                // Create single payout
+                const referenceId = `gully_payout_${venue._id.toString().slice(-8)}_${Date.now()}`
+                const idempotencyKey = randomUUID()
+
+                const payoutRecord = new Payout({
+                    fundAccountId: venue.razorpay_fund_account_id,
+                    userId: venue.userId._id,
+                    venueId: venue._id,
+                    amount: payoutAmountInRupees, // Store in rupees
+                    currency: "INR",
+                    mode: paymentInfo.mode,
+                    purpose: "payout",
+                    referenceId,
+                    narration: `Payout ${venue.venue_name}`,
+                    notes: {
+                        venueId: venue._id.toString(),
+                        venueName: venue.venue_name,
+                        originalAmount: venue.amountNeedToPay,
+                        paymentMode: paymentInfo.mode,
+                        accountType: fundAccount.account_type,
+                    },
+                    idempotencyKey,
+                })
+
+                await payoutRecord.save()
+                console.log(
+                    `[${new Date().toISOString()}] Created payout record ${payoutRecord._id} for venue ${venue._id} using ${paymentInfo.mode} mode`,
+                )
+
+                await this.executePayoutWithRetry(payoutRecord, venue, payoutAmountInPaise, false) // Pass amount in paise for API
+            }
+        } catch (error) {
+            console.error(`[${new Date().toISOString()}] Failed to process venue payout ${venue._id}:`, error.message)
+            this.healthStatus.payoutErrorCount++
+        }
+    }
+
+    /**
+     * Executes payout with retry mechanism
+     * @param {object} payoutRecord - The payout record from your DB (amount in rupees)
+     * @param {object} venue - The venue object
+     * @param {number} amountForRazorpayApi - The amount to send to Razorpay (in paise)
+     * @param {boolean} isSplitPayout - Whether this is part of a split payout
+     */
+    async executePayoutWithRetry(payoutRecord, venue, amountForRazorpayApi, isSplitPayout = false) {
+        const MAX_RETRIES = payoutRecord.maxRetries || 6
+        let currentRetry = 0
+
+        while (currentRetry <= MAX_RETRIES) {
+            try {
+                const payoutPayload = {
+                    account_number: RAZORPAY_ACCOUNT_NUMBER,
+                    fund_account_id: payoutRecord.fundAccountId,
+                    amount: amountForRazorpayApi, // Use the amount in paise for Razorpay API
+                    currency: payoutRecord.currency,
+                    mode: payoutRecord.mode,
+                    purpose: payoutRecord.purpose,
+                    queue_if_low_balance: true,
+                    reference_id: payoutRecord.referenceId,
+                    narration: payoutRecord.narration,
+                    notes: payoutRecord.notes,
+                }
+
+                const splitInfo = isSplitPayout ? ` (Split ${payoutRecord.splitIndex}/${payoutRecord.totalSplits})` : ""
+
+                console.log(
+                    `[${new Date().toISOString()}] Initiating payout ${payoutRecord._id} for venue ${venue._id}${splitInfo} (attempt ${currentRetry + 1}/${MAX_RETRIES + 1})`,
+                )
+                console.log(
+                    `[${new Date().toISOString()}] Payout payload:`,
+                    JSON.stringify(
+                        {
+                            ...payoutPayload,
+                            account_number: "[REDACTED]",
+                            amount: `₹${payoutRecord.amount}`, // Display in rupees from payoutRecord
+                            mode: payoutPayload.mode,
+                        },
+                        null,
+                        2,
+                    ),
+                )
+
+                const response = await axios.post(`${this.razorpayBaseURL}/payouts`, payoutPayload, {
+                    auth: this.razorpayAuth,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-Payout-Idempotency": payoutRecord.idempotencyKey,
+                    },
+                    timeout: 30000,
+                })
+
+                await this.updatePayoutRecord(payoutRecord._id, response.data, "success")
+
+                // For split payouts, don't reset amountNeedToPay until all splits are done
+                if (!isSplitPayout) {
+                    await Venue.findByIdAndUpdate(venue._id, { amountNeedToPay: 0 })
+                }
+
+                console.log(
+                    `[${new Date().toISOString()}] Payout initiated successfully: ${response.data.id} for venue ${venue._id}${splitInfo} (${payoutRecord.mode})`,
+                )
+                this.healthStatus.payoutProcessedCount++
+                return
+            } catch (error) {
+                currentRetry++
+                payoutRecord.retryCount = currentRetry
+                payoutRecord.lastRetryAt = new Date()
+
+                const errorMessage = error.response?.data?.error?.description || error.message
+                const errorCode = error.response?.data?.error?.code || "UNKNOWN"
+
+                console.error(
+                    `[${new Date().toISOString()}] Payout attempt ${currentRetry} failed for venue ${venue._id}. Error ${errorCode}: ${errorMessage}`,
+                )
+
+                // Log full error response for debugging
+                if (error.response?.data) {
+                    console.error(
+                        `[${new Date().toISOString()}] Full Razorpay Error Response:`,
+                        JSON.stringify(error.response.data, null, 2),
+                    )
+                }
+
+                // Check if this is a non-retryable error (like invalid mode/account type combination)
+                const isNonRetryableError =
+                    errorCode === "BAD_REQUEST_ERROR" &&
+                    (errorMessage.includes("Invalid combination") || errorMessage.includes("beneficiary account type"))
+
+                if (isNonRetryableError) {
+                    console.error(
+                        `[${new Date().toISOString()}] Non-retryable error detected for payout ${payoutRecord._id}. Stopping retries.`,
+                    )
+                    await this.updatePayoutRecord(payoutRecord._id, error.response?.data, "failed", errorMessage)
+                    this.healthStatus.payoutErrorCount++
+                    return
+                }
+
+                if (currentRetry <= MAX_RETRIES) {
+                    const delay = Math.min(Math.pow(2, currentRetry) * 1000 + Math.random() * 1000, 30000)
+                    console.log(`[${new Date().toISOString()}] Retrying payout ${payoutRecord._id} in ${delay / 1000} seconds...`)
+                    await this.delay(delay)
+                } else {
+                    await this.updatePayoutRecord(payoutRecord._id, error.response?.data, "failed", errorMessage)
+                    console.error(
+                        `[${new Date().toISOString()}] Payout ${payoutRecord._id} failed permanently after ${MAX_RETRIES + 1} attempts`,
+                    )
+                    this.healthStatus.payoutErrorCount++
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates payout record in database with latest Razorpay data
+     */
+    async updatePayoutRecord(payoutId, razorpayResponse, status, failureReason = null) {
+        const updateData = {
+            razorpayResponse,
+            retryCount: razorpayResponse?.retry_count || 0,
+        }
+
+        if (status === "success" && razorpayResponse) {
+            updateData.razorpayPayoutId = razorpayResponse.id
+            updateData.status = razorpayResponse.status
+                ; (updateData.fees =
+                    (razorpayResponse.fees || 0) /
+                    100), // Convert from paise to rupees
+                    (updateData.tax =
+                        (razorpayResponse.tax || 0) /
+                        100), // Convert from paise to rupees
+                    (updateData.utr = razorpayResponse.utr)
+            updateData.batchId = razorpayResponse.batch_id
+            updateData.feeType = razorpayResponse.fee_type
+            updateData.processedAt = new Date()
+
+            if (razorpayResponse.status_details) {
+                updateData.statusDetails = {
+                    description: razorpayResponse.status_details.description,
+                    source: razorpayResponse.status_details.source,
+                    reason: razorpayResponse.status_details.reason,
+                }
+            }
+        } else if (status === "failed") {
+            updateData.status = "failed"
+            updateData.failureReason = failureReason
+        }
+
+        await Payout.findByIdAndUpdate(payoutId, updateData)
+    }
+
     async processVenuePayouts() {
         if (this.isProcessingPayouts) {
             console.log(`[${new Date().toISOString()}] Payout process already running, skipping...`)
@@ -333,6 +848,7 @@ class EmailReminderScheduler {
         this.healthStatus.payoutProcessedCount = 0
         this.healthStatus.payoutErrorCount = 0
         this.healthStatus.payoutBatchesProcessed = 0
+        this.healthStatus.splitPayoutsCreated = 0
 
         console.log(`[${new Date().toISOString()}] Starting venue payout processing...`)
 
@@ -358,7 +874,7 @@ class EmailReminderScheduler {
             for (let i = 0; i < batches.length; i++) {
                 const batch = batches[i]
                 console.log(
-                    `[${new Date().toISOString()}] Processing batch ${i + 1}/${batches.length} with ${batch.length} venues`,
+                    `[${new Date().toISOString()}] Processing batch ${i + 1}/${batches.length} (${batch.length} venues)`,
                 )
 
                 await this.processBatch(batch, i + 1)
@@ -372,7 +888,7 @@ class EmailReminderScheduler {
 
             this.healthStatus.payoutStatus = "completed"
             console.log(
-                `[${new Date().toISOString()}] Venue payout processing completed. Processed: ${this.healthStatus.payoutProcessedCount}, Errors: ${this.healthStatus.payoutErrorCount}`,
+                `[${new Date().toISOString()}] Venue payout processing completed. Processed: ${this.healthStatus.payoutProcessedCount}, Errors: ${this.healthStatus.payoutErrorCount}, Split payouts created: ${this.healthStatus.splitPayoutsCreated}`,
             )
         } catch (error) {
             this.healthStatus.payoutStatus = "error"
@@ -400,153 +916,6 @@ class EmailReminderScheduler {
         console.log(`[${batchEndTime.toISOString()}] Completed batch ${batchNumber} in ${batchDuration}ms`)
     }
 
-    async processVenuePayout(venue) {
-        const payoutAmount = Math.round(venue.amountNeedToPay * 100)
-
-        if (payoutAmount < 100) {
-            console.warn(
-                `[${new Date().toISOString()}] Skipping venue ${venue._id}: amount below minimum (${payoutAmount} paise)`,
-            )
-            return
-        }
-
-        const existingPayout = await Payout.findOne({
-            venueId: venue._id,
-            status: { $in: ["queued", "pending", "processing"] },
-        })
-
-        if (existingPayout) {
-            console.log(
-                `[${new Date().toISOString()}] Skipping venue ${venue._id}: existing pending payout ${existingPayout._id}`,
-            )
-            return
-        }
-
-        const referenceId = `gully_payout_${venue._id.toString().slice(-8)}_${Date.now()}`
-        const idempotencyKey = randomUUID()
-
-        const payoutRecord = new Payout({
-            fundAccountId: venue.razorpay_fund_account_id,
-            userId: venue.userId._id,
-            venueId: venue._id,
-            amount: payoutAmount,
-            purpose: "payout",
-            referenceId,
-            narration: `Payout to ${venue.venue_name}`,
-            notes: {
-                venueId: venue._id.toString(),
-                venueName: venue.venue_name,
-                originalAmount: venue.amountNeedToPay,
-            },
-            idempotencyKey,
-        })
-
-        await payoutRecord.save()
-        console.log(`[${new Date().toISOString()}] Created payout record ${payoutRecord._id} for venue ${venue._id}`)
-
-        await this.executePayoutWithRetry(payoutRecord, venue)
-    }
-
-    async executePayoutWithRetry(payoutRecord, venue) {
-        const MAX_RETRIES = payoutRecord.maxRetries
-        let currentRetry = 0
-
-        while (currentRetry <= MAX_RETRIES) {
-            try {
-                const payoutPayload = {
-                    account_number: RAZORPAY_ACCOUNT_NUMBER,
-                    fund_account_id: payoutRecord.fundAccountId,
-                    amount: payoutRecord.amount,
-                    currency: payoutRecord.currency,
-                    mode: payoutRecord.mode,
-                    purpose: payoutRecord.purpose,
-                    queue_if_low_balance: true,
-                    reference_id: payoutRecord.referenceId,
-                    narration: payoutRecord.narration,
-                    notes: payoutRecord.notes,
-                }
-
-                console.log(
-                    `[${new Date().toISOString()}] Initiating payout ${payoutRecord._id} for venue ${venue._id} (attempt ${currentRetry + 1}/${MAX_RETRIES + 1})`,
-                )
-                console.log(
-                    `[${new Date().toISOString()}] Payout payload:`,
-                    JSON.stringify({ ...payoutPayload, account_number: "[REDACTED]" }, null, 2),
-                )
-
-                const response = await axios.post(`${this.razorpayBaseURL}/payouts`, payoutPayload, {
-                    auth: this.razorpayAuth,
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-Payout-Idempotency": payoutRecord.idempotencyKey,
-                    },
-                    timeout: 30000,
-                })
-
-                await this.updatePayoutRecord(payoutRecord._id, response.data, "success")
-
-                await Venue.findByIdAndUpdate(venue._id, { amountNeedToPay: 0 })
-
-                console.log(`[${new Date().toISOString()}] Payout successful: ${response.data.id} for venue ${venue._id}`)
-                this.healthStatus.payoutProcessedCount++
-                return
-            } catch (error) {
-                currentRetry++
-                payoutRecord.retryCount = currentRetry
-                payoutRecord.lastRetryAt = new Date()
-
-                const errorMessage = error.response?.data?.error?.description || error.message
-                console.error(
-                    `[${new Date().toISOString()}] Payout attempt ${currentRetry} failed for venue ${venue._id}. Razorpay Error Response:`,
-                    JSON.stringify(error.response?.data, null, 2) || error.message,
-                )
-
-                if (currentRetry <= MAX_RETRIES) {
-                    const delay = Math.min(Math.pow(2, currentRetry) * 1000 + Math.random() * 1000, 30000)
-                    console.log(`[${new Date().toISOString()}] Retrying payout ${payoutRecord._id} in ${delay / 1000} seconds...`)
-                    await this.delay(delay)
-                } else {
-                    await this.updatePayoutRecord(payoutRecord._id, error.response?.data, "failed", errorMessage)
-                    console.error(
-                        `[${new Date().toISOString()}] Payout ${payoutRecord._id} failed permanently after ${MAX_RETRIES} retries`,
-                    )
-                    this.healthStatus.payoutErrorCount++
-                }
-            }
-        }
-    }
-
-    async updatePayoutRecord(payoutId, razorpayResponse, status, failureReason = null) {
-        const updateData = {
-            razorpayResponse,
-            retryCount: razorpayResponse?.retry_count || 0,
-        }
-
-        if (status === "success" && razorpayResponse) {
-            updateData.razorpayPayoutId = razorpayResponse.id
-            updateData.status = razorpayResponse.status
-            updateData.fees = razorpayResponse.fees || 0
-            updateData.tax = razorpayResponse.tax || 0
-            updateData.utr = razorpayResponse.utr
-            updateData.batchId = razorpayResponse.batch_id
-            updateData.feeType = razorpayResponse.fee_type
-            updateData.processedAt = new Date()
-
-            if (razorpayResponse.status_details) {
-                updateData.statusDetails = {
-                    description: razorpayResponse.status_details.description,
-                    source: razorpayResponse.status_details.source,
-                    reason: razorpayResponse.status_details.reason,
-                }
-            }
-        } else if (status === "failed") {
-            updateData.status = "failed"
-            updateData.failureReason = failureReason
-        }
-
-        await Payout.findByIdAndUpdate(payoutId, updateData)
-    }
-
     createBatches(array, batchSize) {
         const batches = []
         for (let i = 0; i < array.length; i += batchSize) {
@@ -555,55 +924,7 @@ class EmailReminderScheduler {
         return batches
     }
 
-    initializeCronJobs() {
-
-        cron.schedule('*/5 * * * *', async () => {
-            try {
-                const now = new Date();
-                const expiredBookings = await Booking.find({
-                    isLocked: true,
-                    isPaymentConfirm: false,
-                    lockedUntil: { $lt: now },
-                });
-
-                if (expiredBookings.length > 0) {
-                    console.log(`Found ${expiredBookings.length} expired bookings. Releasing slots...`);
-
-                    // Delete each expired booking
-                    for (const booking of expiredBookings) {
-                        await Booking.findByIdAndDelete(booking._id);
-                        console.log(`Released slots for booking ${booking._id}`);
-                    }
-                } else {
-                    console.log('No expired bookings found.');
-                }
-            } catch (error) {
-                console.error('Error releasing locked slots:', error);
-            }
-        });
-
-        cron.schedule("30 9 * * *", async () => {
-            console.log(`[${new Date().toISOString()}] Running payout cron job...`)
-            await this.processVenuePayouts()
-        })
-
-        // Payout status sync cron job - runs every 10 minutes by default
-        cron.schedule("30 9 * * *", async () => {
-            console.log(`[${new Date().toISOString()}] Running payout status sync cron job...`)
-            await this.processPayoutStatusSync()
-        })
-
-        cron.schedule("30 9 * * *", async () => {
-            await this.processExpirationReminders()
-        })
-
-        cron.schedule("30 9 * * *", async () => {
-            await this.processExpiredPackages()
-        })
-
-        console.log(`[${new Date().toISOString()}] Email reminder cron jobs initialized`)
-    }
-
+    // Email reminder methods (kept for completeness, not directly modified for this issue)
     async processExpirationReminders() {
         if (this.isProcessingReminders) {
             console.log(`[${new Date().toISOString()}] Email reminder process already running, skipping...`)
@@ -943,21 +1264,67 @@ class EmailReminderScheduler {
         return new Promise((resolve) => setTimeout(resolve, ms))
     }
 
+    // Initialize cron jobs
+    initializeCronJobs() {
+        // Release expired booking slots every 5 minutes
+        cron.schedule("*/5 * * * *", async () => {
+            try {
+                const now = new Date()
+                const expiredBookings = await Booking.find({
+                    isLocked: true,
+                    isPaymentConfirm: false,
+                    lockedUntil: { $lt: now },
+                })
+
+                if (expiredBookings.length > 0) {
+                    console.log(`Found ${expiredBookings.length} expired bookings. Releasing slots...`)
+
+                    for (const booking of expiredBookings) {
+                        await Booking.findByIdAndDelete(booking._id)
+                        console.log(`Released slots for booking ${booking._id}`)
+                    }
+                }
+            } catch (error) {
+                console.error("Error releasing locked slots:", error)
+            }
+        })
+
+        // Process venue payouts daily at 9:30 AM
+        cron.schedule("30 9 * * *", async () => {
+            console.log(`[${new Date().toISOString()}] Running payout cron job...`)
+            await this.processVenuePayouts()
+        })
+
+        // Process payout status sync every day at 10:30 AM
+        cron.schedule("30 10 * * *", async () => {
+            console.log(`[${new Date().toISOString()}] Running payout sync cron job...`)
+            await this.processPayoutStatusSync()
+        })
+
+        // Process expiration reminders daily at 8:00 AM
+        cron.schedule("0 8 * * *", async () => {
+            console.log(`[${new Date().toISOString()}] Running expiration reminder cron job...`)
+            await this.processExpirationReminders()
+        })
+
+        // Process expired packages daily at 7:00 AM
+        cron.schedule("0 7 * * *", async () => {
+            console.log(`[${new Date().toISOString()}] Running expired packages cron job...`)
+            await this.processExpiredPackages()
+        })
+
+        console.log(`[${new Date().toISOString()}] Payout cron jobs initialized`)
+    }
+
     getHealthStatus() {
         return {
             ...this.healthStatus,
-            isProcessingReminders: this.isProcessingReminders,
             isProcessingPayouts: this.isProcessingPayouts,
-            isProcessingPayoutSync: this.isProcessingPayoutSync,
             batchSize: this.batchSize,
             payoutBatchSize: this.payoutBatchSize,
-            reminderDays: this.reminderDays,
+            paymentLimits: this.paymentLimits,
+            fundAccountCacheSize: this.fundAccountCache.size,
         }
-    }
-
-    async triggerManualReminders() {
-        console.log(`[${new Date().toISOString()}] Manual reminder trigger initiated...`)
-        await this.processExpirationReminders()
     }
 
     async triggerManualPayouts() {
@@ -965,14 +1332,13 @@ class EmailReminderScheduler {
         await this.processVenuePayouts()
     }
 
-    async triggerManualPayoutSync() {
+    async triggerManualSync() {
         console.log(`[${new Date().toISOString()}] Manual payout sync trigger initiated...`)
         await this.processPayoutStatusSync()
     }
 }
 
-const emailScheduler = new EmailReminderScheduler()
+const payoutService = new PayoutService()
+payoutService.initializeCronJobs()
 
-emailScheduler.initializeCronJobs()
-
-export default emailScheduler
+export default payoutService

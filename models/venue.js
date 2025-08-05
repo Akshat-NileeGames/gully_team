@@ -101,7 +101,7 @@ const venueSchema = new mongoose.Schema(
         sports_playable_area: {
           type: Number,
           required: true,
-          default: 0
+          default: 0,
         },
         venue_surfacetype: {
           type: String,
@@ -133,7 +133,7 @@ const venueSchema = new mongoose.Schema(
             "TABLE_TOP",
             "TATAMI",
             "TILE",
-            "VINYL"
+            "VINYL",
           ],
           default: "PVC",
         },
@@ -191,14 +191,29 @@ const venueSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // New field to track total amount paid to venue
+    totalAmountPaid: {
+      type: Number,
+      default: 0,
+    },
+    // Track payout history
+    payoutHistory: [
+      {
+        amount: Number,
+        paidAt: Date,
+        payoutId: String,
+        razorpayPayoutId: String,
+        status: String,
+      },
+    ],
     razorpay_fund_account_id: {
       type: String,
-      default: ''
+      default: "",
     },
     razorpaycontactId: {
       type: String,
-      default: ''
-    }
+      default: "",
+    },
   },
   { timestamps: true },
 )

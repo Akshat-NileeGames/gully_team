@@ -228,6 +228,7 @@ const ProviderController = {
         }
     },
     //#endregion
+
     //#region getVenueById
     async getVenueById(req, res, next) {
         const validation = Joi.object({
@@ -1170,7 +1171,7 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to update individual service:", error))
         }
     },
-    
+
 
     //#region GetAllIndividual
     async getAllIndividuals(req, res, next) {

@@ -5,7 +5,7 @@ const paymentSchema = new mongoose.Schema(
     orderId: {
       type: String,
       required: true,
-      unique: true, // Ensure no duplicate payment records
+      unique: true,
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -46,10 +46,35 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    amountPaid: {
+    baseAmount: {
       type: Number,
       required: true,
       min: 0,
+      default: 0
+    },
+    processingFee: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    convenienceFee: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    gstamount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    totalAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
     },
     paymentStatus: {
       type: String,

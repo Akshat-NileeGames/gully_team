@@ -142,6 +142,7 @@ const otherController = {
   },
   async createIndividualOrder(req, res, next) {
     try {
+      console.log(req.body);
       const result = await otherServices.createIndividualOrder(req.body);
 
       return res.status(200).json({
@@ -150,7 +151,7 @@ const otherController = {
         data: result,
       });
     } catch (err) {
-      console.log(" Error in createOrder ");
+      console.log(`Error in Individual create Order:${err.message}`);
       return next(err);
     }
   },

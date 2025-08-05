@@ -28,7 +28,8 @@ const ProviderServices = {
       }
 
       let venueImages = [];
-      console.log(data.venueImages);
+
+      // console.log(data.venueImages);
       if (Array.isArray(data.venueImages) && data.venueImages.length > 0) {
         for (const image of data.venueImages) {
           try {
@@ -96,7 +97,6 @@ const ProviderServices = {
           throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`)
         }
       }
-      console.log(fieldsToUpdate.venueImages);
       if (fieldsToUpdate.venueImages && Array.isArray(fieldsToUpdate.venueImages)) {
         const processedImages = [];
         for (let img of fieldsToUpdate.venueImages) {
@@ -127,7 +127,7 @@ const ProviderServices = {
       throw error
     }
   },
-  //#endregion
+
   async editContactOnRazorPay(venue, contactId) {
     try {
       const endpoint = `https://api.razorpay.com/v1/contacts/${contactId}`;
@@ -2148,7 +2148,6 @@ const ProviderServices = {
           playableArea: playableArea,
           isLockedByUser: userLockedSlots.has(`${slot.startTime}-${slot.endTime}`),
         }))
-      console.log(availableSlots);
       const response = {
         availableSlots,
         bookedSlots: Array.from(bookedSlotsForPlayableArea),
@@ -2287,9 +2286,6 @@ const ProviderServices = {
       const endOfDay = new Date(queryDate)
       endOfDay.setHours(23, 59, 59, 999)
 
-      console.log(
-        `Getting booked slots for venue: ${venueId}, sport: ${sport}, date: ${date}, playableArea: ${playableArea}`,
-      )
 
       const bookings = await Booking.find({
         venueId: venueId,
@@ -2298,7 +2294,7 @@ const ProviderServices = {
         "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
       }).lean()
 
-      console.log(`Found ${bookings.length} bookings for the date range`)
+      // console.log(`Found ${bookings.length} bookings for the date range`)
 
       const bookedSlots = []
 
@@ -2317,7 +2313,7 @@ const ProviderServices = {
                     userId: booking.userId,
                     status: booking.bookingStatus,
                   })
-                  console.log(`Added booked slot: ${slot.startTime}-${slot.endTime} for playable area ${playableArea}`)
+                  // console.log(`Added booked slot: ${slot.startTime}-${slot.endTime} for playable area ${playableArea}`)
                 } else {
                   console.log(
                     `Skipped slot ${slot.startTime}-${slot.endTime} for different playable area ${slot.playableArea}`,
@@ -2329,7 +2325,7 @@ const ProviderServices = {
         }
       })
 
-      console.log(`Total booked slots for playable area ${playableArea}: ${bookedSlots.length}`)
+      // console.log(`Total booked slots for playable area ${playableArea}: ${bookedSlots.length}`)
 
       return bookedSlots;
     } catch (error) {
@@ -2624,9 +2620,9 @@ const ProviderServices = {
     const { startTime, endTime, playableArea } = timeSlot;
     const normalizedDate = new Date(new Date(date).toISOString().split('T')[0]);
 
-    console.log(
-      `Checking availability for slot: ${startTime}-${endTime} on playable area ${playableArea}, date: ${normalizedDate.toISOString()}`
-    );
+    // console.log(
+    //   `Checking availability for slot: ${startTime}-${endTime} on playable area ${playableArea}, date: ${normalizedDate.toISOString()}`
+    // );
 
     const booking = await Booking.findOne({
       venueId,
@@ -2647,9 +2643,9 @@ const ProviderServices = {
     });
 
     const isAvailable = !booking;
-    console.log(
-      `Slot ${startTime}-${endTime} on playable area ${playableArea} is ${isAvailable ? "available" : "booked"}`
-    );
+    // console.log(
+    //   `Slot ${startTime}-${endTime} on playable area ${playableArea} is ${isAvailable ? "available" : "booked"}`
+    // );
 
     return isAvailable;
   }
@@ -3435,7 +3431,9 @@ const ProviderServices = {
       // }
 
       const bookings = await Booking.find({
-        userId: userInfo.userId
+        userId: userInfo.userId,
+        paymentStatus: "successful",
+        bookingStatus: "confirmed"
       })
         .populate({
           path: "venueId",
