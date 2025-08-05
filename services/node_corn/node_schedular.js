@@ -6,7 +6,6 @@ import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_ACCOUNT_NUMBER } from ".
 import { randomUUID } from "crypto"
 
 class PayoutService {
-    // Class name changed back to PayoutService
     constructor() {
         this.emailService = new EmailReminderService()
         this.batchSize = 100
