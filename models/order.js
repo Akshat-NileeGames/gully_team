@@ -60,7 +60,7 @@ const orderHistorySchema = new mongoose.Schema({
   ordertype: {
     type: String,
     required: true,
-    enum: ['tournament', 'banner', 'sponser', 'individual', 'venue', 'booking','Shop']
+    enum: ['tournament', 'banner', 'sponser', 'individual', 'venue', 'booking', 'Shop', 'individual-subscription-Renew','venue-subscription-Renew']
   },
   baseAmount: {
     type: Number,

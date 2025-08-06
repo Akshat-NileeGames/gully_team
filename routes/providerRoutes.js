@@ -7,9 +7,10 @@ import validateUser from "../middlewares/validateUser.js"
 
 router.post("/createVenue", validateUser, ProviderController.createVenue)
 router.post("/editVenue", validateUser, ProviderController.editVenue)
-
+router.post("/subscription/updateVenueSubscription", validateUser, ProviderController.updateVenueSubscriptionStatus)
+router.post("/subscription/updateIndividualSubscription", validateUser, ProviderController.updateIndividualSubscriptionStatus)
 // ==================== Venue ROUTES ====================
-router.get("/getUserGroundRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround)
+router.get("/getUserVenueRegisteredGround", validateUser, ProviderController.getUserGroundRegisteredGround)
 // router.post("/getNearbyVenue", validateUser, ProviderController.GetNearByVenue)
 router.get("/getVenueById/:id", ProviderController.getVenueById)
 router.get("/getAllGrounds", ProviderController.getAllGrounds)

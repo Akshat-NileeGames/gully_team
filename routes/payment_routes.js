@@ -8,7 +8,9 @@ router.post("/createBannerOrder", validateUser, otherController.createBannerOrde
 router.post("/createSponsorOrder", validateUser, otherController.createSponsorOrder);
 router.post("/createShopOrder", validateUser, otherController.createshopOrder);
 router.post("/createVenueOrder", validateUser, otherController.createVenueOrder);
+router.post("/createVenueSubscriptionOrder", validateUser, otherController.createVenueSubscriptionOrder);
 router.post("/createIndividualOrder", validateUser, otherController.createIndividualOrder);
+router.post("/createIndividualSubscriptionOrder", validateUser, otherController.createIndividualSubscriptionOrder);
 router.post("/createBookingOrder", validateUser, otherController.createBookingOrder);
 router.put("/updatePayment", otherController.updatePayment);
 router.post("/applyCoupon", validateUser, otherController.applyCoupon);

@@ -127,6 +127,20 @@ const otherController = {
       return next(err);
     }
   },
+  async createVenueSubscriptionOrder(req, res, next) {
+    try {
+      const result = await otherServices.createVenueSubscriptionOrder(req.body);
+
+      return res.status(200).json({
+        sucess: true,
+        message: "OrderID created SucessFully",
+        data: result,
+      });
+    } catch (err) {
+      console.log(`Error in createOrder:${err}`);
+      return next(err);
+    }
+  },
   async createBookingOrder(req, res, next) {
     try {
       const result = await otherServices.createBookingOrder(req.body);
@@ -144,6 +158,20 @@ const otherController = {
     try {
       console.log(req.body);
       const result = await otherServices.createIndividualOrder(req.body);
+
+      return res.status(200).json({
+        sucess: true,
+        message: "OrderID created SucessFully",
+        data: result,
+      });
+    } catch (err) {
+      console.log(`Error in Individual create Order:${err.message}`);
+      return next(err);
+    }
+  },
+  async createIndividualSubscriptionOrder(req, res, next) {
+    try {
+      const result = await otherServices.createIndividualSubscriptionOrder(req.body);
 
       return res.status(200).json({
         sucess: true,

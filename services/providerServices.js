@@ -29,7 +29,6 @@ const ProviderServices = {
 
       let venueImages = [];
 
-      // console.log(data.venueImages);
       if (Array.isArray(data.venueImages) && data.venueImages.length > 0) {
         for (const image of data.venueImages) {
           try {
@@ -127,7 +126,55 @@ const ProviderServices = {
       throw error
     }
   },
+  async updateVenueSubscriptionStatus(data) {
+    try {
+      const { venueId, packageId } = data;
+      const venue = await Venue.findById(venueId);
+      if (!venue) CustomErrorHandler.notFound("Venue Not Found");
+      const packageInfo = await Package.findById(packageId)
+      if (!packageInfo) throw CustomErrorHandler.notFound("Package not found")
 
+
+      const updatedVenue = await Venue.findByIdAndUpdate(
+        venueId,
+        {
+          isSubscriptionPurchased: true,
+          subscriptionExpiry: DateTime.now().plus({ month: packageInfo.duration }).toJSDate(),
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+
+
+      return updatedVenue;
+
+    } catch (error) {
+      throw new Error(`Failed to update venue subscription: ${error.message}`);
+    }
+  },
+
+  async updateIndividualSubscriptionStatus(data) {
+    try {
+      const { individualId, packageId } = data;
+      const individual = await Individual.findById(individualId);
+      if (!individual) return CustomErrorHandler.notFound("Individual Not Found");
+      const packageInfo = await Package.findById(packageId)
+      if (!packageInfo) return CustomErrorHandler.notFound("Package not found")
+
+      const updatedIndividual = await Individual.findByIdAndUpdate(
+        individualId,
+        {
+          hasActiveSubscription: true,
+          subscriptionExpiry: DateTime.now().plus({ month: packageInfo.duration }).toJSDate(),
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+      return updatedIndividual;
+    } catch (error) {
+      throw new Error(`Failed to update Individual subscription: ${error.message}`);
+    }
+  },
   async editContactOnRazorPay(venue, contactId) {
     try {
       const endpoint = `https://api.razorpay.com/v1/contacts/${contactId}`;

@@ -85,8 +85,7 @@ const ProviderController = {
             latitude: Joi.number().required(),
             // subscriptionExpiry: Joi.date().iso().required(),
             packageRef: Joi.string().required(),
-        })
-
+        });
         const { error } = venueValidation.validate(req.body)
         if (error) {
             return next(CustomErrorHandler.badRequest(`Failed to Validate request:${error}`))
@@ -204,7 +203,49 @@ const ProviderController = {
         }
     },
 
+    async updateVenueSubscriptionStatus(req, res) {
+        try {
+            const venueSubscription = Joi.object({
+                venueId: Joi.string().required(),
+                packageId: Joi.string().required()
+            });
+            const { error } = venueSubscription.validate(req.body);
+            if (error) {
+                return CustomErrorHandler.validationError(`Failed to validate request:${error}`);
+            }
+            const result = await ProviderServices.updateVenueSubscriptionStatus(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Venue Subscription Updated Successfully",
+                data: result,
+            })
 
+        } catch (error) {
+            console.error('Update venue subscription status error:', error);
+        }
+    },
+
+    async updateIndividualSubscriptionStatus(req, res) {
+        try {
+            const venueSubscription = Joi.object({
+                individualId: Joi.string().required(),
+                packageId: Joi.string().required()
+            });
+            const { error } = venueSubscription.validate(req.body);
+            if (error) {
+                return CustomErrorHandler.validationError(`Failed to validate request:${error}`);
+            }
+            const result = await ProviderServices.updateIndividualSubscriptionStatus(req.body);
+            return res.status(200).json({
+                success: true,
+                message: "Individual Subscription Updated Successfully",
+                data: result,
+            })
+
+        } catch (error) {
+            console.error('Update venue subscription status error:', error);
+        }
+    },
     //#region GetAllGrounds
     async getAllGrounds(req, res, next) {
         try {
