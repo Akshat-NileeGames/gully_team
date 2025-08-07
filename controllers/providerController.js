@@ -1,7 +1,6 @@
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { ProviderServices } from "../services/index.js"
 import Joi from "joi"
-import { v4 as uuidv4 } from "uuid"
 const ProviderController = {
 
     //#region Create Venue
@@ -395,127 +394,6 @@ const ProviderController = {
         }
     },
     //#endregion
-
-
-    //    async bookVenue(req, res, next) {
-    //     try {
-    //       const {
-    //         venueId,
-    //         sport,
-    //         bookingPattern,
-    //         scheduledDates,
-    //         durationInHours,
-    //         totalamount,
-    //         paymentStatus,
-    //         bookingStatus,
-    //         isMultiDay = false,
-    //         multiDayStartDate,
-    //         multiDayEndDate,
-    //         isFullDay = false,
-    //       } = req.body
-
-    //       // Validate required fields
-    //       if (!venueId || !sport || !scheduledDates || !Array.isArray(scheduledDates)) {
-    //         return next(CustomErrorHandler.badRequest("Missing required booking information"))
-    //       }
-
-    //       // Validate multi-day booking data
-    //       if (isMultiDay && (!multiDayStartDate || !multiDayEndDate)) {
-    //         return next(CustomErrorHandler.badRequest("Multi-day bookings require start and end dates"))
-    //       }
-
-    //       // Convert string amounts to numbers with proper validation
-    //       const parsedTotalAmount = Number.parseFloat(totalamount)
-    //       const parsedDurationInHours = Number.parseFloat(durationInHours)
-
-    //       if (isNaN(parsedTotalAmount) || parsedTotalAmount <= 0) {
-    //         return next(CustomErrorHandler.badRequest("Invalid total amount"))
-    //       }
-
-    //       if (isNaN(parsedDurationInHours) || parsedDurationInHours <= 0) {
-    //         return next(CustomErrorHandler.badRequest("Invalid duration"))
-    //       }
-
-    //       const bookingData = {
-    //         venueId,
-    //         sport,
-    //         bookingPattern: bookingPattern || "single_slots",
-    //         scheduledDates,
-    //         durationInHours: parsedDurationInHours,
-    //         totalamount: parsedTotalAmount,
-    //         paymentStatus: paymentStatus || "pending",
-    //         bookingStatus: bookingStatus || "pending",
-    //         isMultiDay,
-    //         multiDayStartDate: isMultiDay ? new Date(multiDayStartDate) : undefined,
-    //         multiDayEndDate: isMultiDay ? new Date(multiDayEndDate) : undefined,
-    //         isFullDay,
-    //       }
-
-    //       const booking = await ProviderServices.bookVenue(bookingData)
-
-    //       res.status(201).json({
-    //         status: true,
-    //         message: "Venue booked successfully",
-    //         data: { booking },
-    //       })
-    //     } catch (error) {
-    //       console.error("Error in bookVenue controller:", error)
-    //       next(error)
-    //     }
-    //   },
-
-    // //#region getnearbyVenu
-    // async getNearbyVenues(req, res, next) {
-    //     const validation = Joi.object({
-    //         latitude: Joi.number().required(),
-    //         longitude: Joi.number().required(),
-    //         page: Joi.number().min(1).optional(),
-    //     })
-
-    //     const { error } = validation.validate(req.body)
-    //     if (error) {
-    //         return next(CustomErrorHandler.badRequest(`Failed to validate request:${error}`,))
-    //     }
-
-    //     try {
-    //         const result = await ProviderServices.getNearbyVenues(req.body)
-    //         return res.json({
-    //             success: true,
-    //             message: "Nearby venues retrieved successfully",
-    //             data: { venues: result },
-    //         })
-    //     } catch (error) {
-    //         console.log(`The error is:${error}`);
-    //         return next(CustomErrorHandler.badRequest("Failed to get nearby venues:", error))
-    //     }
-    // },
-    // //#endregion
-
-    // //#region GetNearbyIndividuals
-    // async getNearbyIndividuals(req, res, next) {
-    //     const validation = Joi.object({
-    //         latitude: Joi.number().required(),
-    //         longitude: Joi.number().required(),
-    //         page: Joi.number().optional(),
-    //     })
-
-    //     const { error } = validation.validate(req.body)
-    //     if (error) {
-    //         return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
-    //     }
-
-    //     try {
-    //         const result = await ProviderServices.getNearbyIndividuals(req.body)
-    //         return res.json({
-    //             success: true,
-    //             message: "Nearby individuals retrieved successfully",
-    //             data: { individuals: result },
-    //         })
-    //     } catch (error) {
-    //         return next(CustomErrorHandler.badRequest("Failed to get nearby individuals:", error))
-    //     }
-    // },
-    // //#endregion 
     //#region Search venue
     async searchVenues(req, res, next) {
         const validation = Joi.object({
@@ -1593,7 +1471,6 @@ const ProviderController = {
     //#region GetServicetype
     async GetServiceType(req, res, next) {
         try {
-            console.log("These api is called");
             const result = await ProviderServices.GetServiceType()
             return res.json({
                 success: true,
@@ -1643,7 +1520,6 @@ const ProviderController = {
                 max: Joi.number().min(0).optional(),
             }).default({}),
         })
-        console.log(req.body);
         const { error } = validation.validate(req.body)
         if (error) {
             return next(CustomErrorHandler.badRequest(`Validation failed:${error}`))
@@ -1651,7 +1527,6 @@ const ProviderController = {
 
         try {
             const result = await ProviderServices.getNearbyVenues(req.body)
-            console.log(result);
             return res.json({
                 success: true,
                 message: "Nearby venues with filters retrieved successfully",

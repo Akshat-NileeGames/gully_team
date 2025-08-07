@@ -200,14 +200,14 @@ const ProviderServices = {
       };
 
       const contactResponse = await axios.patch(endpoint, payload, { auth, headers });
-      console.log("✅ Razorpay contact updated:", contactResponse.data.id);
+      console.log("Razorpay contact updated:", contactResponse.data.id);
       await Venue.findByIdAndUpdate(venue._id, {
         razorpaycontactId: contactResponse.data.id
       });
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to update Razorpay contact:", error.response?.data || error.message);
+      console.error("Failed to update Razorpay contact:", error.response?.data || error.message);
       throw new Error("Could not update contact on Razorpay");
     }
   },
@@ -946,8 +946,6 @@ const ProviderServices = {
         type: "Point",
         coordinates: [longitude, latitude]
       };
-      //TODO:Need to remove these comment below
-      console.log("The current location:", userLocation);
       // Find shops with expired subscriptions within the defined radius
       const expiredvenue = await Venue.find({
         "locationHistory.point": {
@@ -1848,7 +1846,6 @@ const ProviderServices = {
         limit: Math.ceil(limit / 2),
         radius,
       });
-      console.log(venueResults);
 
       // Search individuals with smaller limit for combined results
       const individualResults = await this.searchIndividuals({
@@ -1947,7 +1944,6 @@ const ProviderServices = {
         { $set: { isSubscriptionPurchased: false } }
       );
     }
-    console.log("The current location:", userLocation);
     const venue = await Venue.aggregate([
       {
         $geoNear: {
@@ -2006,9 +2002,6 @@ const ProviderServices = {
       const endOfDay = new Date(queryDate)
       endOfDay.setUTCHours(23, 59, 59, 999)
 
-      console.log(
-        `Checking conflicts for venue: ${venueId}, sport: ${sport}, date: ${date}, playableArea: ${playableArea}`,
-      )
 
       // Find existing bookings for the specific date, sport, and playable area
       const existingBookings = await Booking.find({
@@ -2018,7 +2011,6 @@ const ProviderServices = {
         "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
       }).lean()
 
-      console.log(`Found ${existingBookings.length} existing bookings for the date range`)
 
       const conflictingSlots = []
       const availableSlots = []
@@ -2072,8 +2064,6 @@ const ProviderServices = {
         }
       }
 
-      console.log(`Conflict check results: ${conflictingSlots.length} conflicts, ${availableSlots.length} available`)
-
       return {
         hasConflicts: conflictingSlots.length > 0,
         conflictingSlots,
@@ -2119,17 +2109,16 @@ const ProviderServices = {
 
       // Generate all potential slots for the day
       const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime)
-
       // Apply time-based filtering for current date
       const currentDate = DateTime.now()
       const isToday = requestedDate.hasSame(currentDate, "day")
       let filteredSlots = allSlots
 
       if (isToday) {
-        const currentTime = currentDate.toFormat("h:mm a")
+        const currentTime = currentDate.toFormat("HH:mm")
         filteredSlots = allSlots.filter((slot) => {
-          const slotStartTime = DateTime.fromFormat(slot.startTime, "h:mm a")
-          const currentDateTime = DateTime.fromFormat(currentTime, "h:mm a")
+          const slotStartTime = DateTime.fromFormat(slot.startTime, "HH:mm")
+          const currentDateTime = DateTime.fromFormat(currentTime, "HH:mm")
           return slotStartTime >= currentDateTime
         })
       }
@@ -2208,8 +2197,8 @@ const ProviderServices = {
       }
 
       if (isToday) {
-        response.message = `Showing slots from ${currentDate.toFormat("h:mm a")} onwards for today`
-        response.currentTime = currentDate.toFormat("h:mm a")
+        response.message = `Showing slots from ${currentDate.toFormat("HH:mm")} onwards for today`
+        response.currentTime = currentDate.toFormat("HH:mm")
         response.timeFilteringApplied = true
       }
 
@@ -2599,10 +2588,10 @@ const ProviderServices = {
         const currentDate = DateTime.now();
         let filteredSlots = allSlots;
         if (requestedDate.hasSame(currentDate, "day")) {
-          const currentTime = currentDate.toFormat("h:mm a");
+          const currentTime = currentDate.toFormat("HH:mm");
           filteredSlots = allSlots.filter((slot) => {
-            const slotStartTime = DateTime.fromFormat(slot.startTime, "h:mm a");
-            const currentSlotTime = DateTime.fromFormat(currentTime, "h:mm a");
+            const slotStartTime = DateTime.fromFormat(slot.startTime, "HH:mm");
+            const currentSlotTime = DateTime.fromFormat(currentTime, "HH:mm");
             return slotStartTime >= currentSlotTime;
           });
         }
@@ -3582,16 +3571,16 @@ const ProviderServices = {
 
   generateTimeSlots(openTime, closeTime) {
     const slots = []
-    const start = DateTime.fromFormat(openTime, "h:mm a")
-    const end = DateTime.fromFormat(closeTime, "h:mm a")
+    const start = DateTime.fromFormat(openTime, "HH:mm")
+    const end = DateTime.fromFormat(closeTime, "HH:mm")
 
     let current = start
     while (current < end) {
       const slotEnd = current.plus({ hours: 1 })
       if (slotEnd <= end) {
         slots.push({
-          startTime: current.toFormat("h:mm a"),
-          endTime: slotEnd.toFormat("h:mm a"),
+          startTime: current.toFormat("HH:mm"),
+          endTime: slotEnd.toFormat("HH:mm"),
         })
       }
       current = slotEnd
@@ -3601,8 +3590,8 @@ const ProviderServices = {
   },
 
   calculateDuration(startTime, endTime) {
-    let start = DateTime.fromFormat(startTime, "h:mm a")
-    let end = DateTime.fromFormat(endTime, "h:mm a")
+    let start = DateTime.fromFormat(startTime, "HH:mm")
+    let end = DateTime.fromFormat(endTime, "HH:mm")
 
     // fallback if first parse fails
     if (!start.isValid) start = DateTime.fromFormat(startTime, "hh:mm a")

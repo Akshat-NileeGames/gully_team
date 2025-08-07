@@ -754,8 +754,6 @@ const ShopService = {
             type: "Point",
             coordinates: [longitude, latitude]
         };
-        //TODO:Need to remove these comment below
-        console.log("The current location:", userLocation);
         // Find shops with expired subscriptions within the defined radius
         const expiredShops = await Shop.find({
             "locationHistory.point": {
