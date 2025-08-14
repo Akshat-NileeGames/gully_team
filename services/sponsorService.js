@@ -97,9 +97,7 @@ const SponsorService = {
     async deleteSponsor(sponsorId) {
         try {
             const sponsor = await Sponsor.findById(sponsorId);
-            if (!sponsor) {
-                throw new CustomErrorHandler("Sponsor not found", 404);
-            }
+            if (!sponsor) throw CustomErrorHandler.notFound("Sponsor not found");
 
             sponsor.isActive = false;
             await sponsor.save();

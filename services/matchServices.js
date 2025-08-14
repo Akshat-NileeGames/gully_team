@@ -9,127 +9,127 @@ import {
   RegisteredTeam,
   Tournament,
   User,
-  } from "../models/index.js";
-  import { DateTime } from "luxon";
-  import firebaseNotification from "../helpers/firebaseNotification.js";
+} from "../models/index.js";
+import { DateTime } from "luxon";
+import firebaseNotification from "../helpers/firebaseNotification.js";
 
-  const matchServices = {
-    async createMatch(data) {
-      const userInfo = global.user;
-  
-      const { tournamentId, team1ID, team2ID, round, matchNo, dateTime,winningTeamId,matchAuthority } = data;
-      console.log(`The Team 1 id:${team1ID} and Team 2 id:${team2ID}`)
-      // Check if the tournament exists
-      const TournamentExist = await Tournament.findOne({ _id: tournamentId });
-  
-      if (!TournamentExist) {
-        throw CustomErrorHandler.badRequest("This Tournament is Not Found.");
+const matchServices = {
+  async createMatch(data) {
+    const userInfo = global.user;
+
+    const { tournamentId, team1ID, team2ID, round, matchNo, dateTime, winningTeamId, matchAuthority } = data;
+    console.log(`The Team 1 id:${team1ID} and Team 2 id:${team2ID}`)
+    // Check if the tournament exists
+    const TournamentExist = await Tournament.findOne({ _id: tournamentId });
+
+    if (!TournamentExist) {
+      throw CustomErrorHandler.badRequest("This Tournament is Not Found.");
+    }
+
+    // Check if the user has the authority to create the match
+    if (TournamentExist?.authority != userInfo.userId) {
+      throw CustomErrorHandler.badRequest("You do not have permission.");
+    }
+    console.log("time received", dateTime);
+    // Validate that team1 and team2 do not share players
+    const team1 = await Team.findById(team1ID);
+    const team2 = await Team.findById(team2ID);
+
+    const team1Players = team1.players;
+    const team2Players = team2.players;
+
+
+    //Previous Code to check Overlap PLayers
+    // Check for player overlap
+    // const isPlayerPresentInTeam2 = team1Players.some(player1 =>
+    //   team2Players.some(player2 => player1.phoneNumber === player2.phoneNumber)
+    // );
+    // if (isPlayerPresentInTeam2) {
+    //   console.log("Player found:",isPlayerPresentInTeam2)
+    //   throw CustomErrorHandler.alreadyExist("Player overlap found in teams.");
+    // }
+
+
+    const overlappingPlayers = team1Players.filter(player1 =>
+      team2Players.some(player2 => player1.phoneNumber === player2.phoneNumber)
+    );
+    if (overlappingPlayers.length > 0) {
+      const overlapDetails = overlappingPlayers.map(player =>
+        `${player.name} (Phone: ${player.phoneNumber})`
+      ).join(", ");
+
+      throw CustomErrorHandler.badRequest(`There are overlapping players in both teams: ${overlapDetails}`);
+    }
+
+    const formatDateTime = (dateTimeString) => {
+      const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
+      if (!parsedDate.isValid) {
+        throw CustomErrorHandler.badRequest("Invalid date format. Please provide a valid ISO string.");
       }
-  
-      // Check if the user has the authority to create the match
-      if (TournamentExist?.authority != userInfo.userId) {
-        throw CustomErrorHandler.badRequest("You do not have permission.");
-      }
-        console.log("time received" ,dateTime);
-      // Validate that team1 and team2 do not share players
-      const team1 = await Team.findById(team1ID);
-      const team2 = await Team.findById(team2ID);
-  
-      const team1Players = team1.players;
-      const team2Players = team2.players;
-  
 
-      //Previous Code to check Overlap PLayers
-      // Check for player overlap
-      // const isPlayerPresentInTeam2 = team1Players.some(player1 =>
-      //   team2Players.some(player2 => player1.phoneNumber === player2.phoneNumber)
-      // );
-       // if (isPlayerPresentInTeam2) {
-      //   console.log("Player found:",isPlayerPresentInTeam2)
-      //   throw CustomErrorHandler.alreadyExist("Player overlap found in teams.");
-      // }
+      return parsedDate.toISO();
+    };
 
-      
-      const overlappingPlayers = team1Players.filter(player1 =>
-        team2Players.some(player2 => player1.phoneNumber === player2.phoneNumber)
-      );
-      if (overlappingPlayers.length > 0) {
-        const overlapDetails = overlappingPlayers.map(player => 
-          `${player.name} (Phone: ${player.phoneNumber})`
-        ).join(", ");
-    
-        throw CustomErrorHandler.badRequest(`There are overlapping players in both teams: ${overlapDetails}`);
-      }
-
-      const formatDateTime = (dateTimeString) => {
-        const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
-        if (!parsedDate.isValid) {
-          throw CustomErrorHandler.badRequest("Invalid date format. Please provide a valid ISO string.");
-        }
-    
-        return parsedDate.toISO();
-      };
-      
 
     const standardizedDateTime = formatDateTime(dateTime);
     console.log("Create Match - Original DateTime:", dateTime);
     console.log("Create Match - Stored DateTime:", standardizedDateTime);
-    
-    
-  
-      // Create a new match
-      const newMatch = new Match({
-        tournament: tournamentId,
-        team1: team1ID,
-        team2: team2ID,
-        dateTime: standardizedDateTime, // Save as UTC
-        Round: round,
-        matchNo: matchNo,
-        winningTeamId: winningTeamId,
-        matchAuthority:matchAuthority
-        
-      });
-  
-      // Save the new match
-      const matchdata = await newMatch.save();
-      //Fetch The team Captain of Team1 and Team2
-      const [team1org, team2org] = await Promise.all([
-        User.findById(team1.userId),
-        User.findById(team2.userId)
-      ]);
-      
-      const [Team1FCM, Team2FCM] = [team1org.fcmToken, team2org.fcmToken];
-      
-      console.log("Team1FCM", Team1FCM);
-      console.log("Team2FCM", Team2FCM);
-      
-      if (Team1FCM && Team2FCM) {
-        const notificationDataTeam1 = {
-          title: `${team1.teamName} VS ${team2.teamName} ${round} Match`,
-          body: `Your match against ${team2.teamName} is scheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
-        };
-        
-        const notificationDataTeam2 = {
-          title: `${team2.teamName} VS ${team1.teamName} ${round} Match`,
-          body: `Your match against ${team1.teamName} is scheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
-        };
-      
-        try {
-          const [response1, response2] = await Promise.all([
-            firebaseNotification.sendNotification(Team1FCM, notificationDataTeam1),
-            firebaseNotification.sendNotification(Team2FCM, notificationDataTeam2)
-          ]);
-      
-          console.log("Notification sent to Team1 organizer successfully:", response1);
-          console.log("Notification sent to Team2 organizer successfully:", response2);
-        } catch (error) {
-          console.error("Error sending notification:", error);
-        }
+
+
+
+    // Create a new match
+    const newMatch = new Match({
+      tournament: tournamentId,
+      team1: team1ID,
+      team2: team2ID,
+      dateTime: standardizedDateTime, // Save as UTC
+      Round: round,
+      matchNo: matchNo,
+      winningTeamId: winningTeamId,
+      matchAuthority: matchAuthority
+
+    });
+
+    // Save the new match
+    const matchdata = await newMatch.save();
+    //Fetch The team Captain of Team1 and Team2
+    const [team1org, team2org] = await Promise.all([
+      User.findById(team1.userId),
+      User.findById(team2.userId)
+    ]);
+
+    const [Team1FCM, Team2FCM] = [team1org.fcmToken, team2org.fcmToken];
+
+    console.log("Team1FCM", Team1FCM);
+    console.log("Team2FCM", Team2FCM);
+
+    if (Team1FCM && Team2FCM) {
+      const notificationDataTeam1 = {
+        title: `${team1.teamName} VS ${team2.teamName} ${round} Match`,
+        body: `Your match against ${team2.teamName} is scheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
+      };
+
+      const notificationDataTeam2 = {
+        title: `${team2.teamName} VS ${team1.teamName} ${round} Match`,
+        body: `Your match against ${team1.teamName} is scheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
+      };
+
+      try {
+        const [response1, response2] = await Promise.all([
+          firebaseNotification.sendNotification(Team1FCM, notificationDataTeam1),
+          firebaseNotification.sendNotification(Team2FCM, notificationDataTeam2)
+        ]);
+
+        console.log("Notification sent to Team1 organizer successfully:", response1);
+        console.log("Notification sent to Team2 organizer successfully:", response2);
+      } catch (error) {
+        console.error("Error sending notification:", error);
       }
-      
-      return matchdata;
-    },
-  
+    }
+
+    return matchdata;
+  },
+
 
   // async createMatch(data) {
   //   const userInfo = global.user;
@@ -193,7 +193,7 @@ import {
   //   const matchdata = await newMatch.save();
   //   return matchdata;
   // },
-  
+
 
   //Anurag
   // async getOpponentTournamentId() {
@@ -202,14 +202,14 @@ import {
   //     if (!userInfo || !userInfo.userId) {
   //       throw new Error("User information is missing or invalid.");
   //     }
-  
+
   //     const userPhoneNumber = await User.findOne({ _id: userInfo.userId }).select("phoneNumber").lean();
   //     const phoneNumberToFind = userPhoneNumber?.phoneNumber;
-  
+
   //     if (!phoneNumberToFind) {
   //       throw new Error("User phone number not found.");
   //     }
-  
+
   //     const matchData = await Match.find({ scoreBoard: { $ne: null } })
   //       .select("tournament team1 team2 _id")
   //       .populate({
@@ -225,23 +225,23 @@ import {
   //         populate: { path: "players", select: "phoneNumber" },
   //       })
   //       .lean();
-  
+
   //     const tournamentsWithPhoneNumber = matchData.filter((match) => {
   //       return (
   //         match.team1?.players?.some((player) => player.phoneNumber === phoneNumberToFind) ||
   //         match.team2?.players?.some((player) => player.phoneNumber === phoneNumberToFind)
   //       );
   //     });
-  
+
   //     const tournamentDetails = tournamentsWithPhoneNumber.map((match) => {
   //       let teamId = "";
-  
+
   //       if (match.team1?.players?.some((player) => player.phoneNumber === phoneNumberToFind)) {
   //         teamId = match.team1._id.toString();
   //       } else if (match.team2?.players?.some((player) => player.phoneNumber === phoneNumberToFind)) {
   //         teamId = match.team2._id.toString();
   //       }
-  
+
   //       return {
   //         matchId: match._id,
   //         tournamentId: match.tournament._id,
@@ -249,26 +249,26 @@ import {
   //         teamId,
   //       };
   //     });
-  
+
   //     return { data: tournamentDetails };
   //   } catch (error) {
   //     console.error("Error in getOpponentTournamentId:", error.message);
   //     throw error;
   //   }
   // },
-  
- 
+
+
   //DG
   async getOpponentTournamentId() {
     const userInfo = global.user;
     const userId = userInfo.userId;
 
     const userPhoneNumber = await User.findOne({ _id: userId }).select("phoneNumber");
-  
+
     if (!userPhoneNumber) {
       throw CustomErrorHandler.badRequest("User phone number not found.");
     }
-  
+
     const phoneNumberToFind = userPhoneNumber.phoneNumber;
 
     const matchData = await Match.find({ scoreBoard: { $ne: null } })
@@ -288,17 +288,17 @@ import {
           select: "phoneNumber",
         },
       });
-  
+
     const tournamentsWithPhoneNumber = matchData.filter((match) => {
       if (!match.team1?.players || !match.team2?.players) {
         return false;
       }
-  
+
       const team1Players = match.team1.players.map((player) => player.phoneNumber);
       const team2Players = match.team2.players.map((player) => player.phoneNumber);
 
       const hasOverlap = team1Players.some((phone) => team2Players.includes(phone));
-  
+
       if (hasOverlap) {
         return false;
       }
@@ -307,13 +307,13 @@ import {
         team2Players.includes(phoneNumberToFind)
       );
     });
-  
+
     const tournamentDetails = tournamentsWithPhoneNumber.map((match) => {
       let teamId = "";
       let tournamentId = null;
-      
+
       // console.log(match);
-  
+
       if (match.team1 && match.team1.players) {
         const isInTeam1 = match.team1.players.some(
           (player) => player.phoneNumber === phoneNumberToFind
@@ -322,7 +322,7 @@ import {
           teamId = match.team1._id;
         }
       }
-  
+
       if (!teamId && match.team2 && match.team2.players) {
         const isInTeam2 = match.team2.players.some(
           (player) => player.phoneNumber === phoneNumberToFind
@@ -331,11 +331,11 @@ import {
           teamId = match.team2._id;
         }
       }
-  
+
       if (match.tournament && match.tournament._id) {
         tournamentId = match.tournament._id;
       }
-  
+
       if (tournamentId) {
         return {
           matchId: match._id,
@@ -344,14 +344,14 @@ import {
           teamId,
         };
       }
-  
+
       return null;
     }).filter(Boolean);
-  
+
     return { data: tournamentDetails };
-  },  
-  
-  
+  },
+
+
   async getMatch(tournamentId) {
     const MatchExist = await Match.find({
       tournament: tournamentId,
@@ -364,14 +364,14 @@ import {
   },
 
   async getSingleMatch(matchId) {
-  
+
     const MatchExist = await Match.findById(new mongoose.Types.ObjectId(matchId));
     if (!MatchExist) {
       throw CustomErrorHandler.notFound("This Match is Not Found.");
     }
     return MatchExist;
   },
-  
+
 
   //Old
   // async getOpponentTournamentId() {
@@ -486,9 +486,9 @@ import {
       tournament: tournamentID,
       $or: [{ team1: teamID }, { team2: teamID }],
     })
-      // .select("scoreBoard _id ")
-      // .lean();
-      
+    // .select("scoreBoard _id ")
+    // .lean();
+
     if (!opponents) {
       throw CustomErrorHandler.notFound("The Player of this Match not Found.");
     }
@@ -516,104 +516,104 @@ import {
     // console.log(uniqueOpponents);
 
 
-    return {team:filteredOpponents,matchDetails:opponents};
+    return { team: filteredOpponents, matchDetails: opponents };
   },
 
-    async editMatch(data, MatchId) {
-      // Ensure the dateTime is standardized
-      const userInfo = global.user;
-  
-      // Find the Match by ID and ensure it belongs to the correct tournament
-      const MatchExist = await Match.findOne({
-        _id: MatchId,
-        tournament: data.tournamentId,
-      });
-  
-      if (!MatchExist) {
-        throw CustomErrorHandler.notFound("Match Not Found");
+  async editMatch(data, MatchId) {
+    // Ensure the dateTime is standardized
+    const userInfo = global.user;
+
+    // Find the Match by ID and ensure it belongs to the correct tournament
+    const MatchExist = await Match.findOne({
+      _id: MatchId,
+      tournament: data.tournamentId,
+    });
+
+    if (!MatchExist) {
+      throw CustomErrorHandler.notFound("Match Not Found");
+    }
+    const formatDateTime = (dateTimeString) => {
+      const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
+      if (!parsedDate.isValid) {
+        throw CustomErrorHandler.badRequest("Invalid date format. Please provide a valid ISO string.");
       }
-      const formatDateTime = (dateTimeString) => {
-        const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
-        if (!parsedDate.isValid) {
-          throw CustomErrorHandler.badRequest("Invalid date format. Please provide a valid ISO string.");
-        }
-    
-        return parsedDate.toISO();
-      };
+
+      return parsedDate.toISO();
+    };
 
     const standardizedDateTime = formatDateTime(data.dateTime);
     console.log("Edit Match - Original DateTime:", data.dateTime);
     console.log("Edit Match - Formatted DateTime:", standardizedDateTime);
-    
-  
-      // Update the match fields
-      MatchExist.team1 = data.team1ID;
-      MatchExist.team2 = data.team2ID;
-      MatchExist.Round = data.round;
-      MatchExist.matchNo = data.matchNo;
-      MatchExist.dateTime = standardizedDateTime; 
-  
-      // Save the updated document
-      const matchData = await MatchExist.save();
 
-      //Send Notification to both team organizers about match Changes
-      const [team1org, team2org] = await Promise.all([
-        User.findById(MatchExist.team1.userId),
-        User.findById(MatchExist.team2.userId)
-      ]);
-      const [Team1FCM, Team2FCM] = [team1org.fcmToken, team2org.fcmToken];  
-      if (Team1FCM && Team2FCM) {
-        const notificationDataTeam1 = {
-          title: `${MatchExist.team1.teamName} VS ${MatchExist.team2.teamName} ${MatchExist.Round} Match`,
-          body: `Your match against ${MatchExist.team2.teamName} is Rescheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
-        };
-        
-        const notificationDataTeam2 = {
-          title: `${MatchExist.team2.teamName} VS ${MatchExist.team1.teamName} ${MatchExist.Round} Match`,
-          body: `Your match against ${MatchExist.team1.teamName} is Rescheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
-        };
-      
-        try {
-          const [response1, response2] = await Promise.all([
-            firebaseNotification.sendNotification(Team1FCM, notificationDataTeam1),
-            firebaseNotification.sendNotification(Team2FCM, notificationDataTeam2)
-          ]);
-      
-          console.log("Notification sent to Team1 organizer successfully:", response1);
-          console.log("Notification sent to Team2 organizer successfully:", response2);
-        } catch (error) {
-          console.error("Error sending notification:", error);
-        }
+
+    // Update the match fields
+    MatchExist.team1 = data.team1ID;
+    MatchExist.team2 = data.team2ID;
+    MatchExist.Round = data.round;
+    MatchExist.matchNo = data.matchNo;
+    MatchExist.dateTime = standardizedDateTime;
+
+    // Save the updated document
+    const matchData = await MatchExist.save();
+
+    //Send Notification to both team organizers about match Changes
+    const [team1org, team2org] = await Promise.all([
+      User.findById(MatchExist.team1.userId),
+      User.findById(MatchExist.team2.userId)
+    ]);
+    const [Team1FCM, Team2FCM] = [team1org.fcmToken, team2org.fcmToken];
+    if (Team1FCM && Team2FCM) {
+      const notificationDataTeam1 = {
+        title: `${MatchExist.team1.teamName} VS ${MatchExist.team2.teamName} ${MatchExist.Round} Match`,
+        body: `Your match against ${MatchExist.team2.teamName} is Rescheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
+      };
+
+      const notificationDataTeam2 = {
+        title: `${MatchExist.team2.teamName} VS ${MatchExist.team1.teamName} ${MatchExist.Round} Match`,
+        body: `Your match against ${MatchExist.team1.teamName} is Rescheduled on ${standardizedDateTime.split('T')[0]}. Be ready!`,
+      };
+
+      try {
+        const [response1, response2] = await Promise.all([
+          firebaseNotification.sendNotification(Team1FCM, notificationDataTeam1),
+          firebaseNotification.sendNotification(Team2FCM, notificationDataTeam2)
+        ]);
+
+        console.log("Notification sent to Team1 organizer successfully:", response1);
+        console.log("Notification sent to Team2 organizer successfully:", response2);
+      } catch (error) {
+        console.error("Error sending notification:", error);
       }
-      return matchData;
-    },
-    
+    }
+    return matchData;
+  },
+
   // async editMatch(data, MatchId) {  recently commented code
   //   const userInfo = global.user;
-  
+
   //   // Find the Match by ID and ensure it belongs to the correct tournament
   //   const MatchExist = await Match.findOne({
   //     _id: MatchId,
   //     tournament: data.tournamentId,
   //   });
-  
+
   //   if (!MatchExist) {
   //     // Handle the case where the Match is not found
   //     throw CustomErrorHandler.notFound("Match Not Found");
   //   }
-  
+
   //   // Update the match fields
   //   MatchExist.team1 = data.team1ID;
   //   MatchExist.team2 = data.team2ID;
   //   MatchExist.Round = data.round;
   //   MatchExist.matchNo = data.matchNo;
   //   MatchExist.dateTime = data.dateTime;
-  
+
   //   // Save the updated document
   //   const matchData = await MatchExist.save();
   //   return matchData;
   // },
-  
+
 
   // async editMatch(data, MatchId) {
   //   const userInfo = global.user;
@@ -639,25 +639,25 @@ import {
   //   let matchData = await MatchExist.save();
   //   return matchData;
   // },
-//DG 
+  //DG 
   // async updateScoreBoard(data, MatchId) {
   //   try {
   //     // Validate input data
   //     if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
   //       throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
   //     }
-  
+
   //     // Atomic update
   //     const matchData = await Match.findByIdAndUpdate(
   //       MatchId,
   //       { $set: { scoreBoard: data.scoreBoard } },
   //       { new: true, runValidators: true }
   //     );
-  
+
   //     if (!matchData) {
   //       throw CustomErrorHandler.notFound("Match Not Found");
   //     }
-  
+
   //     return matchData;
   //   } catch (err) {
   //     console.error("Error updating scoreBoard:", err);
@@ -670,32 +670,32 @@ import {
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
-  
+
       // Atomic update
       const matchData = await Match.findByIdAndUpdate(
         MatchId,
-        {  
-          $set: { 
-            scoreBoard: data.scoreBoard, 
+        {
+          $set: {
+            scoreBoard: data.scoreBoard,
             status: 'current' // Set status to 'current' when updating scoreboard
           }
         },
         { new: true, runValidators: true }
       );
-  
+
       if (!matchData) {
         throw CustomErrorHandler.notFound("Match Not Found");
       }
-  
+
       return matchData;
     } catch (err) {
       console.error("Error updating scoreBoard:", err);
       throw CustomErrorHandler.internal("Failed to update ScoreBoard");
     }
   },
-  
-  
-//Nikhil
+
+
+  //Nikhil
   // async updateScoreBoard(data, MatchId) {
   //   // const userInfo = global.user;
 
@@ -1065,14 +1065,14 @@ import {
     match.status = "played";
     match.winningTeamId = winningTeamId || "";
 
-    console.log("Current Tournament id:",tournament._id);
+    console.log("Current Tournament id:", tournament._id);
     const tournament_data = await RegisteredTeam.find({
       tournament: tournament._id,
       status: "Accepted",
       // isEliminated:false,
     });
-    const teamorgfmc=tournament_data.map((team)=>team.user.fcmToken);
-    console.log("FMC Token:",teamorgfmc);
+    const teamorgfmc = tournament_data.map((team) => team.user.fcmToken);
+    console.log("FMC Token:", teamorgfmc);
 
     const winnerTeamName = await Team.findById(winningTeamId).select('teamName');
     console.log("Winner Team Name:", winnerTeamName.teamName);
@@ -1080,56 +1080,56 @@ import {
     // Calculate differences and determine win type of the match that will be used for 
     let winningMessage = '';
     let opponentTeam = null;
-    
+
     if (match.scoreBoard.firstInnings.battingTeam._id.toString() === winningTeamId.toString()) {
-        const runDifference = match.scoreBoard.firstInnings.totalScore - match.scoreBoard.secondInnings.totalScore;
-        if(runDifference === 0) {
-          //show nothing if match run difference is 0 or it has tie
-            winningMessage = ' ';
-        }else{
-          winningMessage = `by ${runDifference} runs`;
-        }
-        
-        opponentTeam = tournament_data.find(
-            (team) => team.team._id.toString() === match.scoreBoard.secondInnings.battingTeam._id.toString()
-        );
+      const runDifference = match.scoreBoard.firstInnings.totalScore - match.scoreBoard.secondInnings.totalScore;
+      if (runDifference === 0) {
+        //show nothing if match run difference is 0 or it has tie
+        winningMessage = ' ';
+      } else {
+        winningMessage = `by ${runDifference} runs`;
+      }
+
+      opponentTeam = tournament_data.find(
+        (team) => team.team._id.toString() === match.scoreBoard.secondInnings.battingTeam._id.toString()
+      );
     } else {
-        const wicketsRemaining = 10 - match.scoreBoard.secondInnings.totalWickets;
-        
-        winningMessage = `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
-        opponentTeam = tournament_data.find(
-            (team) => team.team._id.toString() === match.scoreBoard.firstInnings.battingTeam._id.toString()
-        );
+      const wicketsRemaining = 10 - match.scoreBoard.secondInnings.totalWickets;
+
+      winningMessage = `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
+      opponentTeam = tournament_data.find(
+        (team) => team.team._id.toString() === match.scoreBoard.firstInnings.battingTeam._id.toString()
+      );
     }
 
     const opponentTeamName = opponentTeam ? opponentTeam.team.teamName : "Opponent";
     console.log("Opponent Team Name:", opponentTeamName);
 
     if (teamorgfmc) {
-        const notificationData = {
-            title: `Hey Participants!`,
-            body: `${winnerTeamName.teamName} has won the match against ${opponentTeamName} ${winningMessage}`,
-        };
+      const notificationData = {
+        title: `Hey Participants!`,
+        body: `${winnerTeamName.teamName} has won the match against ${opponentTeamName} ${winningMessage}`,
+      };
 
-        try {
-            const sendNotifications = teamorgfmc.map((fcmToken) => {
-                return firebaseNotification.sendNotification(fcmToken, notificationData);
-            });
+      try {
+        const sendNotifications = teamorgfmc.map((fcmToken) => {
+          return firebaseNotification.sendNotification(fcmToken, notificationData);
+        });
 
-            await Promise.all(sendNotifications);
-            console.log("Notifications sent successfully!");
+        await Promise.all(sendNotifications);
+        console.log("Notifications sent successfully!");
 
-        } catch (error) {
-            console.error("Error sending notification:", error);
-        }
+      } catch (error) {
+        console.error("Error sending notification:", error);
+      }
     }
     await match.save();
     return true;
-},
+  },
 
- 
-  
-  
+
+
+
   async teamRanking(ballType) {
     let teamsRanking;
 
@@ -1211,7 +1211,7 @@ import {
               else: 0,
             },
           },
-         
+
           balls: { $ifNull: [`$battingStatistic.${ballType}.balls`, 0] },
           bowlingruns: { $ifNull: [`$bowlingStatistic.${ballType}.runs`, 0] },
           wickets: { $ifNull: [`$bowlingStatistic.${ballType}.wickets`, 0] },
@@ -1265,7 +1265,7 @@ import {
         $sort: {
           [sortingField]: -1,
         },
-      },  
+      },
       {
         $limit: 10,
       },
@@ -1281,7 +1281,7 @@ import {
 
     // Validate startDate
     if (!startDate) {
-        throw new Error("Start date is required");
+      throw new Error("Start date is required");
     }
 
     const startDateTime = new Date(`${startDate}T00:00:00.000Z`);
@@ -1289,94 +1289,94 @@ import {
 
     // Fetch tournament data
     const tournamentData = await Tournament.aggregate([
-        {
-            $geoNear: {
-                near: {
-                    type: "Point",
-                    coordinates: [longitude, latitude],
-                },
-                distanceField: "distance",
-                spherical: true,
-                query: {
-                    isDeleted: false,
-                    "ballType.name": ballType,
-                    tournamentStartDateTime: { $lte: endDateTime },
-                    tournamentEndDateTime: { $gte: startDateTime },
-                },
-            },
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [longitude, latitude],
+          },
+          distanceField: "distance",
+          spherical: true,
+          query: {
+            isDeleted: false,
+            "ballType.name": ballType,
+            tournamentStartDateTime: { $lte: endDateTime },
+            tournamentEndDateTime: { $gte: startDateTime },
+          },
         },
-        {
-            $lookup: {
-                from: "matches",
-                localField: "_id",
-                foreignField: "tournament",
-                as: "matches",
-                pipeline: [
-                    { $match: { dateTime: { $gte: startDateTime, $lte: endDateTime } } },
-                    {
-                        $lookup: {
-                            from: "teams",
-                            localField: "team1",
-                            foreignField: "_id",
-                            as: "team1",
-                        },
-                    },
-                    {
-                        $lookup: {
-                            from: "teams",
-                            localField: "team2",
-                            foreignField: "_id",
-                            as: "team2",
-                        },
-                    },
-                    {
-                        $unwind: { path: "$team1", preserveNullAndEmptyArrays: true },
-                    },
-                    {
-                        $unwind: { path: "$team2", preserveNullAndEmptyArrays: true },
-                    },
-                    {
-                        $project: {
-                            dateTime: 1,
-                            scoreBoard: 1,
-                            team1: { players: 1 },
-                            team2: { players: 1 },
-                        },
-                    },
-                ],
+      },
+      {
+        $lookup: {
+          from: "matches",
+          localField: "_id",
+          foreignField: "tournament",
+          as: "matches",
+          pipeline: [
+            { $match: { dateTime: { $gte: startDateTime, $lte: endDateTime } } },
+            {
+              $lookup: {
+                from: "teams",
+                localField: "team1",
+                foreignField: "_id",
+                as: "team1",
+              },
             },
+            {
+              $lookup: {
+                from: "teams",
+                localField: "team2",
+                foreignField: "_id",
+                as: "team2",
+              },
+            },
+            {
+              $unwind: { path: "$team1", preserveNullAndEmptyArrays: true },
+            },
+            {
+              $unwind: { path: "$team2", preserveNullAndEmptyArrays: true },
+            },
+            {
+              $project: {
+                dateTime: 1,
+                scoreBoard: 1,
+                team1: { players: 1 },
+                team2: { players: 1 },
+              },
+            },
+          ],
         },
+      },
     ]);
 
     // // Flatten matches from tournament data
     // const matches = tournamentData.map((t) => t.matches).flat();
 
-     // Flatten matches from tournament data
+    // Flatten matches from tournament data
     const matches = tournamentData.flatMap((tournament) => tournament.matches);
 
     // Extract player performance from the scoreboards
     const allPlayersData = matches.flatMap((match) => {
-        const team1Players = match?.scoreBoard?.team1?.players || [];
-        const team2Players = match?.scoreBoard?.team2?.players || [];
-        return [...team1Players, ...team2Players];
+      const team1Players = match?.scoreBoard?.team1?.players || [];
+      const team2Players = match?.scoreBoard?.team2?.players || [];
+      return [...team1Players, ...team2Players];
     });
 
     // Aggregate player performance by phone number
     const aggregatedPlayers = {};
     allPlayersData.forEach((player) => {
-        const phoneNumber = player.phoneNumber;
-        if (!aggregatedPlayers[phoneNumber]) {
-            aggregatedPlayers[phoneNumber] = { ...player, batting: { ...player.batting }, bowling: { ...player.bowling } };
-        } else {
-            const existingPlayer = aggregatedPlayers[phoneNumber];
-            existingPlayer.batting.runs += player.batting?.runs || 0;
-            existingPlayer.batting.balls += player.batting?.balls || 0;
-            existingPlayer.batting.fours += player.batting?.fours || 0;
-            existingPlayer.batting.sixes += player.batting?.sixes || 0;
+      const phoneNumber = player.phoneNumber;
+      if (!aggregatedPlayers[phoneNumber]) {
+        aggregatedPlayers[phoneNumber] = { ...player, batting: { ...player.batting }, bowling: { ...player.bowling } };
+      } else {
+        const existingPlayer = aggregatedPlayers[phoneNumber];
+        existingPlayer.batting.runs += player.batting?.runs || 0;
+        existingPlayer.batting.balls += player.batting?.balls || 0;
+        existingPlayer.batting.fours += player.batting?.fours || 0;
+        existingPlayer.batting.sixes += player.batting?.sixes || 0;
 
-            existingPlayer.bowling.runs += player.bowling?.runs || 0;
-            existingPlayer.bowling.wickets += player.bowling?.wickets || 0;
-        }
+        existingPlayer.bowling.runs += player.bowling?.runs || 0;
+        existingPlayer.bowling.wickets += player.bowling?.wickets || 0;
+      }
     });
 
     // Convert aggregated players to an array
@@ -1391,28 +1391,28 @@ import {
     const playerIds = top10Players.map((player) => player._id);
 
     const playerProfiles = await Player.find({ _id: { $in: playerIds } })
-        .populate({ path: "userId", select: "profilePhoto" })
-        .select("_id userId");
+      .populate({ path: "userId", select: "profilePhoto" })
+      .select("_id userId");
 
-        //const defaultPhoto = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAAAAD";
-     const profilePhotoMap = new Map(
-        playerProfiles.map((player) => [
-            player._id.toString(),
-            player.userId?.profilePhoto || "",  // Default photo if missing
-        ])
+    //const defaultPhoto = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAAAAD";
+    const profilePhotoMap = new Map(
+      playerProfiles.map((player) => [
+        player._id.toString(),
+        player.userId?.profilePhoto || "",  // Default photo if missing
+      ])
     );
 
     // const profilePhotoMap = new Map(playerProfiles.map((p) => [p._id.toString(), p.userId.profilePhoto || ""]));
     top10Players.forEach((player, index) => {
-        player.profilePhoto = profilePhotoMap.get(player._id.toString()) || "";
-        player.rank = index + 1;
+      player.profilePhoto = profilePhotoMap.get(player._id.toString()) || "";
+      player.rank = index + 1;
     });
 
     return top10Players;
-},
+  },
 
 
-  
+
   //original code by nikhil
   // async topPerformers(data) {
   //   let { latitude, longitude, startDate, filter } = data;
@@ -1732,131 +1732,131 @@ import {
   // },
 
   //Nikhil
-//   async myPerformance(matchType, category) {
-//     const userInfo = global.user;
-//     const userId = userInfo.userId;
+  //   async myPerformance(matchType, category) {
+  //     const userInfo = global.user;
+  //     const userId = userInfo.userId;
 
-//     let playerPerformances = await Player.find({ userId });
+  //     let playerPerformances = await Player.find({ userId });
 
-//     if (!playerPerformances || playerPerformances.length === 0) {
-      
-//       throw CustomErrorHandler.notFound("Player Performances Not Found");
-//     }
+  //     if (!playerPerformances || playerPerformances.length === 0) {
 
-//     const aggregatePlayerPerformances = (playerPerformances) => {
-//       let aggregatedData = {
-//         batting: {
-//           Runs:  { tennis: 0, leather: 0 },
-//           Balls: { tennis: 0, leather: 0 },
-//           Fours: { tennis: 0, leather: 0 },
-//           Sixes: { tennis: 0, leather: 0 },
-//           "Strike Rate": { tennis: 0, leather: 0 },
-//           "Half Century": { tennis: 0, leather: 0 },
-//           Century: { tennis: 0, leather: 0 },
-//         },
-//         bowling: {
-//           Overs: { tennis: 0, leather: 0 },
-//           Runs: { tennis: 0, leather: 0 },
-//           Wickets: { tennis: 0, leather: 0 },
-//           Economy: { tennis: 0, leather: 0 },
-//           Maidens: { tennis: 0, leather: 0 },
-//         },
-//       };
+  //       throw CustomErrorHandler.notFound("Player Performances Not Found");
+  //     }
 
-//       playerPerformances.forEach((player) => {
-//         // Aggregate batting statistics
-//         aggregatedData.batting.Runs.tennis +=
-//           player.battingStatistic?.tennis?.runs || 0;
-//         aggregatedData.batting.Runs.leather +=
-//           player.battingStatistic?.leather?.runs || 0;
-//         aggregatedData.batting.Balls.tennis +=
-//           player.battingStatistic?.tennis?.balls || 0;
-//         aggregatedData.batting.Balls.leather +=
-//           player.battingStatistic?.leather?.balls || 0;
-//         aggregatedData.batting.Fours.tennis +=
-//           player.battingStatistic?.tennis?.fours || 0;
-//         aggregatedData.batting.Fours.leather +=
-//           player.battingStatistic?.leather?.fours || 0;
-//         aggregatedData.batting.Sixes.tennis +=
-//           player.battingStatistic?.tennis?.sixes || 0;
-//         aggregatedData.batting.Sixes.leather +=
-//           player.battingStatistic?.leather?.sixes || 0;
-//         aggregatedData.batting["Strike Rate"].tennis +=
-//           parseInt(
-//             ((player.battingStatistic?.tennis?.runs || 0) /
-//               (player.battingStatistic?.tennis?.balls || 1)) *
-//               100
-//           ) || 0;
-//         aggregatedData.batting["Strike Rate"].leather +=
-//           parseInt(
-//             ((player.battingStatistic?.leather?.runs || 0) /
-//               (player.battingStatistic?.leather?.balls || 1)) *
-//               100
-//           ) || 0;
-//         aggregatedData.batting["Half Century"].tennis +=
-//           player.battingStatistic?.tennis?.halfCentury || 0;
-//         aggregatedData.batting["Half Century"].leather +=
-//           player.battingStatistic?.leather?.halfCentury || 0;
-//         aggregatedData.batting.Century.tennis +=
-//           player.battingStatistic?.tennis?.century || 0;
-//         aggregatedData.batting.Century.leather +=
-//           player.battingStatistic?.leather?.century || 0;
+  //     const aggregatePlayerPerformances = (playerPerformances) => {
+  //       let aggregatedData = {
+  //         batting: {
+  //           Runs:  { tennis: 0, leather: 0 },
+  //           Balls: { tennis: 0, leather: 0 },
+  //           Fours: { tennis: 0, leather: 0 },
+  //           Sixes: { tennis: 0, leather: 0 },
+  //           "Strike Rate": { tennis: 0, leather: 0 },
+  //           "Half Century": { tennis: 0, leather: 0 },
+  //           Century: { tennis: 0, leather: 0 },
+  //         },
+  //         bowling: {
+  //           Overs: { tennis: 0, leather: 0 },
+  //           Runs: { tennis: 0, leather: 0 },
+  //           Wickets: { tennis: 0, leather: 0 },
+  //           Economy: { tennis: 0, leather: 0 },
+  //           Maidens: { tennis: 0, leather: 0 },
+  //         },
+  //       };
 
-//         // Aggregate bowling statistics
-//         aggregatedData.bowling.Overs.tennis +=
-//           player.bowlingStatistic?.tennis?.Over || 0;
-//         aggregatedData.bowling.Overs.leather +=
-//           player.bowlingStatistic?.leather?.Over || 0;
-//         aggregatedData.bowling.Runs.tennis +=
-//           player.bowlingStatistic?.tennis?.runs || 0;
-//         aggregatedData.bowling.Runs.leather +=
-//           player.bowlingStatistic?.leather?.runs || 0;
-//         aggregatedData.bowling.Wickets.tennis +=
-//           player.bowlingStatistic?.tennis?.wickets || 0;
-//         aggregatedData.bowling.Wickets.leather +=
-//           player.bowlingStatistic?.leather?.wickets || 0;
-//         aggregatedData.bowling.Economy.tennis +=
-//           parseInt(
-//             ((player.bowlingStatistic?.tennis?.runs || 0) /
-//               (player.bowlingStatistic?.tennis?.Over || 1)) *
-//               6
-//           ) || 0;
-//         aggregatedData.bowling.Economy.leather +=
-//           parseInt(
-//             ((player.bowlingStatistic?.leather?.runs || 0) /
-//               (player.bowlingStatistic?.leather?.Over || 1)) *
-//               6
-//           ) || 0;
-//         aggregatedData.bowling.Maidens.tennis +=
-//           player.bowlingStatistic?.tennis?.maidens || 0;
-//         aggregatedData.bowling.Maidens.leather +=
-//           player.bowlingStatistic?.leather?.maidens || 0;
-//       });
+  //       playerPerformances.forEach((player) => {
+  //         // Aggregate batting statistics
+  //         aggregatedData.batting.Runs.tennis +=
+  //           player.battingStatistic?.tennis?.runs || 0;
+  //         aggregatedData.batting.Runs.leather +=
+  //           player.battingStatistic?.leather?.runs || 0;
+  //         aggregatedData.batting.Balls.tennis +=
+  //           player.battingStatistic?.tennis?.balls || 0;
+  //         aggregatedData.batting.Balls.leather +=
+  //           player.battingStatistic?.leather?.balls || 0;
+  //         aggregatedData.batting.Fours.tennis +=
+  //           player.battingStatistic?.tennis?.fours || 0;
+  //         aggregatedData.batting.Fours.leather +=
+  //           player.battingStatistic?.leather?.fours || 0;
+  //         aggregatedData.batting.Sixes.tennis +=
+  //           player.battingStatistic?.tennis?.sixes || 0;
+  //         aggregatedData.batting.Sixes.leather +=
+  //           player.battingStatistic?.leather?.sixes || 0;
+  //         aggregatedData.batting["Strike Rate"].tennis +=
+  //           parseInt(
+  //             ((player.battingStatistic?.tennis?.runs || 0) /
+  //               (player.battingStatistic?.tennis?.balls || 1)) *
+  //               100
+  //           ) || 0;
+  //         aggregatedData.batting["Strike Rate"].leather +=
+  //           parseInt(
+  //             ((player.battingStatistic?.leather?.runs || 0) /
+  //               (player.battingStatistic?.leather?.balls || 1)) *
+  //               100
+  //           ) || 0;
+  //         aggregatedData.batting["Half Century"].tennis +=
+  //           player.battingStatistic?.tennis?.halfCentury || 0;
+  //         aggregatedData.batting["Half Century"].leather +=
+  //           player.battingStatistic?.leather?.halfCentury || 0;
+  //         aggregatedData.batting.Century.tennis +=
+  //           player.battingStatistic?.tennis?.century || 0;
+  //         aggregatedData.batting.Century.leather +=
+  //           player.battingStatistic?.leather?.century || 0;
 
-//       return aggregatedData;
-//     };
-//   const aggregatedData = aggregatePlayerPerformances(playerPerformances);
-  
-//   // return aggregatedData[matchType];
-//   return aggregatedData; //DG
+  //         // Aggregate bowling statistics
+  //         aggregatedData.bowling.Overs.tennis +=
+  //           player.bowlingStatistic?.tennis?.Over || 0;
+  //         aggregatedData.bowling.Overs.leather +=
+  //           player.bowlingStatistic?.leather?.Over || 0;
+  //         aggregatedData.bowling.Runs.tennis +=
+  //           player.bowlingStatistic?.tennis?.runs || 0;
+  //         aggregatedData.bowling.Runs.leather +=
+  //           player.bowlingStatistic?.leather?.runs || 0;
+  //         aggregatedData.bowling.Wickets.tennis +=
+  //           player.bowlingStatistic?.tennis?.wickets || 0;
+  //         aggregatedData.bowling.Wickets.leather +=
+  //           player.bowlingStatistic?.leather?.wickets || 0;
+  //         aggregatedData.bowling.Economy.tennis +=
+  //           parseInt(
+  //             ((player.bowlingStatistic?.tennis?.runs || 0) /
+  //               (player.bowlingStatistic?.tennis?.Over || 1)) *
+  //               6
+  //           ) || 0;
+  //         aggregatedData.bowling.Economy.leather +=
+  //           parseInt(
+  //             ((player.bowlingStatistic?.leather?.runs || 0) /
+  //               (player.bowlingStatistic?.leather?.Over || 1)) *
+  //               6
+  //           ) || 0;
+  //         aggregatedData.bowling.Maidens.tennis +=
+  //           player.bowlingStatistic?.tennis?.maidens || 0;
+  //         aggregatedData.bowling.Maidens.leather +=
+  //           player.bowlingStatistic?.leather?.maidens || 0;
+  //       });
 
-// },
+  //       return aggregatedData;
+  //     };
+  //   const aggregatedData = aggregatePlayerPerformances(playerPerformances);
+
+  //   // return aggregatedData[matchType];
+  //   return aggregatedData; //DG
+
+  // },
 
 
 
-//DG 
+  //DG 
 
-// async myPerformance(userId, category) {
- 
-//   if (!userId) {
-//     throw CustomErrorHandler.badRequest("User ID is required");
-//   }
+  // async myPerformance(userId, category) {
 
-//   const playerPerformances = await Player.find({ userId }).lean(); 
+  //   if (!userId) {
+  //     throw CustomErrorHandler.badRequest("User ID is required");
+  //   }
 
-//   if (!playerPerformances || playerPerformances.length === 0) {
-//     throw CustomErrorHandler.notFound("Player Performances Not Found");
-//   }
+  //   const playerPerformances = await Player.find({ userId }).lean(); 
+
+  //   if (!playerPerformances || playerPerformances.length === 0) {
+  //     throw CustomErrorHandler.notFound("Player Performances Not Found");
+  //   }
 
   // const aggregatedData = {
   //   batting: {
@@ -1902,15 +1902,15 @@ import {
   //   }
   // });
 
-//   if (category === "batting") {
-//     Object.keys(aggregatedData.batting.Runs).forEach((ballType) => {
-//       aggregatedData.batting["Strike Rate"][ballType] = parseFloat(
-//         ((aggregatedData.batting.Runs[ballType] || 0) /
-//           (aggregatedData.batting.Balls[ballType] || 1)) *
-//           100
-//       ).toFixed(2);
-//     });
-//   }
+  //   if (category === "batting") {
+  //     Object.keys(aggregatedData.batting.Runs).forEach((ballType) => {
+  //       aggregatedData.batting["Strike Rate"][ballType] = parseFloat(
+  //         ((aggregatedData.batting.Runs[ballType] || 0) /
+  //           (aggregatedData.batting.Balls[ballType] || 1)) *
+  //           100
+  //       ).toFixed(2);
+  //     });
+  //   }
 
   // if (category === "bowling") {
   //   Object.keys(aggregatedData.bowling.Runs).forEach((ballType) => {
@@ -1921,86 +1921,85 @@ import {
   //         : "0.00";
   //   });
   // }
-//   // Return the aggregated data
-//   return aggregatedData;
-// },
+  //   // Return the aggregated data
+  //   return aggregatedData;
+  // },
 
-//new
-async myPerformance(userId, category) {
-  if (!userId) {
-    throw CustomErrorHandler.badRequest("User ID is required");
-  }
+  //new
+  async myPerformance(userId, category) {
+    if (!userId) {
+      throw CustomErrorHandler.badRequest("User ID is required");
+    }
 
-  const user = await User.findById(userId).select("phoneNumber").lean();
-  if (!user) {
-    throw CustomErrorHandler.notFound("User not found.");
-  }
-  const userPhoneNumber = user.phoneNumber;
-  console.log("userPhoneNumber", userPhoneNumber);
+    const user = await User.findById(userId).select("phoneNumber").lean();
+    if (!user) {
+      throw CustomErrorHandler.notFound("User not found.");
+    }
+    const userPhoneNumber = user.phoneNumber;
 
-  // Fetch tournaments associated with the user
-  const userTournaments = await Tournament.find({
-    $or: [
-      { user: userId }, // If the user created the tournament
-      { organizer: userId }, // If the user is an organizer
-      { coHostId1: userId }, // If the user is a co-host
-      { coHostId2: userId }  // If the user is a second co-host
-    ],
-    isDeleted: false,
-  }).select("_id").lean();
+    // Fetch tournaments associated with the user
+    const userTournaments = await Tournament.find({
+      $or: [
+        { user: userId }, // If the user created the tournament
+        { organizer: userId }, // If the user is an organizer
+        { coHostId1: userId }, // If the user is a co-host
+        { coHostId2: userId }  // If the user is a second co-host
+      ],
+      isDeleted: false,
+    }).select("_id").lean();
 
-  const userPlayedTournament = await Tournament.find({
-    $or: [
-      { user: userId },
-      { organizer: userId },
-      { coHostId1: userId },
-      { coHostId2: userId }
-    ],
-    isDeleted: false,
-  },{
-    locationHistory:0,
-    matches:0,
-    payments:0,
+    const userPlayedTournament = await Tournament.find({
+      $or: [
+        { user: userId },
+        { organizer: userId },
+        { coHostId1: userId },
+        { coHostId2: userId }
+      ],
+      isDeleted: false,
+    }, {
+      locationHistory: 0,
+      matches: 0,
+      payments: 0,
 
-  });
-  
-  // const userPlayedTournament = await Tournament.find({
-  //   $or: [
-  //     { user: userId },
-  //     { organizer: userId },
-  //     { coHostId1: userId },
-  //     { coHostId2: userId }
-  //   ],
-  //   isDeleted: false,
-  // }, {
-  //   _id: 1, 
-  //   tournamentStartDateTime: 1, 
-  //   tournamentEndDateTime: 1,  
-  //   tournamentName: 1,
-  //   fees: 1,
-  //   coverPhoto:1,   
-  //   rules: 1, 
-  // });
-  // {
-  //   _id: 1, 
-  //   tournamentStartDateTime: 1, 
-  //   tournamentEndDateTime: 1,  
-  //   tournamentName: 1,
-  //   ballType: 1,
-  //   tournamentPrize: 1, 
-  //   fees: 1,   
-  //   rules: 1, 
-  // });
-  const tournamentIds = userTournaments.map((tournament) => tournament._id);
-  const matches = await Match.find({
-    tournament: { $in: tournamentIds }, 
-    status: "played",
-    scoreBoard: { $ne: null }, 
-    $or: [
-      { "scoreBoard.team1.players.phoneNumber": userPhoneNumber },
-      { "scoreBoard.team2.players.phoneNumber": userPhoneNumber },
-    ],
-  })
+    });
+
+    // const userPlayedTournament = await Tournament.find({
+    //   $or: [
+    //     { user: userId },
+    //     { organizer: userId },
+    //     { coHostId1: userId },
+    //     { coHostId2: userId }
+    //   ],
+    //   isDeleted: false,
+    // }, {
+    //   _id: 1, 
+    //   tournamentStartDateTime: 1, 
+    //   tournamentEndDateTime: 1,  
+    //   tournamentName: 1,
+    //   fees: 1,
+    //   coverPhoto:1,   
+    //   rules: 1, 
+    // });
+    // {
+    //   _id: 1, 
+    //   tournamentStartDateTime: 1, 
+    //   tournamentEndDateTime: 1,  
+    //   tournamentName: 1,
+    //   ballType: 1,
+    //   tournamentPrize: 1, 
+    //   fees: 1,   
+    //   rules: 1, 
+    // });
+    const tournamentIds = userTournaments.map((tournament) => tournament._id);
+    const matches = await Match.find({
+      tournament: { $in: tournamentIds },
+      status: "played",
+      scoreBoard: { $ne: null },
+      $or: [
+        { "scoreBoard.team1.players.phoneNumber": userPhoneNumber },
+        { "scoreBoard.team2.players.phoneNumber": userPhoneNumber },
+      ],
+    })
     // .populate("tournament", "tournamentName tournamentStartDateTime tournamentEndDateTime ballType")
     // .populate("team1", "teamName teamLogo")
     // .populate("team2", "teamName teamLogo")
@@ -2011,52 +2010,52 @@ async myPerformance(userId, category) {
     const filteredTournaments = userTournaments.filter((tournament) =>
       playedTournamentIds.has(tournament._id.toString())
     );
-    
+
     // Use filteredTournaments for further processing in matchsummary and other computations.
     const matchsummary = filteredTournaments.map(tournament => {
-      const tournamentMatches = matches.filter(match => 
+      const tournamentMatches = matches.filter(match =>
         match.tournament._id.toString() === tournament._id.toString()
       );
-  
+
       const matchStats = tournamentMatches.map(match => {
         const team1Players = match.scoreBoard.team1.players;
         const team2Players = match.scoreBoard.team2.players;
-        const playerStats = team1Players.concat(team2Players).find(player => 
+        const playerStats = team1Players.concat(team2Players).find(player =>
           player.phoneNumber === userPhoneNumber
         );
-  
+
         if (!playerStats) return null;
-        
-         // Calculate total overs bowled by the player
-      const oversData = playerStats?.bowling?.overs || {};
-      let totalBalls = Object.keys(oversData).reduce((sum, key) => {
-        const over = oversData[key];
-        // Only count deliveries with valid "over" and "ball" values
-        return sum + (over.over !== undefined && over.ball !== undefined ? 1 : 0);
-      }, 0);
 
-      // Subtract one ball if there are any valid deliveries
-      if (totalBalls > 0) {
-        totalBalls -= 1;
-      }
+        // Calculate total overs bowled by the player
+        const oversData = playerStats?.bowling?.overs || {};
+        let totalBalls = Object.keys(oversData).reduce((sum, key) => {
+          const over = oversData[key];
+          // Only count deliveries with valid "over" and "ball" values
+          return sum + (over.over !== undefined && over.ball !== undefined ? 1 : 0);
+        }, 0);
 
-      const totalOversBowled =
-        Math.floor(totalBalls / 6) + (totalBalls % 6) / 10;
+        // Subtract one ball if there are any valid deliveries
+        if (totalBalls > 0) {
+          totalBalls -= 1;
+        }
+
+        const totalOversBowled =
+          Math.floor(totalBalls / 6) + (totalBalls % 6) / 10;
 
         // To Calculate strike rate
-        const strikeRate = playerStats.batting.balls > 0 
+        const strikeRate = playerStats.batting.balls > 0
           ? ((playerStats.batting.runs / playerStats.batting.balls) * 100).toFixed(2)
           : "0.00";
-  
+
         // to Calculate economy
         // const economy = playerStats.bowling.overs > 0
         //   ? (playerStats.bowling.runs / playerStats.bowling.overs).toFixed(2)
         //   : "0.00";
         const economy =
-        totalBalls > 0
-          ? (playerStats.bowling.runs / (totalBalls / 6)).toFixed(2)
-          : "0.00";
-  
+          totalBalls > 0
+            ? (playerStats.bowling.runs / (totalBalls / 6)).toFixed(2)
+            : "0.00";
+
         return {
           matchId: match._id,
           matchDate: match.dateTime,
@@ -2078,7 +2077,7 @@ async myPerformance(userId, category) {
           }
         };
       }).filter(Boolean);
-  
+
       return {
         tournamentId: tournament._id,
         tournamentName: tournament.tournamentName,
@@ -2086,26 +2085,26 @@ async myPerformance(userId, category) {
       };
     });
 
-  // Fetch all performances and latest 5 performances
-  const allPerformances = await Player.find({ userId }).lean();
+    // Fetch all performances and latest 5 performances
+    const allPerformances = await Player.find({ userId }).lean();
 
-  const latestPerformances = await Match.find({
-    $or: [
-      { "scoreBoard.team1.players.phoneNumber": userPhoneNumber },
-      { "scoreBoard.team2.players.phoneNumber": userPhoneNumber },
-    ],
-    status: "played",
-  })
-    .sort({ dateTime: -1 })
-    .limit(5)
-    .lean();
+    const latestPerformances = await Match.find({
+      $or: [
+        { "scoreBoard.team1.players.phoneNumber": userPhoneNumber },
+        { "scoreBoard.team2.players.phoneNumber": userPhoneNumber },
+      ],
+      status: "played",
+    })
+      .sort({ dateTime: -1 })
+      .limit(5)
+      .lean();
 
     // console.log("Latest Performances:",latestPerformances);
 
     const latestMatchesData = latestPerformances.map((match) => {
       const team1Players = match.scoreBoard.team1.players;
       const team2Players = match.scoreBoard.team2.players;
-    
+
       // Find the user's performance in the match
       const playerStats = team1Players.concat(team2Players).find(
         (player) => player.phoneNumber === userPhoneNumber
@@ -2117,14 +2116,14 @@ async myPerformance(userId, category) {
         // Only count deliveries with valid "over" and "ball" values
         return sum + (over.over !== undefined && over.ball !== undefined ? 1 : 0);
       }, 0);
-    
+
       // Subtract one ball if there are any valid deliveries
       if (totalBalls > 0) {
         totalBalls -= 1;
       }
-    
+
       const totalOversBowled = Math.floor(totalBalls / 6) + (totalBalls % 6) / 10; // Convert balls to overs (e.g., 8 balls = 1.2 overs)
-    
+
       // Initialize aggregated data structure for the match
       const playerData = {
         batting: {
@@ -2136,9 +2135,9 @@ async myPerformance(userId, category) {
           century: playerStats?.batting?.century || 0,
           strikeRate: playerStats?.batting?.balls
             ? (
-                (playerStats.batting.runs / playerStats.batting.balls) *
-                100
-              ).toFixed(2)
+              (playerStats.batting.runs / playerStats.batting.balls) *
+              100
+            ).toFixed(2)
             : "0.00",
         },
         bowling: {
@@ -2151,7 +2150,7 @@ async myPerformance(userId, category) {
           maidens: playerStats?.bowling?.maidens || 0,
         },
       };
-    
+
       return {
         _id: match._id,
         dateTime: match.dateTime,
@@ -2160,153 +2159,153 @@ async myPerformance(userId, category) {
         playerData,
       };
     });
-    
 
-    
-  // if (!allPerformances || allPerformances.length === 0) {
-  //   throw CustomErrorHandler.notFound("Player Performances Not Found");
-  // }
 
-  const aggregatedData = {
-    batting: {
-      Runs: { tennis: 0, leather: 0 },
-      Balls: { tennis: 0, leather: 0 },
-      Fours: { tennis: 0, leather: 0 },
-      Sixes: { tennis: 0, leather: 0 },
-      "Strike Rate": { tennis: 0, leather: 0 },
-      "Half Century": { tennis: 0, leather: 0 },
-      Century: { tennis: 0, leather: 0 },
-      Innings: { tennis: 0, leather: 0 },
-      Average: { tennis: 0, leather: 0 },
-    },
-    bowling: {
-      Overs: { tennis: 0, leather: 0 },
-      Runs: { tennis: 0, leather: 0 },
-      Wickets: { tennis: 0, leather: 0 },
-      Economy: { tennis: 0, leather: 0 },
-      Maidens: { tennis: 0, leather: 0 },
-      Innings: { tennis: 0, leather: 0 },
-      Average: { tennis: 0, leather: 0 },
-   
-    },
-  };
 
-  allPerformances.forEach((performance) => {
-    if (performance.battingStatistic) {
-      Object.keys(performance.battingStatistic).forEach((ballType) => {
-        const stats = performance.battingStatistic[ballType] || {};
-        aggregatedData.batting.Runs[ballType] += stats.runs || 0;
-        aggregatedData.batting.Balls[ballType] += stats.balls || 0;
-        aggregatedData.batting.Fours[ballType] += stats.fours || 0;
-        aggregatedData.batting.Sixes[ballType] += stats.sixes || 0;
-        aggregatedData.batting["Half Century"][ballType] += stats.halfCentury || 0;
-        aggregatedData.batting.Century[ballType] += stats.century || 0;
-        aggregatedData.batting.Innings[ballType] += stats.innings || 1;
+    // if (!allPerformances || allPerformances.length === 0) {
+    //   throw CustomErrorHandler.notFound("Player Performances Not Found");
+    // }
 
-      });
-    }
-    if (performance.bowlingStatistic) {
-      Object.keys(performance.bowlingStatistic).forEach((ballType) => {
-        const stats = performance.bowlingStatistic[ballType] || {};
-        aggregatedData.bowling.Overs[ballType] += stats.Over || 0;
-        aggregatedData.bowling.Runs[ballType] += stats.runs || 0;
-        aggregatedData.bowling.Wickets[ballType] += stats.wickets || 0;
-        aggregatedData.bowling.Maidens[ballType] += stats.maidens || 0;
-        aggregatedData.bowling.Innings[ballType] += stats.innings || 1;
-        
-      });
-    }
-  });
-  
+    const aggregatedData = {
+      batting: {
+        Runs: { tennis: 0, leather: 0 },
+        Balls: { tennis: 0, leather: 0 },
+        Fours: { tennis: 0, leather: 0 },
+        Sixes: { tennis: 0, leather: 0 },
+        "Strike Rate": { tennis: 0, leather: 0 },
+        "Half Century": { tennis: 0, leather: 0 },
+        Century: { tennis: 0, leather: 0 },
+        Innings: { tennis: 0, leather: 0 },
+        Average: { tennis: 0, leather: 0 },
+      },
+      bowling: {
+        Overs: { tennis: 0, leather: 0 },
+        Runs: { tennis: 0, leather: 0 },
+        Wickets: { tennis: 0, leather: 0 },
+        Economy: { tennis: 0, leather: 0 },
+        Maidens: { tennis: 0, leather: 0 },
+        Innings: { tennis: 0, leather: 0 },
+        Average: { tennis: 0, leather: 0 },
 
-  Object.keys(aggregatedData.batting.Runs).forEach((ballType) => {
-    aggregatedData.batting["Strike Rate"][ballType] = parseFloat(
-      ((aggregatedData.batting.Runs[ballType] || 0) /
-        (aggregatedData.batting.Balls[ballType] || 1)) *
+      },
+    };
+
+    allPerformances.forEach((performance) => {
+      if (performance.battingStatistic) {
+        Object.keys(performance.battingStatistic).forEach((ballType) => {
+          const stats = performance.battingStatistic[ballType] || {};
+          aggregatedData.batting.Runs[ballType] += stats.runs || 0;
+          aggregatedData.batting.Balls[ballType] += stats.balls || 0;
+          aggregatedData.batting.Fours[ballType] += stats.fours || 0;
+          aggregatedData.batting.Sixes[ballType] += stats.sixes || 0;
+          aggregatedData.batting["Half Century"][ballType] += stats.halfCentury || 0;
+          aggregatedData.batting.Century[ballType] += stats.century || 0;
+          aggregatedData.batting.Innings[ballType] += stats.innings || 1;
+
+        });
+      }
+      if (performance.bowlingStatistic) {
+        Object.keys(performance.bowlingStatistic).forEach((ballType) => {
+          const stats = performance.bowlingStatistic[ballType] || {};
+          aggregatedData.bowling.Overs[ballType] += stats.Over || 0;
+          aggregatedData.bowling.Runs[ballType] += stats.runs || 0;
+          aggregatedData.bowling.Wickets[ballType] += stats.wickets || 0;
+          aggregatedData.bowling.Maidens[ballType] += stats.maidens || 0;
+          aggregatedData.bowling.Innings[ballType] += stats.innings || 1;
+
+        });
+      }
+    });
+
+
+    Object.keys(aggregatedData.batting.Runs).forEach((ballType) => {
+      aggregatedData.batting["Strike Rate"][ballType] = parseFloat(
+        ((aggregatedData.batting.Runs[ballType] || 0) /
+          (aggregatedData.batting.Balls[ballType] || 1)) *
         100
-    ).toFixed(2);
-  
-    aggregatedData.batting.Average[ballType] = parseFloat(
-      aggregatedData.batting.Runs[ballType] /
-      (aggregatedData.batting.Innings[ballType] || 1)
-    ).toFixed(2);
-  });
-  
-  Object.keys(aggregatedData.bowling.Runs).forEach((ballType) => {
-    const totalOvers = aggregatedData.bowling.Overs[ballType];
-    aggregatedData.bowling.Economy[ballType] =
-      totalOvers > 0
-        ? parseFloat(aggregatedData.bowling.Runs[ballType] / totalOvers).toFixed(2)
-        : "0.00";
-  
-    aggregatedData.bowling.Average[ballType] = parseFloat(
-      aggregatedData.bowling.Runs[ballType] /
-      (aggregatedData.bowling.Wickets[ballType] || 1)
-    ).toFixed(2);
-  });
-  
+      ).toFixed(2);
 
-  // Find the best performance against a team
-  const bestBattingPerformance = matches.reduce((best, match) => {
-    const team1Players = match.scoreBoard.team1.players;
-    const team2Players = match.scoreBoard.team2.players;
+      aggregatedData.batting.Average[ballType] = parseFloat(
+        aggregatedData.batting.Runs[ballType] /
+        (aggregatedData.batting.Innings[ballType] || 1)
+      ).toFixed(2);
+    });
 
-    const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
-    if (userPerformance && userPerformance.batting.runs > (best.runs || 0)) {
-      return {
-        runs: userPerformance.batting.runs,
-        team: match.team1._id === userPerformance.team ? match.team2.teamName : match.team1.teamName,
-        _id:match._id,
-      };
-    }
-    return best;
-  }, {});
+    Object.keys(aggregatedData.bowling.Runs).forEach((ballType) => {
+      const totalOvers = aggregatedData.bowling.Overs[ballType];
+      aggregatedData.bowling.Economy[ballType] =
+        totalOvers > 0
+          ? parseFloat(aggregatedData.bowling.Runs[ballType] / totalOvers).toFixed(2)
+          : "0.00";
 
-  const bestBowlingPerformance = matches.reduce((best, match) => {
-    const team1Players = match.scoreBoard.team1.players;
-    const team2Players = match.scoreBoard.team2.players;
-  
-    const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
-    if (userPerformance && userPerformance.bowling.wickets > (best.wickets || 0)) {
-      return {
-        performance: `${userPerformance.bowling.runs}-${userPerformance.bowling.wickets}`,
-        team: match.team1._id === userPerformance.team ? match.team2.teamName : match.team1.teamName,
-        _id:match._id,
-      };
-    }
-    return best;
-  }, {});
+      aggregatedData.bowling.Average[ballType] = parseFloat(
+        aggregatedData.bowling.Runs[ballType] /
+        (aggregatedData.bowling.Wickets[ballType] || 1)
+      ).toFixed(2);
+    });
 
-  
-  const currentYear = new Date().getFullYear();
-  const overallMatchRuns = matches.reduce((total, match) => {
-    const team1Players = match.scoreBoard.team1.players;
-    const team2Players = match.scoreBoard.team2.players;
 
-    const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
-    if (userPerformance && new Date(match.matchDate).getFullYear() === currentYear) {
-      return total + (userPerformance.batting.runs || 0);
-    }
-    return total;
-  }, 0);
+    // Find the best performance against a team
+    const bestBattingPerformance = matches.reduce((best, match) => {
+      const team1Players = match.scoreBoard.team1.players;
+      const team2Players = match.scoreBoard.team2.players;
 
-  // Calculate overall bowling performance for the year
-  const overallBowlingPerformance = matches.reduce((total, match) => {
-    const team1Players = match.scoreBoard.team1.players;
-    const team2Players = match.scoreBoard.team2.players;
+      const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
+      if (userPerformance && userPerformance.batting.runs > (best.runs || 0)) {
+        return {
+          runs: userPerformance.batting.runs,
+          team: match.team1._id === userPerformance.team ? match.team2.teamName : match.team1.teamName,
+          _id: match._id,
+        };
+      }
+      return best;
+    }, {});
 
-    const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
-    if (userPerformance && new Date(match.matchDate).getFullYear() === currentYear) {
-      return total + (userPerformance.bowling.wickets || 0);
-    }
-    return total;
-  }, 0);
+    const bestBowlingPerformance = matches.reduce((best, match) => {
+      const team1Players = match.scoreBoard.team1.players;
+      const team2Players = match.scoreBoard.team2.players;
 
-  return { aggregatedData, matches, bestBattingPerformance, bestBowlingPerformance, latestMatchesData,userPlayedTournament};
+      const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
+      if (userPerformance && userPerformance.bowling.wickets > (best.wickets || 0)) {
+        return {
+          performance: `${userPerformance.bowling.runs}-${userPerformance.bowling.wickets}`,
+          team: match.team1._id === userPerformance.team ? match.team2.teamName : match.team1.teamName,
+          _id: match._id,
+        };
+      }
+      return best;
+    }, {});
 
-},
 
-   
+    const currentYear = new Date().getFullYear();
+    const overallMatchRuns = matches.reduce((total, match) => {
+      const team1Players = match.scoreBoard.team1.players;
+      const team2Players = match.scoreBoard.team2.players;
+
+      const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
+      if (userPerformance && new Date(match.matchDate).getFullYear() === currentYear) {
+        return total + (userPerformance.batting.runs || 0);
+      }
+      return total;
+    }, 0);
+
+    // Calculate overall bowling performance for the year
+    const overallBowlingPerformance = matches.reduce((total, match) => {
+      const team1Players = match.scoreBoard.team1.players;
+      const team2Players = match.scoreBoard.team2.players;
+
+      const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
+      if (userPerformance && new Date(match.matchDate).getFullYear() === currentYear) {
+        return total + (userPerformance.bowling.wickets || 0);
+      }
+      return total;
+    }, 0);
+
+    return { aggregatedData, matches, bestBattingPerformance, bestBowlingPerformance, latestMatchesData, userPlayedTournament };
+
+  },
+
+
   async createChallengeMatch(data) {
     const { team1ID, team2ID, dateTime } = data;
 
@@ -2470,24 +2469,24 @@ async myPerformance(userId, category) {
     const MatchExist = await ChallengeTeam.findById(MatchId);
 
     if (!MatchExist) {
-        throw CustomErrorHandler.notFound("This Match is Not Found.");
+      throw CustomErrorHandler.notFound("This Match is Not Found.");
     }
 
     const user = await User.findById(userInfo.userId);
     const phoneNumberToFind = user.phoneNumber;
 
     const team1 = MatchExist.scoreBoard.team1.players.filter((player) => {
-        return player.phoneNumber === phoneNumberToFind;
+      return player.phoneNumber === phoneNumberToFind;
     });
 
     const team2 = MatchExist.scoreBoard.team2.players.filter((player) => {
-        return player.phoneNumber === phoneNumberToFind;
+      return player.phoneNumber === phoneNumberToFind;
     });
 
     const teamData = team1.length > 0 ? team1[0] : team2.length > 0 ? team2[0] : null;
 
     if (!teamData) {
-        throw CustomErrorHandler.notFound("Player not found in either team.");
+      throw CustomErrorHandler.notFound("Player not found in either team.");
     }
 
     // Calculate batting achievements
@@ -2496,88 +2495,88 @@ async myPerformance(userId, category) {
     const runs = teamData?.batting?.runs || 0;
 
     if (runs >= 50 && runs < 100) {
-        isHalfCentury = 1;
+      isHalfCentury = 1;
     } else if (runs >= 100 && runs < 200) {
-        isCentury = 1;
+      isCentury = 1;
     } else if (runs >= 200 && runs < 300) {
-        isCentury = 2;
+      isCentury = 2;
     } else if (runs >= 300 && runs < 400) {
-        isCentury = 3;
+      isCentury = 3;
     } else if (runs >= 400 && runs < 500) {
-        isCentury = 4;
+      isCentury = 4;
     }
 
     // Calculate batting stats
     const battingStats = {
-        Runs: {
-            tennis: teamData?.batting?.runs || 0,
-            leather: 0,
-        },
-        Balls: {
-            tennis: teamData?.batting?.balls || 0,
-            leather: 0,
-        },
-        Fours: {
-            tennis: teamData?.batting?.fours || 0,
-            leather: 0,
-        },
-        Sixes: {
-            tennis: teamData?.batting?.sixes || 0,
-            leather: 0,
-        },
-        "Strike Rate": {
-            tennis: teamData?.batting?.balls ? 
-                ((teamData.batting.runs / teamData.batting.balls) * 100).toFixed(2) : 0,
-            leather: 0,
-        },
-        Average: {
-            tennis: teamData?.batting?.runs || 0,
-            leather: 0,
-        },
-        "Half Century": {
-            tennis: isHalfCentury,
-            leather: 0,
-        },
-        Century: {
-            tennis: isCentury,
-            leather: 0,
-        },
+      Runs: {
+        tennis: teamData?.batting?.runs || 0,
+        leather: 0,
+      },
+      Balls: {
+        tennis: teamData?.batting?.balls || 0,
+        leather: 0,
+      },
+      Fours: {
+        tennis: teamData?.batting?.fours || 0,
+        leather: 0,
+      },
+      Sixes: {
+        tennis: teamData?.batting?.sixes || 0,
+        leather: 0,
+      },
+      "Strike Rate": {
+        tennis: teamData?.batting?.balls ?
+          ((teamData.batting.runs / teamData.batting.balls) * 100).toFixed(2) : 0,
+        leather: 0,
+      },
+      Average: {
+        tennis: teamData?.batting?.runs || 0,
+        leather: 0,
+      },
+      "Half Century": {
+        tennis: isHalfCentury,
+        leather: 0,
+      },
+      Century: {
+        tennis: isCentury,
+        leather: 0,
+      },
     };
 
     // Calculate bowling stats
     const bowlingStats = {
-        Overs: {
-            tennis: Object.keys(teamData?.bowling?.overs || {}).length - 1 || 0,
-            leather: 0,
-        },
-        Runs: {
-            tennis: teamData?.bowling?.runs || 0,
-            leather: 0,
-        },
-        Wickets: {
-            tennis: teamData?.bowling?.wickets || 0,
-            leather: 0,
-        },
-        Economy: {
-            tennis: (() => {
-                const overs = Object.keys(teamData?.bowling?.overs || {}).length - 1;
-                const runs = teamData?.bowling?.runs || 0;
-                return overs > 0 ? (runs / overs).toFixed(2) : 0;
-            })(),
-            leather: 0,
-        },
-        Maidens: {
-            tennis: teamData?.bowling?.maidens || 0,
-            leather: 0,
-        },
+      Overs: {
+        tennis: Object.keys(teamData?.bowling?.overs || {}).length - 1 || 0,
+        leather: 0,
+      },
+      Runs: {
+        tennis: teamData?.bowling?.runs || 0,
+        leather: 0,
+      },
+      Wickets: {
+        tennis: teamData?.bowling?.wickets || 0,
+        leather: 0,
+      },
+      Economy: {
+        tennis: (() => {
+          const overs = Object.keys(teamData?.bowling?.overs || {}).length - 1;
+          const runs = teamData?.bowling?.runs || 0;
+          return overs > 0 ? (runs / overs).toFixed(2) : 0;
+        })(),
+        leather: 0,
+      },
+      Maidens: {
+        tennis: teamData?.bowling?.maidens || 0,
+        leather: 0,
+      },
     };
     console.log("battingStats", battingStats);
     console.log("BowlingStats", bowlingStats);
     return {
-        batting: battingStats,
-        bowling: bowlingStats
+      batting: battingStats,
+      bowling: bowlingStats
     };
-},
+  },
 
   async deleteMatch(matchId) {
     const match = await Match.findById(matchId);
@@ -2592,6 +2591,6 @@ async myPerformance(userId, category) {
 
 };
 
-        
+
 
 export default matchServices;

@@ -166,7 +166,7 @@ const ProviderController = {
                 .optional(),
             upiId: Joi.string()
                 .pattern(/^[\w.-]+@[\w]+$/)
-                .required(),
+                .optional(),
             venuefacilities: Joi.object({
                 isWaterAvailable: Joi.boolean(),
                 isParkingAvailable: Joi.boolean(),
@@ -179,10 +179,10 @@ const ProviderController = {
                 isWalkingTrackAvailable: Joi.boolean(),
             }),
             venue_rules: Joi.array().items(Joi.string()).optional(),
-            venueImages: Joi.array().items(Joi.string()).min(1).max(5).required(),
-            selectLocation: Joi.string().required(),
-            longitude: Joi.number().required(),
-            latitude: Joi.number().required(),
+            venueImages: Joi.array().items(Joi.string()).min(1).max(5).optional(),
+            selectLocation: Joi.string().optional(),
+            longitude: Joi.number().optional(),
+            latitude: Joi.number().optional(),
         })
 
         const { error } = venueValidation.validate(req.body)
@@ -394,6 +394,7 @@ const ProviderController = {
         }
     },
     //#endregion
+
     //#region Search venue
     async searchVenues(req, res, next) {
         const validation = Joi.object({
@@ -414,6 +415,7 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest(error))
         }
         try {
+            console.log(req.body);
             const result = await ProviderServices.searchVenues(req.body)
             return res.json({
                 success: true,
@@ -425,6 +427,7 @@ const ProviderController = {
         }
     },
     //#endregion 
+
     //#region searchIndividual
     async searchIndividuals(req, res, next) {
         const validation = Joi.object({
@@ -463,16 +466,17 @@ const ProviderController = {
             return next(CustomErrorHandler.badRequest("Failed to search individuals:", error))
         }
     },
-    //#endregion 
+    //#endregion
+
     //#region combinedSearch
     async combinedSearch(req, res, next) {
         const validation = Joi.object({
             query: Joi.string().min(1).required(),
-            latitude: Joi.number().min(-90).max(90).required(), // Made required
-            longitude: Joi.number().min(-180).max(180).required(), // Made required
+            latitude: Joi.number().min(-90).max(90).required(),
+            longitude: Joi.number().min(-180).max(180).required(),
             page: Joi.number().min(1).default(1),
             limit: Joi.number().min(1).max(50).default(10),
-            radius: Joi.number().min(1).max(15).default(15), // Max 15km
+            radius: Joi.number().min(1).max(50).default(15),
         })
 
         const { error } = validation.validate(req.body)
@@ -760,7 +764,7 @@ const ProviderController = {
 
         const { error } = validation.validate({ ...req.params, ...req.query })
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to validate request:${error}`))
         }
 
         try {
@@ -842,6 +846,7 @@ const ProviderController = {
     },
 
     async getTimeSlotAnalytics(req, res, next) {
+        console.log(req.params);
         const validation = Joi.object({
             venueId: Joi.string().required(),
             sport: Joi.string().optional(),
@@ -850,7 +855,7 @@ const ProviderController = {
 
         const { error } = validation.validate({ ...req.params, ...req.query })
         if (error) {
-            return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to validate request:${error}`))
         }
 
         try {
@@ -866,7 +871,7 @@ const ProviderController = {
                 data: result,
             })
         } catch (error) {
-            return next(CustomErrorHandler.badRequest("Failed to get time slot analytics:", error))
+            return next(CustomErrorHandler.badRequest(`Failed to get time slot analytics:${error}`))
         }
     },
 

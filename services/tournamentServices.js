@@ -110,38 +110,38 @@ const tournamentServices = {
   async setSponsor(data) {
     const userInfo = global.user;
     const { tournamentId, PackageId } = data;
-  
+
     try {
       const tour = await Tournament.findById(tournamentId);
-  
+
       if (!tour) {
         throw new Error("Tournament not found");
       }
-  
+
       tour.isSponsorshippurchase = true;
       tour.SponsorshipPackageId = PackageId;
       const purchasedPackage = await Package.findById(PackageId);
       const user = await User.findById(userInfo.userId);
-     
-  
+
+
       await tour.save();
 
       setTimeout(async () => {
         console.log("Sending email after 10 seconds...");
-        const order = await OrderHistory.findOne({ tournamentId: tournamentId }); 
+        const order = await OrderHistory.findOne({ tournamentId: tournamentId });
         console.log(order);
         const mail = await tournamentServices.sendMail("sponsorship", user, tour, order.orderId, purchasedPackage);
         console.log(mail);
       }, 10000);
-  
+
       return tour;
     } catch (err) {
       console.log("Error updating sponsorship:", err);
       throw err;
     }
-  },  
+  },
 
-  async sendMail(userFor = "", user, tour,orderId, purchasedPackage) {
+  async sendMail(userFor = "", user, tour, orderId, purchasedPackage) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
@@ -154,11 +154,11 @@ const tournamentServices = {
     });
 
     let mailOptions;
-     mailOptions = {
-        from: "gullyteam33@gmail.com",
-        to: user.email,
-        subject: "Sponsorship Invoice",
-        html: `<!DOCTYPE html>
+    mailOptions = {
+      from: "gullyteam33@gmail.com",
+      to: user.email,
+      subject: "Sponsorship Invoice",
+      html: `<!DOCTYPE html>
         <html lang="en">
         <head>
         <meta charset="UTF-8">
@@ -379,7 +379,7 @@ const tournamentServices = {
 </body>
 </html>
 `,
-      };
+    };
 
     transporter.sendMail(mailOptions, function (error, info) {
       if (error) {

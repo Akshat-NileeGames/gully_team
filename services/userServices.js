@@ -172,7 +172,6 @@ const userServices = {
   async deleteProfile(userId) {
     //Find the user by ID
     const userInfo = global.user;
-    console.log("UserId:", userInfo.userId);
     let user = await User.findById(userInfo.userId);
     if (!user) {
       // Handle the case where the user is not found

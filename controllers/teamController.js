@@ -466,50 +466,54 @@ const teamController = {
 
 
 
-  async editTeam(req, res, next) {
-    let TeamId = req.params.Id;
-    //validation
-    const teamValidation = Joi.object({
-      teamLogo: Joi.string().optional(),
-      teamName: Joi.string().required(),
+async editTeam(req, res, next) {
+  let TeamId = req.params.Id;
+
+  // Validation
+  const teamValidation = Joi.object({
+    teamLogo: Joi.string().optional(),
+    teamName: Joi.string().required(),
+  });
+
+  const { error } = teamValidation.validate(req.body);
+
+  if (error) {
+    return next(error);
+  }
+
+  const team = await Team.findById(TeamId);
+
+  if (!team) {
+    return next(CustomErrorHandler.notFound("Team not found"));
+  }
+
+  if (team.teamName !== req.body.teamName) {
+    const TeamNameExist = await Team.exists({
+      teamName: req.body.teamName,
     });
 
-    const { error } = teamValidation.validate(req.body);
-
-    if (error) {
-      return next(error);
+    if (TeamNameExist) {
+      return next(
+        CustomErrorHandler.alreadyExist(
+          "This Tournament Name is already taken. Please try another name."
+        )
+      );
     }
+  }
 
-    const team = await Team.findById(TeamId);
+  try {
+    const result = await teamServices.editTeam(req.body, TeamId);
 
-    if (team.teamName !== req.body.teamName) {
-      //verify phone Number aready exist
-      const TeamNameExist = await Team.exists({
-        teamName: req.body.teamName,
-      });
-
-      if (TeamNameExist) {
-        return next(
-          CustomErrorHandler.alreadyExist(
-            "This Tournament Name already Taken. Please try another Name"
-          )
-        );
-      }
-    }
-    try {
-      const result = await teamServices.editTeam(req.body, TeamId);
-
-      return res.status(200).json({
-        success: true,
-        message: "profile edited successfully",
-        data: result,
-      });
-    } catch (err) {
-      console.log("Error in editTeam");
-      return next(err);
-    }
-  },
-
+    return res.status(200).json({
+      success: true,
+      message: "Profile edited successfully",
+      data: result,
+    });
+  } catch (err) {
+    console.log("Error in editTeam", err);
+    return next(err);
+  }
+},
   // async addPlayer(req, res, next) {
   //   let TeamId = req.params.Id;
   //   //validation

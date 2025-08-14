@@ -51,6 +51,6 @@ app.use("/api/provider", providerRoute);
 app.use("/api/shop", shopRoutes);
 // app.use("/api/performances",matchRoute ) // edited
 app.use('/api/banner', bannerRoute);
-app.use("/admin", adminRoute);
+app.use("/api/admin", adminRoute);
 app.use(errorHandler);
 app.listen(APP_PORT, () => console.log("listening on port", APP_PORT));

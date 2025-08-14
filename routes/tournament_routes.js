@@ -25,6 +25,7 @@ router.get("/getCurrentTournament", validateUser, tournamentController.getCurren
 router.get("/getAllTournament", validateUser, tournamentController.getAllTournament);
 
 //get Current tournament for  organizer
+//Todo:Not used Api
 router.get("/getTournamentByUser", validateUser, tournamentController.getTournamentByUser);
 
 //request functionality.
@@ -53,6 +54,7 @@ router.get("/sponsor/getSponsor/:tournamentId", SponsorController.getSponsor);
 
 router.post("/sponsor/editSponsor/:sponsorId", validateUser, SponsorController.editSponsor);
 router.delete("/sponsor/deleteSponsor/:sponsorId", validateUser, SponsorController.deleteSponsor);
+//It is used to show sponsors to user 
 router.get("/sponsor/getSponsorsForTournament/:tournamentId", validateUser, SponsorController.getSponsorsForTournament);
 
 export default router;

@@ -22,8 +22,8 @@ const adminService = {
     }
 
     // Clear existing tokens
-    admin.token = [];
-    admin.expiredTokens = [];
+    // admin.token = [];
+    // admin.expiredTokens = [];
 
     // Generate a new token
     const token = jwtService.sign(
@@ -35,8 +35,8 @@ const adminService = {
       { expiresIn: "1y" }
     );
 
-    const expiresIn = new Date(Date.now() + 3600000); // Token expiration in milliseconds (1 hour)
-    admin.token.push({ token, expiresAt: expiresIn });
+    // const expiresIn = new Date(Date.now() + 3600000); // Token expiration in milliseconds (1 hour)
+    // admin.token.push({ token, expiresAt: expiresIn });
     await admin.save();
 
     const adminData = {
@@ -44,10 +44,10 @@ const adminService = {
       email: admin.email,
       id: admin._id,
       role: admin.role,
-      token: token,
-      expiresIn: expiresIn,
+      token: token
+      // expiresIn: expiresIn,
     };
-
+    
     return adminData;
   },
 

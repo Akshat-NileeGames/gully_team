@@ -19,6 +19,7 @@ router.post("/addCategory", validateUser, ShopController.addCategory);
 router.post("/UpdateshopSubscriptionStatus", validateUser, ShopController.updateSubscriptionStatus);
 router.post("/additionalPackage", validateUser, ShopController.addExtensionPackage);
 router.get("/search/:querytext", validateUser, ShopController.search);
+//Todo:Not Used
 router.post("/setProductDiscount", validateUser, ShopController.setProductDiscount);
 router.post("/getSimilarProduct", validateUser, ShopController.getSimilarProduct);
 router.post("/getSimilarShopProduct", validateUser, ShopController.getSimilarShopProduct);
@@ -31,7 +32,8 @@ router.get("/getShopAnalytics/:shopId", validateUser, ShopController.getShopAnal
 router.get("/getProductViewAnalytics/:shopId/:timeRange", validateUser, ShopController.getProductViewAnalytics);
 router.get("/getVisitorAnalytics/:shopId/:timeRange", validateUser, ShopController.getVisitorAnalytics);
 
-//If needed we can implement it in future
+//If needed we can implement it in future 
+//TODO:not used
 router.get("/getDailyVisitors/:shopId/:days", validateUser, ShopController.getDailyVisitors);
 
 router.post("/recordProductView", validateUser, ShopController.recordProductView);

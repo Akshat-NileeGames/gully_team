@@ -11,10 +11,6 @@ router.get("/getUsersAllTeam", validateUser, teamController.getUserTeams);
 router.get('/player-teams', validateUser, teamController.getPlayerTeams);
 
 // router.get("/getPlayerTeams", validateUser, teamController.getPlayerTeams);
-
-
-
-
 router.post("/createTeam", validateUser, teamController.createTeam);
 
 router.post("/editTeam/:Id", validateUser, teamController.editTeam);
@@ -31,12 +27,13 @@ router.post("/addLookingFor", validateUser, teamController.addLookingFor);
 
 router.post("/getAllLooking", validateUser, teamController.getAllLooking);
 
-router.post("/deleteLookingFor/:lookingId",validateUser,teamController.deleteLookingFor);
+router.delete("/deleteLookingFor/:lookingId",validateUser,teamController.deleteLookingFor);
 
 router.get("/getLookingByID", validateUser, teamController.getLookingByID);
 
 router.post("/getAllNearByTeam", validateUser, teamController.getAllNearByTeam);
 
+//Todo:need 
 router.get("/pointsTable/:tournamentId", validateUser, teamController.getPointsTable);
 
 

@@ -9,6 +9,8 @@ const validateAdmin = async function (req, res, next) {
     return next(CustomErrorHandler.unAuthorized());
   }
   const token = authHeader.split(" ")[1];
+console.log("Incoming token:", token);
+
 
   try {
     const { phoneNumber, email } = await jwtService.verify(token);

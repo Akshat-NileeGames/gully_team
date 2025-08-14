@@ -718,7 +718,6 @@ const ShopService = {
 
             for (const shop of shops) {
                 let shouldUpdate = false;
-                console.log('packageEndDate:', shop.packageEndDate, 'Type:', typeof shop.packageEndDate);
                 if (!shop.packageEndDate) {
                     if (shop.isSubscriptionPurchased !== false) {
                         shop.isSubscriptionPurchased = false;

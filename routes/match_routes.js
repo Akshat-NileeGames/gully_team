@@ -14,7 +14,7 @@ router.delete("/deleteMatch/:matchId", validateUser, matchController.deleteMatch
 
 router.get("/getOpponentTournamentId",validateUser, matchController.getOpponentTournamentId);
 
-router.get("/getOpponent/:tournamentId/:teamId",validateUser,matchController.getOpponent,);
+router.get("/getOpponent/:tournamentId/:teamId",validateUser,matchController.getOpponent);
 
 router.get("/getOpponentOld/:tournamentId/:teamId", validateUser,  matchController.getOpponentOld,);
 

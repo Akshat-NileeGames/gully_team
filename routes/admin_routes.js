@@ -3,10 +3,10 @@ import express from "express";
 const router = express.Router();
 
 import { adminController } from "../controllers/index.js"
-import { adminOtherController} from "../controllers/index.js"
-import { adminUserController} from "../controllers/index.js"
-import { adminTournamentController} from "../controllers/index.js"
-import { ShopController} from "../controllers/index.js"
+import { adminOtherController } from "../controllers/index.js"
+import { adminUserController } from "../controllers/index.js"
+import { adminTournamentController } from "../controllers/index.js"
+import { ShopController } from "../controllers/index.js"
 
 import validateAdmin from "../middlewares/validateAdmin.js"
 import accessUser from "../middlewares/accessUser.js"
@@ -30,57 +30,57 @@ router.get("/getContent/:contentName", adminOtherController.getContent);
 router.post("/updateContent/:contentName", adminOtherController.updateContent);
 
 // ***********************    Admin HelpDesk Route     ****************************
-router.post("/getHelpdesk/:page/:pageSize",validateAdmin,accessUser("Helpdesk"), adminOtherController.getHelpdesk);
+router.post("/getHelpdesk/:page/:pageSize", validateAdmin, accessUser("Helpdesk"), adminOtherController.getHelpdesk);
 
-router.get("/getHelpdeskById/:helpdeskId",validateAdmin,accessUser("Helpdesk"), adminOtherController.getHelpdeskById);
+router.get("/getHelpdeskById/:helpdeskId", validateAdmin, accessUser("Helpdesk"), adminOtherController.getHelpdeskById);
 
-router.post("/updateHelpdesk/:helpdeskId",validateAdmin,accessUser("Helpdesk"), adminOtherController.updateHelpdesk);
+router.post("/updateHelpdesk/:helpdeskId", validateAdmin, accessUser("Helpdesk"), adminOtherController.updateHelpdesk);
 
 
 // ***********************    Admin Notification  Route     ****************************
 
-router.post("/getNotification/:page/:pageSize",validateAdmin,accessUser("Notification"), adminOtherController.getNotification);
+router.post("/getNotification/:page/:pageSize", validateAdmin, accessUser("Notification"), adminOtherController.getNotification);
 
-router.get("/getNotificationById/:Id",validateAdmin,accessUser("Notification"), adminOtherController.getNotificationById);
+router.get("/getNotificationById/:Id", validateAdmin, accessUser("Notification"), adminOtherController.getNotificationById);
 
-router.post("/addNotification",validateAdmin,accessUser("Notification"), adminOtherController.addNotification);
+router.post("/addNotification", validateAdmin, accessUser("Notification"), adminOtherController.addNotification);
 
-router.post("/updateNotification/:NotificationId",validateAdmin,accessUser("Notification"), adminOtherController.updateNotification);
+router.post("/updateNotification/:NotificationId", validateAdmin, accessUser("Notification"), adminOtherController.updateNotification);
 
 // ***********************    Admin User Route     ****************************
 
 
 // User Releated Functionality
 
-router.post("/getAllUser/:page/:pageSize",validateAdmin,accessUser("Users"), adminUserController.getAllUser);
+router.post("/getAllUser/:page/:pageSize", validateAdmin, accessUser("Users"), adminUserController.getAllUser);
 
-router.post("/editUserStatus/:userId",validateAdmin,accessUser("Users"), adminUserController.editUserStatus);
+router.post("/editUserStatus/:userId", validateAdmin, accessUser("Users"), adminUserController.editUserStatus);
 
 // ***********************    SubAdmin  Route     ****************************
 
 // SubAdmin Releated Functionality
 
-router.post("/addSubAdmin",validateAdmin,accessUser("subAdmin"), adminUserController.addSubAdmin);
+router.post("/addSubAdmin", validateAdmin, accessUser("subAdmin"), adminUserController.addSubAdmin);
 
-router.post("/editSubAdmin/:userId",validateAdmin,accessUser("subAdmin"), adminUserController.editSubAdmin);
+router.post("/editSubAdmin/:userId", validateAdmin, accessUser("subAdmin"), adminUserController.editSubAdmin);
 
-router.post("/getSubAdminById/:userId",validateAdmin,accessUser("subAdmin"), adminUserController.getSubAdminById);
+router.post("/getSubAdminById/:userId", validateAdmin, accessUser("subAdmin"), adminUserController.getSubAdminById);
 
-router.post("/getAllSubAdmin/:page/:pageSize",validateAdmin,accessUser("subAdmin"), adminUserController.getAllSubAdmin);
+router.post("/getAllSubAdmin/:page/:pageSize", validateAdmin, accessUser("subAdmin"), adminUserController.getAllSubAdmin);
 
 // ***********************    Tournament  Route     ****************************
 
-router.get("/getAllTournament/:page/:pageSize",validateAdmin,accessUser("Organizer"), adminTournamentController.getAllTournament);
+router.get("/getAllTournament/:page/:pageSize", validateAdmin, accessUser("Organizer"), adminTournamentController.getAllTournament);
 
-router.get("/getAllTournamentLive/:page/:pageSize",validateAdmin,accessUser("Organizer"), adminTournamentController.getAllTournamentLive);
+router.get("/getAllTournamentLive/:page/:pageSize", validateAdmin, accessUser("Organizer"), adminTournamentController.getAllTournamentLive);
 
-router.get("/getTournamentById/:Id",validateAdmin,accessUser("Organizer"), adminTournamentController.getTournamentById);
+router.get("/getTournamentById/:Id", validateAdmin, accessUser("Organizer"), adminTournamentController.getTournamentById);
 
-router.post("/updateTournamentById/:Id",validateAdmin,accessUser("Organizer"), adminTournamentController.updateTournamentById);
+router.post("/updateTournamentById/:Id", validateAdmin, accessUser("Organizer"), adminTournamentController.updateTournamentById);
 
-router.get("/getMatchesByTournamentId/:TournamentId",validateAdmin,accessUser("Organizer"), adminTournamentController.getMatchesByTournamentId);
+router.get("/getMatchesByTournamentId/:TournamentId", validateAdmin, accessUser("Organizer"), adminTournamentController.getMatchesByTournamentId);
 
-router.get("/getMatchesHistoryByTournamentId/:TournamentId",validateAdmin,accessUser("Organizer"), adminTournamentController.getMatchesHistoryByTournamentId);
+router.get("/getMatchesHistoryByTournamentId/:TournamentId", validateAdmin, accessUser("Organizer"), adminTournamentController.getMatchesHistoryByTournamentId);
 
 // ***********************    Banner   Route     ****************************
 
