@@ -14,12 +14,12 @@ import { DateTime } from "luxon";
 import firebaseNotification from "../helpers/firebaseNotification.js";
 
 const matchServices = {
+
   async createMatch(data) {
-    const userInfo = global.user;
 
     const { tournamentId, team1ID, team2ID, round, matchNo, dateTime, winningTeamId, matchAuthority } = data;
+    const userInfo = global.user;
     console.log(`The Team 1 id:${team1ID} and Team 2 id:${team2ID}`)
-    // Check if the tournament exists
     const TournamentExist = await Tournament.findOne({ _id: tournamentId });
 
     if (!TournamentExist) {
@@ -664,6 +664,7 @@ const matchServices = {
   //     throw CustomErrorHandler.internal("Failed to update ScoreBoard");
   //   }
   // },
+
   async updateScoreBoard(data, MatchId) {
     try {
       // Validate input data
@@ -671,7 +672,6 @@ const matchServices = {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
 
-      // Atomic update
       const matchData = await Match.findByIdAndUpdate(
         MatchId,
         {
@@ -690,7 +690,6 @@ const matchServices = {
       return matchData;
     } catch (err) {
       console.error("Error updating scoreBoard:", err);
-      throw CustomErrorHandler.internal("Failed to update ScoreBoard");
     }
   },
 

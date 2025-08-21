@@ -10,13 +10,12 @@ const playerSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: false, //newly added by SS
-
+    required: false,
   },
-  matchId: { // DG
+  matchId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Match",
-    required: false, // DG updated this field to false as createTeam api threw "matchId required" error
+    required: false,
   },
   name: {
     type: String,
@@ -27,7 +26,18 @@ const playerSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["Batsman", "Bowler", "All Rounder", "Wicket Keeper", "Captain"],
+    enum: [
+      "Batsman",
+      "Bowler",
+      "All Rounder",
+      "Wicket Keeper",
+      "Captain",
+      "Goal Keeper",
+      "Defender",
+      "Midfielder",
+      "Attacker",
+      "Striker"
+    ],
     required: true,
   },
   battingStatistic: {
@@ -38,6 +48,33 @@ const playerSchema = new mongoose.Schema({
     tennis: {},
     leather: {},
   },
+
+  footballStatistic: {
+    matchesPlayed: { type: Number, default: 0 },
+    minutesPlayed: { type: Number, default: 0 },
+
+    goals: { type: Number, default: 0 },
+    assists: { type: Number, default: 0 }, //last pass
+    shotsOnTarget: { type: Number, default: 0 },
+
+    tackles: { type: Number, default: 0 },
+    interceptions: { type: Number, default: 0 },
+    clearances: { type: Number, default: 0 },
+    blocks: { type: Number, default: 0 },
+
+    saves: { type: Number, default: 0 },
+    goalsConceded: { type: Number, default: 0 },
+    //Need to add it into team
+    cleanSheets: { type: Number, default: 0 },
+    penaltySaves: { type: Number, default: 0 },
+
+    yellowCards: { type: Number, default: 0 },
+    redCards: { type: Number, default: 0 },
+    foulsCommitted: { type: Number, default: 0 },
+    foulsSuffered: { type: Number, default: 0 },
+    //Need to talk in future
+    offsides: { type: Number, default: 0 },
+  }
 });
 
 export default mongoose.model("Player", playerSchema);

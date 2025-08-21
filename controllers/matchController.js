@@ -49,10 +49,10 @@ const matchController = {
       tournamentId: Joi.string().min(3).max(30).required(),
       team1ID: Joi.string().min(3).max(30).required(),
       team2ID: Joi.string().min(3).max(30).required(),
-      round: Joi.string().required(), // Adjust min and max values based on your requirements
-      matchNo: Joi.number().integer().required(), // Adjust min and max values based on your requirements
+      round: Joi.string().required(),
+      matchNo: Joi.number().integer().required(),
       dateTime: Joi.date().iso().required(),
-      winningTeamId: Joi.string().optional(), //DG
+      winningTeamId: Joi.string().optional(),
       matchAuthority: Joi.string().required(),
     });
 
@@ -90,8 +90,8 @@ const matchController = {
           team2: result.team2,
           round: result.Round,
           matchNo: result.matchNo,
-          dateTime: result.dateTime, // UTC format
-          winningTeamId: Joi.string().optional(), //DG
+          dateTime: result.dateTime,
+          winningTeamId: Joi.string().optional(),
 
         },
       });
@@ -105,7 +105,6 @@ const matchController = {
     let tournamentId = req.params.tournamentId;
     try {
       const result = await matchServices.getMatch(tournamentId);
-
       return res.status(200).json({
         success: true,
         message: "Match Retrieved Successfully",

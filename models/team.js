@@ -21,14 +21,23 @@ const teamSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
   },
+  teamfor: {
+    type: String,
+    required: true,
+    enum: ['cricket', 'football']
+  },
+  // teamMatchsData: {
+  //   tennis: {
 
+  //   },
+  //   leather: {
+
+  //   },
+  // },
   teamMatchsData: {
-    tennis: {
-
-    },
-    leather: {
-
-    },
+    type: Map,
+    of: mongoose.Schema.Types.Mixed, // You can define a more specific schema here if needed
+    default: {},
   },
   numberOfWins: {
     type: Number,

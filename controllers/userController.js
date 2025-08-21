@@ -48,7 +48,7 @@ const userController = {
       const result = await userServices.createProfile(req.body);
 
       const otpExpiryMinutes = 10; // Adjust this to the desired expiry time in minutes
-      const otpResonce = await userServices.sendOTP(
+      const otpResonce = await userServices.senwwdOTP(
         result._id,
         req.body.phoneNumber,
         otpExpiryMinutes

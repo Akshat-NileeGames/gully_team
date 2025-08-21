@@ -1,3 +1,25 @@
+
+/**
+ * @file providerServices.js
+ * @description Service layer for venue and individual service provider operations.
+ * Contains all business logic for venue management, booking system, analytics,
+ * and individual service provider functionality.
+/**
+ * ProviderServices Object
+ *
+ * Contains all service methods for provider-related operations.
+ * Each method handles specific business logic and database interactions.
+ *
+ * Service Method Categories:
+ * 1. Venue Management (create, edit, retrieve)
+ * 2. Booking System (slots, reservations, payments)
+ * 3. Search & Discovery (location-based, filtered)
+ * 4. Analytics & Reporting (dashboard, revenue, sports)
+ * 5. Individual Services (coaches, trainers)
+ * 6. Subscription Management
+ */
+
+
 import { Venue, Booking, User, Package, Individual, Category, Payout } from "../models/index.js"
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"
@@ -9,26 +31,53 @@ import axios from "axios";
 function isBase64Image(str) {
   return /^data:image\/[a-zA-Z]+;base64,/.test(str);
 }
-const ProviderServices = {
 
+
+const ProviderServices = {
+  /**
+   * @function createVenue
+   * @description Handles the registration of a venue on the platform. 
+   * Requires complete venue data, including venue name, sports, and pricing.
+   * Validates user, package, and sports pricing. Uploads images and saves the venue to the database.
+   * 
+   * @param {Object} data - Data required to create a venue (name, sports, pricing, images, etc.)
+   * @returns {Promise<Object>} The registered venue data
+   * @throws {Error} Throws various errors related to missing user, package, pricing, or image upload failure.
+   */
   async createVenue(data) {
     try {
-      const userInfo = global.user
-      const packageInfo = await Package.findById(data.packageRef)
-      if (!packageInfo) throw CustomErrorHandler.notFound("Package not found")
+      /**
+       * Retrieve user information from a global context (token-based authentication).
+       * Throws an error if the user is not found.
+       */
+      const userInfo = global.user;
+      const user = await User.findById(userInfo.userId);
+      if (!user) throw CustomErrorHandler.notFound("User not found");
 
-      const user = await User.findById(userInfo.userId)
-      if (!user) throw CustomErrorHandler.notFound("User not found")
+      /**
+       * Fetch the selected package using the provided package ID.
+       * Throws an error if the package does not exist.
+       */
+      const packageInfo = await Package.findById(data.packageRef);
+      if (!packageInfo) throw CustomErrorHandler.notFound("Package not found");
+
+      /**
+       * Validate that sport pricing is provided for all selected sports.
+       * If any selected sport is missing pricing, throws an error listing the missing sports.
+       */
       if (data.sportPricing && data.sportPricing.length > 0) {
-        const providedSports = data.sportPricing.map((sp) => sp.sport)
-        const missingPricing = data.venue_sports.filter((sport) => !providedSports.includes(sport))
+        const providedSports = data.sportPricing.map((sp) => sp.sport);
+        const missingPricing = data.venue_sports.filter((sport) => !providedSports.includes(sport));
         if (missingPricing.length > 0) {
-          throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`)
+          throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`);
         }
       }
 
+      /**
+       * Upload venue images to AWS and collect their URLs.
+       * Throws an error if any image upload fails or if no images are provided.
+       */
       let venueImages = [];
-
       if (Array.isArray(data.venueImages) && data.venueImages.length > 0) {
         for (const image of data.venueImages) {
           try {
@@ -40,14 +89,18 @@ const ProviderServices = {
 
             venueImages.push(uploadedUrl);
           } catch (uploadError) {
-            console.error(`Image upload failed:${uploadError}`);
+            console.error(`Image upload failed: ${uploadError}`);
             throw CustomErrorHandler.serverError("Failed to upload one or more venue images.");
           }
         }
       } else {
-        throw CustomErrorHandler.badRequest("Shop images are required.");
+        throw CustomErrorHandler.badRequest("Venue images are required.");
       }
 
+      /**
+       * Create a new venue document with the provided and processed data.
+       * Includes location coordinates, user reference, package info, and subscription expiry.
+       */
       const venue = new Venue({
         venue_name: data.venue_name,
         venue_description: data.venue_description,
@@ -64,7 +117,10 @@ const ProviderServices = {
         locationHistory: {
           point: {
             type: "Point",
-            coordinates: [Number.parseFloat(data.longitude), Number.parseFloat(data.latitude)],
+            coordinates: [
+              Number.parseFloat(data.longitude),
+              Number.parseFloat(data.latitude)
+            ],
             selectLocation: data.selectLocation,
           },
         },
@@ -72,30 +128,54 @@ const ProviderServices = {
         packageRef: data.packageRef,
         isSubscriptionPurchased: true,
         subscriptionExpiry: DateTime.now().plus({ month: packageInfo.duration }).toJSDate(),
-      })
+      });
 
-      await venue.save()
-      return venue
+      await venue.save();
+      return venue;
     } catch (error) {
-      console.log("Failed to create Venue:", error)
-      throw error
+      console.log("Failed to create venue:", error);
+      throw error;
     }
   },
 
+  /**
+ * @function editVenue
+ * @description Updates an existing venue with new data. 
+ * Validates user, ensures all selected sports have pricing, processes images, 
+ * and updates the venue document. Also syncs venue contact info with Razorpay.
+ * 
+ * @param {Object} data - Data to update the venue (must include venueId)
+ * @param {string} data.venueId - ID of the venue to update
+ * @returns {Promise<Object>} The updated venue data (excluding timestamps and version)
+ * @throws {Error} Throws errors if user not found, pricing is incomplete, or image upload fails
+ */
   async editVenue(data) {
     try {
       const { venueId, ...fieldsToUpdate } = data;
-      const userInfo = global.user
+      const userInfo = global.user;
 
-      const user = await User.findById(userInfo.userId)
-      if (!user) throw CustomErrorHandler.notFound("User not found")
+      /**
+       * Validate that the user exists.
+       */
+      const user = await User.findById(userInfo.userId);
+      if (!user) throw CustomErrorHandler.notFound("User not found");
+
+      /**
+       * If sports and pricing are being updated, ensure that pricing is provided for each selected sport.
+       */
       if (fieldsToUpdate.sportPricing && fieldsToUpdate.sportPricing.length > 0) {
-        const providedSports = fieldsToUpdate.sportPricing.map((sp) => sp.sport)
-        const missingPricing = fieldsToUpdate.venue_sports.filter((sport) => !providedSports.includes(sport))
+        const providedSports = fieldsToUpdate.sportPricing.map((sp) => sp.sport);
+        const missingPricing = fieldsToUpdate.venue_sports.filter(
+          (sport) => !providedSports.includes(sport)
+        );
         if (missingPricing.length > 0) {
-          throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`)
+          throw CustomErrorHandler.badRequest(`Pricing missing for sports: ${missingPricing.join(", ")}`);
         }
       }
+
+      /**
+       * If venueImages are provided, upload new base64 images and keep already uploaded URLs.
+       */
       if (fieldsToUpdate.venueImages && Array.isArray(fieldsToUpdate.venueImages)) {
         const processedImages = [];
         for (let img of fieldsToUpdate.venueImages) {
@@ -108,33 +188,69 @@ const ProviderServices = {
         }
         fieldsToUpdate.venueImages = processedImages;
       }
+
+      /**
+       * Update the venue document with new data.
+       */
       await Venue.findByIdAndUpdate(
         venueId,
         { $set: fieldsToUpdate },
         { new: true }
       );
 
+      /**
+       * Retrieve the updated venue without timestamps and internal fields.
+       */
       const venue = await Venue.findById(venueId, {
         updatedAt: 0,
         createdAt: 0,
         __v: 0,
       });
-      await this.editContactOnRazorPay(venue, venue.razorpaycontactId)
-      return venue
+
+      /**
+       * Update the contact info on Razorpay if necessary.
+       */
+      await this.editContactOnRazorPay(venue, venue.razorpaycontactId);
+
+      return venue;
     } catch (error) {
-      console.log("Failed to create Venue:", error)
-      throw error
+      console.log("Failed to edit venue:", error);
+      throw error;
     }
   },
+
+  /**
+ * @function updateVenueSubscriptionStatus
+ * @description Updates the subscription status of a venue by marking it as purchased 
+ * and setting the subscription expiry based on the selected package's duration.
+ * 
+ * @param {Object} data - Data required to update the subscription status
+ * @param {string} data.venueId - ID of the venue to update
+ * @param {string} data.packageId - ID of the selected subscription package
+ * 
+ * @returns {Promise<Object>} The updated venue document with the new subscription status
+ * @throws {Error} Throws an error if the venue or package is not found, or if update fails
+ */
   async updateVenueSubscriptionStatus(data) {
     try {
       const { venueId, packageId } = data;
+
+      /**
+       * Find the venue by ID and throw an error if not found.
+       */
       const venue = await Venue.findById(venueId);
-      if (!venue) CustomErrorHandler.notFound("Venue Not Found");
-      const packageInfo = await Package.findById(packageId)
-      if (!packageInfo) throw CustomErrorHandler.notFound("Package not found")
+      if (!venue) throw CustomErrorHandler.notFound("Venue not found");
 
+      /**
+       * Retrieve the package info using the provided package ID.
+       * Throws an error if the package is not found.
+       */
+      const packageInfo = await Package.findById(packageId);
+      if (!packageInfo) throw CustomErrorHandler.notFound("Package not found");
 
+      /**
+       * Update the venue's subscription fields.
+       */
       const updatedVenue = await Venue.findByIdAndUpdate(
         venueId,
         {
@@ -145,22 +261,46 @@ const ProviderServices = {
         { new: true }
       );
 
-
       return updatedVenue;
-
     } catch (error) {
       throw new Error(`Failed to update venue subscription: ${error.message}`);
     }
   },
 
+  /**
+  * @function updateIndividualSubscriptionStatus
+  * @description Updates the subscription status of an individual user.
+  * Sets `hasActiveSubscription` to true and updates the subscription expiry date
+  * based on the duration of the selected package.
+  * 
+  * @param {Object} data - Required data to update the individual's subscription
+  * @param {string} data.individualId - ID of the individual to update
+  * @param {string} data.packageId - ID of the package to apply
+  * 
+  * @returns {Promise<Object>} The updated individual document with subscription details
+  * @throws {Error} Throws an error if the individual or package is not found, or update fails
+  */
   async updateIndividualSubscriptionStatus(data) {
     try {
       const { individualId, packageId } = data;
-      const individual = await Individual.findById(individualId);
-      if (!individual) return CustomErrorHandler.notFound("Individual Not Found");
-      const packageInfo = await Package.findById(packageId)
-      if (!packageInfo) return CustomErrorHandler.notFound("Package not found")
 
+      /**
+       * Find the individual by ID.
+       * Throws an error if not found.
+       */
+      const individual = await Individual.findById(individualId);
+      if (!individual) throw CustomErrorHandler.notFound("Individual not found");
+
+      /**
+       * Fetch package info by ID.
+       * Throws an error if the package is not found.
+       */
+      const packageInfo = await Package.findById(packageId);
+      if (!packageInfo) throw CustomErrorHandler.notFound("Package not found");
+
+      /**
+       * Update the individual's subscription fields.
+       */
       const updatedIndividual = await Individual.findByIdAndUpdate(
         individualId,
         {
@@ -170,11 +310,25 @@ const ProviderServices = {
         },
         { new: true }
       );
+
       return updatedIndividual;
     } catch (error) {
-      throw new Error(`Failed to update Individual subscription: ${error.message}`);
+      throw new Error(`Failed to update individual subscription: ${error.message}`);
     }
   },
+
+
+  /**
+   * @function editContactOnRazorPay
+   * @description Updates the contact information of a venue on Razorpay using the given contact ID.
+   * Updates local venue document with the new Razorpay contact ID.
+   * 
+   * @param {Object} venue - Venue object containing updated contact info
+   * @param {string} contactId - Existing Razorpay contact ID to update
+   * 
+   * @returns {Promise<boolean>} Returns true if update is successful
+   * @throws {Error} Throws error if Razorpay update fails
+   */
   async editContactOnRazorPay(venue, contactId) {
     try {
       const endpoint = `https://api.razorpay.com/v1/contacts/${contactId}`;
@@ -200,7 +354,9 @@ const ProviderServices = {
       };
 
       const contactResponse = await axios.patch(endpoint, payload, { auth, headers });
+
       console.log("Razorpay contact updated:", contactResponse.data.id);
+
       await Venue.findByIdAndUpdate(venue._id, {
         razorpaycontactId: contactResponse.data.id
       });
@@ -212,97 +368,82 @@ const ProviderServices = {
     }
   },
 
-  async getAllGrounds(filters) {
-    try {
-      const { page, limit, search, sportsCategory, location, radius } = filters
-      const query = { isActive: true, isSubscriptionPurchased: true }
 
-      if (search) {
-        query.$or = [
-          { venue_name: { $regex: search, $options: "i" } },
-          { venue_description: { $regex: search, $options: "i" } },
-          { venue_address: { $regex: search, $options: "i" } },
-        ]
-      }
 
-      if (sportsCategory) {
-        query.venue_sports = { $in: [sportsCategory] }
-      }
-
-      if (location && location.coordinates) {
-        query["locationHistory.point"] = {
-          $near: {
-            $geometry: {
-              type: "Point",
-              coordinates: location.coordinates,
-            },
-            $maxDistance: radius * 1000,
-          },
-        }
-      }
-
-      const skip = (page - 1) * limit
-      const venues = await Venue.find(query)
-        .populate("userId", "name email")
-        .populate("packageRef")
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 })
-
-      const total = await Venue.countDocuments(query)
-
-      return {
-        venues,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-        },
-      }
-    } catch (error) {
-      console.log("Failed to get all grounds:", error)
-      throw error
-    }
-  },
-
+  /**
+ * @function getVenueById
+ * @description Retrieves a venue by its ID and populates its package reference.
+ * Validates ID format before querying.
+ * 
+ * @param {Object} data
+ * @param {string} data.id - Venue ID to fetch
+ * 
+ * @returns {Promise<Object>} The venue document
+ * @throws {Error} Throws error if ID is invalid or venue not found
+ */
   async getVenueById(data) {
     try {
       if (!data.id.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
+        throw CustomErrorHandler.badRequest("Invalid Venue ID format");
       }
 
-      const venue = await Venue.findById(data.id).populate("packageRef")
+      const venue = await Venue.findById(data.id).populate("packageRef");
 
       if (!venue) {
-        throw CustomErrorHandler.notFound("Venue not found")
+        throw CustomErrorHandler.notFound("Venue not found");
       }
 
-      return venue
+      return venue;
     } catch (error) {
-      console.log("Failed to get Venue by id:", error)
-      throw error
+      console.log("Failed to get venue by ID:", error);
+      throw error;
     }
   },
 
+
+  /**
+ * @function getUserGroundRegisteredGround
+ * @description Retrieves all venues (grounds) registered by the currently authenticated user.
+ * 
+ * @returns {Promise<Array>} Array of venue documents owned by the user
+ * @throws {Error} Throws error if user is not found or query fails
+ */
   async getUserGroundRegisteredGround() {
     try {
-      const userInfo = global.user
-      const user = await User.findById(userInfo.userId)
-      if (!user) throw CustomErrorHandler.notFound("User not found")
+      const userInfo = global.user;
 
+      const user = await User.findById(userInfo.userId);
+      if (!user) throw CustomErrorHandler.notFound("User not found");
       const grounds = await Venue.find({
-        userId: userInfo.userId,
-      }).populate("packageRef")
+        userId: userInfo.userId
+      }).populate("packageRef");
 
-      return grounds
+      return grounds;
     } catch (error) {
-      console.log("Failed to get user grounds:", error)
-      throw error
+      console.log("Failed to get user grounds:", error);
+      throw error;
     }
   },
 
 
+  /**
+   * @function lockSlots
+   * @description Locks a slot temporarily for a venue to prevent double booking during the checkout process.
+   * Supports locking new slots or appending to an existing in-progress booking session.
+   * 
+   * @param {Object} params
+   * @param {string} params.venueId - ID of the venue
+   * @param {string} params.sport - Sport being booked
+   * @param {string} params.date - Booking date (YYYY-MM-DD)
+   * @param {string} params.startTime - Start time of the slot (e.g. "10:00")
+   * @param {string} params.endTime - End time of the slot (e.g. "11:00")
+   * @param {string} params.playableArea - Playable area or court name
+   * @param {string} params.userId - ID of the user making the booking
+   * @param {string} params.sessionId - Temporary session ID to track locked slots
+   * 
+   * @returns {Promise<Object>} Slot lock result, including booking ID and lock status
+   * @throws {Error} Throws error if validation fails or locking process encounters an issue
+   */
   async lockSlots({ venueId, sport, date, startTime, endTime, playableArea, userId, sessionId }) {
     try {
       const venue = await Venue.findById(venueId)
@@ -449,7 +590,24 @@ const ProviderServices = {
       throw error
     }
   },
-
+  /**
+     * @function releaseLockedSlots
+     * @description Releases a previously locked slot from a booking session. 
+     * If no more slots remain after removal, the entire booking document is deleted.
+     * 
+     * @param {Object} params
+     * @param {string} params.venueId - Venue ID
+     * @param {string} params.sport - Sport type
+     * @param {string} params.date - Booking date (YYYY-MM-DD)
+     * @param {string} params.userId - User ID who owns the lock
+     * @param {string} params.startTime - Start time of the slot
+     * @param {string} params.endTime - End time of the slot
+     * @param {string} params.playableArea - The area/court to release
+     * @param {string} params.sessionId - Booking session identifier
+     * 
+     * @returns {Promise<Object>} Result containing released count and message
+     * @throws {Error} Throws error if no matching booking or slot is found
+     */
   async releaseLockedSlots({ venueId, sport, date, userId, startTime, endTime, playableArea, sessionId }) {
     try {
 
@@ -686,207 +844,6 @@ const ProviderServices = {
     }
   },
 
-  // MARK: - Modified existing methods
-
-  async bookVenue(bookingData) {
-    try {
-      const {
-        venueId,
-        sport,
-        bookingPattern,
-        scheduledDates,
-        durationInHours,
-        totalamount,
-        paymentStatus,
-        bookingStatus,
-        userId,
-        paymentId,
-        razorpayPaymentId,
-        razorpaySignature,
-        isPaymentConfirm = false,
-      } = bookingData
-
-      const venue = await Venue.findById(venueId)
-      if (!venue) throw CustomErrorHandler.notFound("Venue not found")
-
-      if (!venue.venue_sports.includes(sport)) {
-        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
-      }
-
-      // For time-sensitive bookings, check if slots are locked by this user
-      if (isPaymentConfirm) {
-        // This is a confirmed payment, proceed with booking
-        for (const dateSlot of scheduledDates) {
-          const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
-          const dayTiming = venue.venue_timeslots[bookingDay]
-
-          if (!dayTiming || !dayTiming.isOpen) {
-            throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`)
-          }
-        }
-      } else {
-        // Regular booking flow - check availability
-        for (const dateSlot of scheduledDates) {
-          const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
-          const dayTiming = venue.venue_timeslots[bookingDay]
-
-          if (!dayTiming || !dayTiming.isOpen) {
-            throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`)
-          }
-
-          // Validate each time slot with playable area
-          for (const slot of dateSlot.timeSlots) {
-            const isAvailable = await this.checkSlotAvailabilityWithPlayableArea(venueId, sport, dateSlot.date, slot)
-
-            if (!isAvailable) {
-              throw CustomErrorHandler.badRequest(
-                `Slot ${slot.startTime} - ${slot.endTime} on playable area ${slot.playableArea} is unavailable on ${dateSlot.date}`,
-              )
-            }
-          }
-        }
-      }
-
-      const booking = new Booking({
-        venueId,
-        userId,
-        sport,
-        bookingPattern: bookingPattern || "single_slots",
-        scheduledDates,
-        durationInHours: durationInHours,
-        totalAmount: totalamount,
-        paymentStatus: paymentStatus || "pending",
-        bookingStatus: bookingStatus || "pending",
-        paymentId,
-        razorpayPaymentId,
-        razorpaySignature,
-        isPaymentConfirm,
-        isLocked: false,
-      })
-
-      await booking.save()
-      await Venue.findByIdAndUpdate(venueId, {
-        $inc: {
-          totalBookings: 1,
-          amountNeedToPay: totalamount,
-          totalAmount: totalamount,
-        },
-      })
-
-      return await booking.populate("venueId userId")
-    } catch (error) {
-      console.log("Failed to book venue:", error)
-      throw error
-    }
-  },
-
-  // async bookVenue(bookingData) {
-  //   try {
-  //     const {
-  //       venueId,
-  //       sport,
-  //       bookingPattern,
-  //       scheduledDates,
-  //       durationInHours,
-  //       totalamount,
-  //       paymentStatus,
-  //       bookingStatus,
-  //       isMultiDay = false,
-  //       multiDayStartDate,
-  //       multiDayEndDate,
-  //       isFullDay = false,
-  //     } = bookingData
-
-  //     const userInfo = global.user
-  //     const venue = await Venue.findById(venueId)
-  //     if (!venue) throw CustomErrorHandler.notFound("Venue not found")
-
-  //     if (!venue.venue_sports.includes(sport)) {
-  //       throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
-  //     }
-
-  //     // Enhanced validation for multi-day and full-day bookings
-  //     if (isMultiDay && (!multiDayStartDate || !multiDayEndDate)) {
-  //       throw CustomErrorHandler.badRequest("Multi-day bookings require start and end dates")
-  //     }
-
-  //     // Calculate total days for multi-day bookings
-  //     let totalDays = 1
-  //     if (isMultiDay) {
-  //       const startDate = new Date(multiDayStartDate)
-  //       const endDate = new Date(multiDayEndDate)
-  //       totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
-  //     }
-
-  //     // Validate availability for all dates
-  //     for (const dateSlot of scheduledDates) {
-  //       const bookingDay = DateTime.fromJSDate(new Date(dateSlot.date)).toFormat("cccc")
-  //       const dayTiming = venue.venue_timeslots[bookingDay]
-
-  //       if (!dayTiming || !dayTiming.isOpen) {
-  //         throw CustomErrorHandler.badRequest(`Venue is closed on ${bookingDay}`)
-  //       }
-
-  //       // For full-day bookings, check entire day availability
-  //       if (dateSlot.isFullDay || isFullDay) {
-  //         const isFullDayAvailable = await this.checkFullDayAvailability(venueId, sport, dateSlot.date)
-  //         if (!isFullDayAvailable) {
-  //           throw CustomErrorHandler.badRequest(`Full day booking not available on ${dateSlot.date}`)
-  //         }
-  //       } else {
-  //         // Check individual time slots
-  //         for (const slot of dateSlot.timeSlots || []) {
-  //           const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, dateSlot.date, slot)
-  //           if (!isAvailable) {
-  //             throw CustomErrorHandler.badRequest(
-  //               `Slot ${slot.startTime} - ${slot.endTime} is unavailable on ${dateSlot.date}`,
-  //             )
-  //           }
-  //         }
-  //       }
-  //     }
-
-  //     // Calculate pricing with multi-day discounts
-  //     const pricingBreakdown = this.calculateMultiDayPricing(venue, sport, totalDays, totalamount, isFullDay)
-
-  //     const booking = new Booking({
-  //       venueId,
-  //       sport,
-  //       bookingPattern: bookingPattern || "single_slots",
-  //       scheduledDates: scheduledDates.map((dateSlot) => ({
-  //         ...dateSlot,
-  //         isFullDay: dateSlot.isFullDay || isFullDay,
-  //       })),
-  //       isMultiDay,
-  //       multiDayStartDate: isMultiDay ? new Date(multiDayStartDate) : undefined,
-  //       multiDayEndDate: isMultiDay ? new Date(multiDayEndDate) : undefined,
-  //       totalDays,
-  //       durationInHours,
-  //       totalAmount: pricingBreakdown.finalAmount,
-  //       dailyRate: pricingBreakdown.dailyRate,
-  //       pricingBreakdown,
-  //       paymentStatus: paymentStatus || "pending",
-  //       bookingStatus: bookingStatus || "pending",
-  //       userId: userInfo.userId,
-  //     })
-
-  //     await booking.save()
-
-  //     // Update venue statistics
-  //     await Venue.findByIdAndUpdate(venueId, {
-  //       $inc: {
-  //         totalBookings: 1,
-  //         amountNeedToPay: pricingBreakdown.finalAmount,
-  //         totalAmount: pricingBreakdown.finalAmount,
-  //       },
-  //     })
-
-  //     return await booking.populate("venueId userId")
-  //   } catch (error) {
-  //     console.log("Failed to book venue:", error)
-  //     throw error
-  //   }
-  // },
   levenshteinDistance(str1, str2) {
     const matrix = []
     const len1 = str1.length
@@ -1132,440 +1089,7 @@ const ProviderServices = {
     return false
   },
 
-  async searchVenues(filters) {
-    try {
-      const { query, latitude, longitude, page, radius, sport, venueType, priceRange } = filters
-      const MAX_DISTANCE_METERS = Math.min(radius * 1000, 15000) // Max 15km
-      const limit = 10;
-      const userLocation = {
-        type: "Point",
-        coordinates: [longitude, latitude],
-      }
 
-      // Build aggregation pipeline
-      const pipeline = [
-        // Geospatial search first for performance
-        {
-          $geoNear: {
-            near: userLocation,
-            distanceField: "distance",
-            spherical: true,
-            maxDistance: MAX_DISTANCE_METERS,
-            query: {
-              isActive: true,
-              isSubscriptionPurchased: true,
-            },
-          },
-        },
-        // Add calculated fields
-        {
-          $addFields: {
-            distanceInKm: { $divide: ["$distance", 1000] },
-            searchableText: {
-              $concat: [
-                "$venue_name",
-                " ",
-                "$venue_description",
-                " ",
-                "$venue_address",
-                " ",
-                {
-                  $reduce: {
-                    input: "$venue_sports",
-                    initialValue: "",
-                    in: { $concat: ["$$value", " ", "$$this"] },
-                  },
-                },
-              ],
-            },
-          },
-        },
-        // Apply filters
-        {
-          $match: {
-            $and: [
-              // Text search using regex for better performance
-              {
-                $or: [
-                  { venue_name: { $regex: query, $options: "i" } },
-                  { venue_description: { $regex: query, $options: "i" } },
-                  { venue_address: { $regex: query, $options: "i" } },
-                  { venue_sports: { $in: [new RegExp(query, "i")] } },
-                ],
-              },
-              // Additional filters
-              ...(sport ? [{ venue_sports: { $in: [sport] } }] : []),
-              ...(venueType ? [{ venue_type: venueType }] : []),
-              ...(priceRange?.min !== undefined ? [{ perHourCharge: { $gte: priceRange.min } }] : []),
-              ...(priceRange?.max !== undefined ? [{ perHourCharge: { $lte: priceRange.max } }] : []),
-            ],
-          },
-        },
-        // Lookup package information
-        {
-          $lookup: {
-            from: "packages",
-            localField: "packageRef",
-            foreignField: "_id",
-            as: "packageRef",
-          },
-        },
-        {
-          $unwind: {
-            path: "$packageRef",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        // Lookup user information
-        // {
-        //   $lookup: {
-        //     from: "users",
-        //     localField: "userId",
-        //     foreignField: "_id",
-        //     as: "userId",
-        //     pipeline: [{ $project: { name: 1, email: 1 } }],
-        //   },
-        // },
-        // {
-        //   $unwind: {
-        //     path: "$userInfo",
-        //     preserveNullAndEmptyArrays: true,
-        //   },
-        // },
-        // Add search score
-        {
-          $addFields: {
-            searchScore: {
-              $add: [
-                // Text relevance score
-                {
-                  $cond: [{ $regexMatch: { input: "$venue_name", regex: query, options: "i" } }, 40, 0],
-                },
-                {
-                  $cond: [{ $regexMatch: { input: "$venue_description", regex: query, options: "i" } }, 20, 0],
-                },
-                // Distance score (closer = higher score)
-                { $subtract: [30, { $multiply: ["$distanceInKm", 2] }] },
-                // Booking popularity score
-                { $min: [20, { $multiply: ["$totalBookings", 0.1] }] },
-                // Active subscription bonus
-                { $cond: ["$isSubscriptionPurchased", 10, 0] },
-              ],
-            },
-          },
-        },
-        // Sort by search score and distance
-        {
-          $sort: {
-            searchScore: -1,
-            distanceInKm: 1,
-            totalBookings: -1,
-          },
-        },
-        // Pagination
-        { $skip: (page - 1) * limit },
-        { $limit: limit },
-        // Final projection
-        {
-          $project: {
-            venue_name: 1,
-            venue_description: 1,
-            venue_address: 1,
-            venue_contact: 1,
-            venue_type: 1,
-            venue_surfacetype: 1,
-            venue_sports: 1,
-            sportPricing: 1,
-            perHourCharge: 1,
-            upiId: 1,
-            venuefacilities: 1,
-            venue_rules: 1,
-            venueImages: 1,
-            venue_timeslots: 1,
-            locationHistory: 1,
-            totalBookings: 1,
-            isActive: 1,
-            isSubscriptionPurchased: 1,
-            subscriptionExpiry: 1,
-            packageRef: 1,
-            userId: 1,
-            // distance: 1,
-            // distanceInKm: 1,
-            // searchScore: 1,
-          },
-        },
-      ]
-
-      const venues = await Venue.aggregate(pipeline)
-
-      // Get total count for pagination
-      const countPipeline = [
-        {
-          $geoNear: {
-            near: userLocation,
-            distanceField: "distance",
-            spherical: true,
-            maxDistance: MAX_DISTANCE_METERS,
-            query: {
-              isActive: true,
-              isSubscriptionPurchased: true,
-            },
-          },
-        },
-        {
-          $match: {
-            $and: [
-              {
-                $or: [
-                  { venue_name: { $regex: query, $options: "i" } },
-                  { venue_description: { $regex: query, $options: "i" } },
-                  { venue_address: { $regex: query, $options: "i" } },
-                  { venue_sports: { $in: [new RegExp(query, "i")] } },
-                ],
-              },
-              ...(sport ? [{ venue_sports: { $in: [sport] } }] : []),
-              ...(venueType ? [{ venue_type: venueType }] : []),
-              ...(priceRange?.min !== undefined ? [{ perHourCharge: { $gte: priceRange.min } }] : []),
-              ...(priceRange?.max !== undefined ? [{ perHourCharge: { $lte: priceRange.max } }] : []),
-            ],
-          },
-        },
-        { $count: "total" },
-      ]
-
-      const countResult = await Venue.aggregate(countPipeline)
-      const total = countResult[0]?.total || 0
-
-      return {
-        venues,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-          hasMore: page < Math.ceil(total / limit),
-        },
-        searchQuery: query,
-        searchRadius: radius,
-        userLocation: { latitude, longitude },
-      }
-    } catch (error) {
-      console.log("Failed to search venues:", error)
-      throw error
-    }
-  },
-
-  async searchIndividuals(filters) {
-    try {
-      const { query, latitude, longitude, page, radius, sport, serviceType, experienceRange, ageGroup } = filters
-      const MAX_DISTANCE_METERS = Math.min(radius * 1000, 15000) // Max 15km
-      const limit = 10;
-      const userLocation = {
-        type: "Point",
-        coordinates: [longitude, latitude],
-      }
-
-      // Build aggregation pipeline
-      const pipeline = [
-        // Geospatial search first
-        {
-          $geoNear: {
-            near: userLocation,
-            distanceField: "distance",
-            spherical: true,
-            maxDistance: MAX_DISTANCE_METERS,
-            query: {
-              hasActiveSubscription: true,
-            },
-          },
-        },
-        // Add calculated fields
-        {
-          $addFields: {
-            distanceInKm: { $divide: ["$distance", 1000] },
-            searchableText: {
-              $concat: [
-                "$fullName",
-                " ",
-                "$bio",
-                " ",
-                {
-                  $reduce: {
-                    input: "$sportsCategories",
-                    initialValue: "",
-                    in: { $concat: ["$$value", " ", "$$this"] },
-                  },
-                },
-                " ",
-                {
-                  $reduce: {
-                    input: "$selectedServiceTypes",
-                    initialValue: "",
-                    in: { $concat: ["$$value", " ", "$$this"] },
-                  },
-                },
-              ],
-            },
-          },
-        },
-        // Apply filters
-        {
-          $match: {
-            $and: [
-              // Text search
-              {
-                $or: [
-                  { fullName: { $regex: query, $options: "i" } },
-                  { bio: { $regex: query, $options: "i" } },
-                  { sportsCategories: { $in: [new RegExp(query, "i")] } },
-                  { selectedServiceTypes: { $in: [new RegExp(query, "i")] } },
-                ],
-              },
-              // Additional filters
-              ...(sport ? [{ sportsCategories: { $in: [sport] } }] : []),
-              ...(serviceType === "one_on_one" ? [{ "serviceOptions.providesOneOnOne": true }] : []),
-              ...(serviceType === "team_service" ? [{ "serviceOptions.providesTeamService": true }] : []),
-              ...(serviceType === "online_service" ? [{ "serviceOptions.providesOnlineService": true }] : []),
-              ...(experienceRange?.min !== undefined ? [{ yearOfExperience: { $gte: experienceRange.min } }] : []),
-              ...(experienceRange?.max !== undefined ? [{ yearOfExperience: { $lte: experienceRange.max } }] : []),
-              ...(ageGroup ? [{ supportedAgeGroups: { $in: [ageGroup] } }] : []),
-            ],
-          },
-        },
-        // Lookup package information
-        {
-          $lookup: {
-            from: "packages",
-            localField: "packageRef",
-            foreignField: "_id",
-            as: "packageRef",
-          },
-        },
-        {
-          $unwind: {
-            path: "$packageRef",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        // Lookup user information
-        // {
-        //   $lookup: {
-        //     from: "users",
-        //     localField: "userId",
-        //     foreignField: "_id",
-        //     as: "userInfo",
-        //     pipeline: [{ $project: { name: 1, email: 1 } }],
-        //   },
-        // },
-        // {
-        //   $unwind: {
-        //     path: "$userInfo",
-        //     preserveNullAndEmptyArrays: true,
-        //   },
-        // },
-        // Add search score
-        {
-          $addFields: {
-            searchScore: {
-              $add: [
-                // Text relevance score
-                {
-                  $cond: [{ $regexMatch: { input: "$fullName", regex: query, options: "i" } }, 40, 0],
-                },
-                {
-                  $cond: [{ $regexMatch: { input: "$bio", regex: query, options: "i" } }, 20, 0],
-                },
-                // Distance score
-                { $subtract: [30, { $multiply: ["$distanceInKm", 2] }] },
-                // Experience score
-                { $min: [15, { $multiply: ["$yearOfExperience", 0.5] }] },
-                // Active subscription bonus
-                { $cond: ["$hasActiveSubscription", 10, 0] },
-                // Service variety bonus
-                {
-                  $add: [
-                    { $cond: ["$serviceOptions.providesOneOnOne", 3, 0] },
-                    { $cond: ["$serviceOptions.providesTeamService", 3, 0] },
-                    { $cond: ["$serviceOptions.providesOnlineService", 2, 0] },
-                  ],
-                },
-              ],
-            },
-          },
-        },
-        // Sort by search score and experience
-        {
-          $sort: {
-            searchScore: -1,
-            yearOfExperience: -1,
-            distanceInKm: 1,
-          },
-        },
-        // Pagination
-        { $skip: (page - 1) * limit },
-        { $limit: limit },
-      ]
-
-      const individuals = await Individual.aggregate(pipeline)
-
-      // Get total count
-      const countPipeline = [
-        {
-          $geoNear: {
-            near: userLocation,
-            distanceField: "distance",
-            spherical: true,
-            maxDistance: MAX_DISTANCE_METERS,
-            query: {
-              hasActiveSubscription: true,
-            },
-          },
-        },
-        {
-          $match: {
-            $and: [
-              {
-                $or: [
-                  { fullName: { $regex: query, $options: "i" } },
-                  { bio: { $regex: query, $options: "i" } },
-                  { sportsCategories: { $in: [new RegExp(query, "i")] } },
-                  { selectedServiceTypes: { $in: [new RegExp(query, "i")] } },
-                ],
-              },
-              ...(sport ? [{ sportsCategories: { $in: [sport] } }] : []),
-              ...(serviceType === "one_on_one" ? [{ "serviceOptions.providesOneOnOne": true }] : []),
-              ...(serviceType === "team_service" ? [{ "serviceOptions.providesTeamService": true }] : []),
-              ...(serviceType === "online_service" ? [{ "serviceOptions.providesOnlineService": true }] : []),
-              ...(experienceRange?.min !== undefined ? [{ yearOfExperience: { $gte: experienceRange.min } }] : []),
-              ...(experienceRange?.max !== undefined ? [{ yearOfExperience: { $lte: experienceRange.max } }] : []),
-              ...(ageGroup ? [{ supportedAgeGroups: { $in: [ageGroup] } }] : []),
-            ],
-          },
-        },
-        { $count: "total" },
-      ]
-
-      const countResult = await Individual.aggregate(countPipeline)
-      const total = countResult[0]?.total || 0
-
-      return {
-        individuals,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-          hasMore: page < Math.ceil(total / limit),
-        },
-        searchQuery: query,
-        searchRadius: radius,
-        userLocation: { latitude, longitude },
-      }
-    } catch (error) {
-      console.log("Failed to search individuals:", error)
-      throw error
-    }
-  },
   async getTodayBookings(data) {
     try {
       const { venueId, sport = "all" } = data;
@@ -1983,101 +1507,6 @@ const ProviderServices = {
     ]);
     return venue;
   },
-  // Add this new method to ProviderServices
-  async checkSlotConflicts({ venueId, sport, date, playableArea, selectedSlots }) {
-    try {
-      const venue = await Venue.findById(venueId)
-      if (!venue) {
-        throw CustomErrorHandler.notFound("Venue not found")
-      }
-
-      if (!venue.venue_sports.map((s) => s.toLowerCase()).includes(sport.toLowerCase())) {
-        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
-      }
-
-      // Parse the date in yyyy-MM-dd format
-      const queryDate = new Date(date + "T00:00:00.000Z")
-      const startOfDay = new Date(queryDate)
-      startOfDay.setUTCHours(0, 0, 0, 0)
-      const endOfDay = new Date(queryDate)
-      endOfDay.setUTCHours(23, 59, 59, 999)
-
-
-      // Find existing bookings for the specific date, sport, and playable area
-      const existingBookings = await Booking.find({
-        venueId: venueId,
-        sport: new RegExp(`^${sport}$`, "i"),
-        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
-        "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
-      }).lean()
-
-
-      const conflictingSlots = []
-      const availableSlots = []
-
-      // Check each selected slot for conflicts
-      for (const selectedSlot of selectedSlots) {
-        let hasConflict = false
-
-        // Normalize selected slot times for robust comparison
-        const normalizedSelectedStartTime = selectedSlot.startTime.trim().toUpperCase()
-        const normalizedSelectedEndTime = selectedSlot.endTime.trim().toUpperCase()
-
-        // Check against all existing bookings
-        for (const booking of existingBookings) {
-          for (const dateSlot of booking.scheduledDates) {
-            const bookingDate = new Date(dateSlot.date)
-
-            // Check if the booking date matches our query date
-            // This comparison correctly handles MongoDB's $date objects
-            if (bookingDate >= startOfDay && bookingDate <= endOfDay) {
-              for (const timeSlot of dateSlot.timeSlots) {
-                // Normalize booked slot times for robust comparison
-                const normalizedBookingStartTime = timeSlot.startTime.trim().toUpperCase()
-                const normalizedBookingEndTime = timeSlot.endTime.trim().toUpperCase()
-
-                // Check if playable area matches and time slots overlap
-                if (
-                  timeSlot.playableArea === selectedSlot.playableArea &&
-                  normalizedBookingStartTime === normalizedSelectedStartTime &&
-                  normalizedBookingEndTime === normalizedSelectedEndTime
-                ) {
-                  hasConflict = true
-                  conflictingSlots.push({
-                    startTime: selectedSlot.startTime,
-                    endTime: selectedSlot.endTime,
-                    playableArea: selectedSlot.playableArea,
-                    bookingId: booking._id,
-                    conflictReason: "Slot already booked",
-                  })
-                  break // Found conflict for this selectedSlot, move to next selectedSlot
-                }
-              }
-              if (hasConflict) break // Found conflict for this selectedSlot, move to next selectedSlot
-            }
-          }
-          if (hasConflict) break // Found conflict for this selectedSlot, move to next selectedSlot
-        }
-
-        if (!hasConflict) {
-          availableSlots.push(selectedSlot)
-        }
-      }
-
-      return {
-        hasConflicts: conflictingSlots.length > 0,
-        conflictingSlots,
-        availableSlots,
-        totalChecked: selectedSlots.length,
-        date,
-        playableArea,
-        sport,
-      }
-    } catch (error) {
-      console.log("Failed to check slot conflicts:", error)
-      throw error
-    }
-  },
   async getAvailableSlots({ venueId, sport, date, playableArea, userId }) {
     try {
       const venue = await Venue.findById(venueId)
@@ -2241,302 +1670,7 @@ const ProviderServices = {
     return !booking
   },
 
-  // async getBookedSlots(data) {
-  //   try {
-  //     const { venueId, sport, date, playableArea } = data;
 
-  //     const isGroundExist = await Venue.findById(venueId);
-  //     if (!isGroundExist) {
-  //       throw CustomErrorHandler.notFound("Venue Not Found");
-  //     }
-
-  //     const queryDate = new Date(date);
-  //     const startOfDay = new Date(queryDate);
-  //     startOfDay.setHours(0, 0, 0, 0);
-  //     const endOfDay = new Date(queryDate);
-  //     endOfDay.setHours(23, 59, 59, 999);
-
-  //     console.log(
-  //       `Getting booked slots for venue: ${venueId}, sport: ${sport}, date: ${date}, playableArea: ${playableArea}`
-  //     );
-
-  //     const bookings = await Booking.find({
-  //       venueId: venueId,
-  //       sport: new RegExp(`^${sport}$`, "i"),
-  //       bookingStatus: { $in: ["confirmed", "pending", "completed"] },
-  //       "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
-  //     }).lean();
-
-  //     console.log(`Found ${bookings.length} bookings for the date range`);
-
-  //     const conflictingTimeSlots = [];
-
-  //     bookings.forEach((booking) => {
-  //       if (booking.scheduledDates && booking.scheduledDates.length) {
-  //         booking.scheduledDates.forEach((dateEntry) => {
-  //           const entryDate = new Date(dateEntry.date);
-  //           if (
-  //             entryDate >= startOfDay &&
-  //             entryDate <= endOfDay &&
-  //             Array.isArray(dateEntry.timeSlots)
-  //           ) {
-  //             dateEntry.timeSlots.forEach((slot) => {
-  //               if (slot.playableArea === playableArea) {
-  //                 conflictingTimeSlots.push({
-  //                   startTime: slot.startTime,
-  //                   endTime: slot.endTime,
-  //                   playableArea: slot.playableArea,
-  //                 });
-  //               }
-  //             });
-  //           }
-  //         });
-  //       }
-  //     });
-
-  //     console.log(`Total conflicting time slots: ${conflictingTimeSlots.length}`);
-
-  //     return [
-  //       {
-  //         date: new Date(date).toISOString(),
-  //         endDate: null,
-  //         isFullDay: false,
-  //         timeSlots: conflictingTimeSlots,
-  //       },
-  //     ];
-  //   } catch (error) {
-  //     console.error("Failed to get booked slots:", error);
-  //     throw error;
-  //   }
-  // },
-
-  async getBookedSlots(data) {
-    try {
-      const { venueId, sport, date, playableArea } = data
-      const isGroundExist = await Venue.findById(venueId)
-      if (!isGroundExist) return CustomErrorHandler.notFound("Venue Not Found")
-
-      const queryDate = new Date(date)
-      const startOfDay = new Date(queryDate)
-      startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay = new Date(queryDate)
-      endOfDay.setHours(23, 59, 59, 999)
-
-
-      const bookings = await Booking.find({
-        venueId: venueId,
-        sport: new RegExp(`^${sport}$`, "i"),
-        bookingStatus: { $in: ["confirmed", "pending", "completed"] },
-        "scheduledDates.date": { $gte: startOfDay, $lte: endOfDay },
-      }).lean()
-
-      // console.log(`Found ${bookings.length} bookings for the date range`)
-
-      const bookedSlots = []
-
-      bookings.forEach((booking) => {
-        if (booking.scheduledDates && booking.scheduledDates.length) {
-          booking.scheduledDates.forEach((dateEntry) => {
-            const entryDate = new Date(dateEntry.date)
-            if (entryDate >= startOfDay && entryDate <= endOfDay && dateEntry.timeSlots && dateEntry.timeSlots.length) {
-              dateEntry.timeSlots.forEach((slot) => {
-                if (slot.playableArea === playableArea) {
-                  bookedSlots.push({
-                    startTime: slot.startTime,
-                    endTime: slot.endTime,
-                    playableArea: slot.playableArea,
-                    bookingId: booking._id,
-                    userId: booking.userId,
-                    status: booking.bookingStatus,
-                  })
-                  // console.log(`Added booked slot: ${slot.startTime}-${slot.endTime} for playable area ${playableArea}`)
-                } else {
-                  console.log(
-                    `Skipped slot ${slot.startTime}-${slot.endTime} for different playable area ${slot.playableArea}`,
-                  )
-                }
-              })
-            }
-          })
-        }
-      })
-
-      // console.log(`Total booked slots for playable area ${playableArea}: ${bookedSlots.length}`)
-
-      return bookedSlots;
-    } catch (error) {
-      console.log("Failed to get booked slots:", error)
-      throw error
-    }
-  },
-
-  //#region Previous to get SLots 
-  // async checkMultipleSlots(data) {
-  //   try {
-  //     const { venueId, sport, date, playableArea } = data;
-
-  //     // Validate venue
-  //     const venue = await Venue.findById(venueId);
-  //     if (!venue) {
-  //       throw CustomErrorHandler.notFound("Venue not found");
-  //     }
-
-  //     if (!venue.venue_sports.includes(sport)) {
-  //       throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
-  //     }
-
-  //     const conflictingDateSlots = [];
-
-  //     // Get all bookings for the venue and sport
-  //     const existingBookings = await Booking.find({
-  //       venueId: venueId,
-  //       sport: sport,
-  //       bookingStatus: { $in: ["confirmed", "pending"] },
-  //     });
-
-  //     for (const dateString of date) {
-  //       const conflictingTimeSlots = [];
-  //       const requestedDateStr = dateString.split('T')[0];
-  //       for (const booking of existingBookings) {
-  //         for (const scheduledDate of booking.scheduledDates) {
-  //           const bookingDateStr = scheduledDate.date.toISOString().split('T')[0];
-  //           if (bookingDateStr === requestedDateStr) {
-  //             for (const timeSlot of scheduledDate.timeSlots) {
-  //               if (timeSlot.playableArea === playableArea) {
-  //                 conflictingTimeSlots.push({
-  //                   startTime: timeSlot.startTime,
-  //                   endTime: timeSlot.endTime,
-  //                   playableArea: timeSlot.playableArea,
-  //                 });
-  //               }
-  //             }
-  //           }
-  //         }
-  //       }
-  //       if (conflictingTimeSlots.length > 0) {
-  //         conflictingDateSlots.push({
-  //           date: requestedDateStr,
-  //           endDate: null,
-  //           isFullDay: false,
-  //           timeSlots: conflictingTimeSlots,
-  //         });
-  //       }
-  //     }
-  //     return conflictingDateSlots;
-  //   } catch (error) {
-  //     console.error("Failed to get conflicting date slots:", error);
-  //     throw error;
-  //   }
-  // },
-
-  //#region new to get slots with avaialble slots
-  // async checkMultipleSlots(data) {
-  //   try {
-  //     const { venueId, sport, date, playableArea } = data;
-
-  //     // Validate venue
-  //     const venue = await Venue.findById(venueId);
-  //     if (!venue) {
-  //       throw CustomErrorHandler.notFound("Venue not found");
-  //     }
-
-  //     if (!venue.venue_sports.includes(sport)) {
-  //       throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`);
-  //     }
-
-  //     const conflictingDateSlots = [];
-  //     const availableSlotsByDate = [];
-
-  //     // Get all bookings for the venue and sport
-  //     const existingBookings = await Booking.find({
-  //       venueId: venueId,
-  //       sport: sport,
-  //       bookingStatus: { $in: ["confirmed", "pending"] },
-  //     });
-
-  //     for (const dateString of date) {
-  //       const requestedDate = DateTime.fromISO(dateString);
-  //       const requestedDateStr = requestedDate.toISODate(); // YYYY-MM-DD format
-  //       const dayName = requestedDate.toFormat("cccc");
-  //       const dayTiming = venue.venue_timeslots[dayName];
-
-  //       // Initialize time slots containers
-  //       const conflictingTimeSlots = [];
-  //       const bookedSlotsSet = new Set();
-
-  //       // Handle unavailable days (venue closed)
-  //       if (!dayTiming || !dayTiming.isOpen) {
-  //         availableSlotsByDate.push({
-  //           date: requestedDate.toISO(),
-  //           endDate: null,
-  //           isFullDay: false,
-  //           timeSlots: [],
-  //         });
-
-  //         continue; // Skip to next date
-  //       }
-
-  //       // Generate all possible slots
-  //       const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime);
-
-  //       for (const booking of existingBookings) {
-  //         for (const scheduledDate of booking.scheduledDates) {
-  //           const bookingDateStr = scheduledDate.date.toISOString().split('T')[0];
-
-  //           if (bookingDateStr === requestedDateStr) {
-  //             for (const timeSlot of scheduledDate.timeSlots) {
-  //               if (timeSlot.playableArea === playableArea) {
-  //                 const slotKey = `${timeSlot.startTime}-${timeSlot.endTime}`;
-  //                 bookedSlotsSet.add(slotKey);
-
-  //                 conflictingTimeSlots.push({
-  //                   startTime: timeSlot.startTime,
-  //                   endTime: timeSlot.endTime,
-  //                   playableArea: timeSlot.playableArea,
-  //                 });
-  //               }
-  //             }
-  //           }
-  //         }
-  //       }
-
-  //       // Filter available slots
-  //       const availableTimeSlots = allSlots
-  //         .filter((slot) => !bookedSlotsSet.has(`${slot.startTime}-${slot.endTime}`))
-  //         .map((slot) => ({
-  //           startTime: slot.startTime,
-  //           endTime: slot.endTime,
-  //           playableArea: playableArea,
-  //         }));
-
-  //       // Push conflicting slots if found
-  //       if (conflictingTimeSlots.length > 0) {
-  //         conflictingDateSlots.push({
-  //           date: requestedDateStr,
-  //           endDate: null,
-  //           isFullDay: false,
-  //           timeSlots: conflictingTimeSlots,
-  //         });
-  //       }
-
-  //       // Push available slots
-  //       availableSlotsByDate.push({
-  //         date: requestedDate.toISO(),
-  //         endDate: null,
-  //         isFullDay: false,
-  //         timeSlots: availableTimeSlots,
-  //       });
-  //     }
-
-  //     return {
-  //       conflictingDateSlots,
-  //       availableSlotsByDate,
-  //     };
-  //   } catch (error) {
-  //     console.error("Failed to get conflicting and available slots:", error);
-  //     throw error;
-  //   }
-  // },
 
   async checkMultipleSlots(data) {
     try {
@@ -2742,75 +1876,6 @@ const ProviderServices = {
       throw error
     }
   },
-  async checkMultipleDateAvailability(data) {
-    try {
-      const { venueId, sport, startDate, endDate, timeSlots } = data
-
-      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
-      }
-
-      const venue = await Venue.findById(venueId)
-      if (!venue) {
-        throw CustomErrorHandler.notFound("Venue not found")
-      }
-
-      if (!venue.venue_sports.includes(sport)) {
-        throw CustomErrorHandler.badRequest(`Venue does not support ${sport}`)
-      }
-
-      const availability = []
-      const currentDate = DateTime.fromJSDate(new Date(startDate))
-      const endDateTime = DateTime.fromJSDate(new Date(endDate))
-
-      let date = currentDate
-      while (date <= endDateTime) {
-        const dayName = date.toFormat("cccc")
-        const dayTiming = Venue.venue_timeslots[dayName]
-
-        if (!dayTiming || !dayTiming.isOpen) {
-          availability.push({
-            date: date.toJSDate(),
-            available: false,
-            reason: "Venue closed",
-          })
-        } else {
-          const dayAvailability = {
-            date: date.toJSDate(),
-            available: true,
-            slots: [],
-          }
-
-          for (const slot of timeSlots) {
-            const isAvailable = await this.checkGroundSlotAvailability(venueId, sport, date.toJSDate(), slot)
-            dayAvailability.slots.push({
-              ...slot,
-              available: isAvailable,
-            })
-
-            if (!isAvailable) {
-              dayAvailability.available = false
-            }
-          }
-
-          availability.push(dayAvailability)
-        }
-
-        date = date.plus({ days: 1 })
-      }
-
-      return {
-        availability,
-        sport,
-        totalDays: availability.length,
-        fullyAvailableDays: availability.filter((day) => day.available).length,
-      }
-    } catch (error) {
-      console.log("Failed to check multiple date availability:", error)
-      throw error
-    }
-  },
-
 
   async getDashboardAnalytics(venueId) {
     try {
@@ -3202,56 +2267,6 @@ const ProviderServices = {
     }
   },
 
-  async getAllIndividuals(filters) {
-    try {
-      const { page, limit, search, sportsCategory, location, radius } = filters
-      const query = { isActive: true, hasActiveSubscription: true }
-
-      if (search) {
-        query.$or = [{ fullName: { $regex: search, $options: "i" } }, { bio: { $regex: search, $options: "i" } }]
-      }
-
-      if (sportsCategory) {
-        query.sportsCategories = { $in: [sportsCategory] }
-      }
-
-      if (location && location.coordinates) {
-        query["location.coordinates"] = {
-          $near: {
-            $geometry: {
-              type: "Point",
-              coordinates: location.coordinates,
-            },
-            $maxDistance: radius * 1000,
-          },
-        }
-      }
-
-      const skip = (page - 1) * limit
-      const individuals = await Individual.find(query)
-        .populate("userId", "name email")
-        .populate("packageRef")
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 })
-
-      const total = await Individual.countDocuments(query)
-
-      return {
-        individuals,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-        },
-      }
-    } catch (error) {
-      console.log("Failed to get all individuals:", error)
-      throw error
-    }
-  },
-
   async getIndividualById(data) {
     try {
       if (!data.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -3284,168 +2299,6 @@ const ProviderServices = {
       return individuals
     } catch (error) {
       console.log("Failed to get user individuals:", error)
-      throw error
-    }
-  },
-
-
-  async bookIndividual(bookingData, userId) {
-    try {
-      const { individualId, serviceType, bookingDate, timeSlot, duration, paymentMethod, specialRequests, teamSize } =
-        bookingData
-
-      if (!individualId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid individual ID format")
-      }
-
-      const individual = await Individual.findById(individualId)
-      if (!individual) {
-        throw CustomErrorHandler.notFound("Individual not found")
-      }
-
-      // Check if individual provides the requested service type
-      if (serviceType === "one_on_one" && !individual.serviceOptions.providesOneOnOne) {
-        throw CustomErrorHandler.badRequest("Individual does not provide one-on-one service")
-      }
-      if (serviceType === "team_service" && !individual.serviceOptions.providesTeamService) {
-        throw CustomErrorHandler.badRequest("Individual does not provide team service")
-      }
-      if (serviceType === "online_service" && !individual.serviceOptions.providesOnlineService) {
-        throw CustomErrorHandler.badRequest("Individual does not provide online service")
-      }
-
-      // Check availability
-      const bookingDay = DateTime.fromJSDate(new Date(bookingDate)).toFormat("cccc")
-      const dayAvailability = individual.availability[bookingDay]
-
-      if (!dayAvailability || !dayAvailability.isAvailable) {
-        throw CustomErrorHandler.badRequest("Individual is not available on this day")
-      }
-
-      const isAvailable = await this.checkIndividualSlotAvailability(individualId, bookingDate, timeSlot)
-      if (!isAvailable) {
-        throw CustomErrorHandler.badRequest("Time slot is not available")
-      }
-
-      const totalAmount = duration * individual.hourlyRate
-
-      const booking = new Booking({
-        bookingType: "individual",
-        serviceId: individualId,
-        userId,
-        serviceType,
-        bookingDate: new Date(bookingDate),
-        timeSlot,
-        duration,
-        totalAmount,
-        paymentMethod,
-        specialRequests,
-        teamSize,
-      })
-
-      await booking.save()
-
-      return await booking.populate("serviceId userId")
-    } catch (error) {
-      console.log("Failed to book individual:", error)
-      throw error
-    }
-  },
-
-  async getIndividualAvailableSlots(individualId, date) {
-    try {
-      if (!individualId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid individual ID format")
-      }
-
-      const individual = await Individual.findById(individualId)
-      if (!individual) {
-        throw CustomErrorHandler.notFound("Individual not found")
-      }
-
-      const bookingDay = DateTime.fromJSDate(new Date(date)).toFormat("cccc")
-      const dayAvailability = individual.availability[bookingDay]
-
-      if (!dayAvailability || !dayAvailability.isAvailable) {
-        return {
-          availableSlots: [],
-          bookedSlots: [],
-          totalSlots: 0,
-          date,
-          pricing: individual.hourlyRate,
-          message: "Individual is not available on this day",
-        }
-      }
-
-      const allSlots = this.generateTimeSlots(dayAvailability.startTime, dayAvailability.endTime)
-
-      const existingBookings = await Booking.find({
-        serviceId: individualId,
-        bookingDate: new Date(date),
-        bookingStatus: { $in: ["confirmed", "pending"] },
-      })
-
-      const bookedSlots = new Set()
-      existingBookings.forEach((booking) => {
-        if (booking.timeSlot) {
-          bookedSlots.add(`${booking.timeSlot.startTime}-${booking.timeSlot.endTime}`)
-        }
-      })
-
-      const availableSlots = allSlots.filter((slot) => !bookedSlots.has(`${slot.startTime}-${slot.endTime}`))
-
-      return {
-        availableSlots,
-        bookedSlots: Array.from(bookedSlots),
-        totalSlots: allSlots.length,
-        date,
-        pricing: individual.hourlyRate,
-      }
-    } catch (error) {
-      console.log("Failed to get individual available slots:", error)
-      throw error
-    }
-  },
-
-  async getIndividualBookings(filters) {
-    try {
-      const { individualId, startDate, endDate, status, page, limit } = filters
-
-      if (!individualId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid individual ID format")
-      }
-
-      const query = { serviceId: individualId, bookingType: "individual" }
-
-      if (status) query.bookingStatus = status
-
-      if (startDate || endDate) {
-        query.bookingDate = {}
-        if (startDate) query.bookingDate.$gte = new Date(startDate)
-        if (endDate) query.bookingDate.$lte = new Date(endDate)
-      }
-
-      const skip = (page - 1) * limit
-      const bookings = await Booking.find(query)
-        .populate("userId", "name email phone")
-        .populate("serviceId", "fullName phoneNumber")
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 })
-
-      const total = await Booking.countDocuments(query)
-
-      return {
-        bookings,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalItems: total,
-          itemsPerPage: limit,
-        },
-      }
-    } catch (error) {
-      console.log("Failed to get individual bookings:", error)
       throw error
     }
   },
@@ -3970,302 +2823,6 @@ const ProviderServices = {
     }
   },
 
-  async getTimeSlotAnalytics({ venueId, sport, period = "month" }) {
-    try {
-      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
-      }
-
-      const dateRange = this.getDateRange(period)
-      const matchQuery = {
-        venueId: mongoose.Types.ObjectId(venueId),
-        createdAt: { $gte: dateRange.start, $lte: dateRange.end }
-      }
-
-      if (sport && sport !== 'all') {
-        matchQuery.sport = new RegExp(`^${sport}$`, "i")
-      }
-
-      // Get time slot popularity
-      const timeSlotData = await Booking.aggregate([
-        { $match: matchQuery },
-        { $unwind: "$scheduledDates" },
-        { $unwind: "$scheduledDates.timeSlots" },
-        {
-          $group: {
-            _id: {
-              startTime: "$scheduledDates.timeSlots.startTime",
-              endTime: "$scheduledDates.timeSlots.endTime"
-            },
-            bookings: { $sum: 1 },
-            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } },
-            sports: { $addToSet: "$sport" }
-          }
-        },
-        {
-          $project: {
-            timeSlot: { $concat: ["$_id.startTime", " - ", "$_id.endTime"] },
-            bookings: 1,
-            revenue: 1,
-            sports: 1,
-            avgRevenuePerBooking: { $divide: ["$revenue", "$bookings"] }
-          }
-        },
-        { $sort: { bookings: -1 } }
-      ])
-
-      // Peak hours analysis
-      const hourlyData = await Booking.aggregate([
-        { $match: matchQuery },
-        { $unwind: "$scheduledDates" },
-        { $unwind: "$scheduledDates.timeSlots" },
-        {
-          $addFields: {
-            hour: {
-              $toInt: {
-                $substr: ["$scheduledDates.timeSlots.startTime", 0, 2]
-              }
-            }
-          }
-        },
-        {
-          $group: {
-            _id: "$hour",
-            bookings: { $sum: 1 },
-            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
-          }
-        },
-        { $sort: { _id: 1 } }
-      ])
-
-      // Day of week analysis
-      const dayOfWeekData = await Booking.aggregate([
-        { $match: matchQuery },
-        { $unwind: "$scheduledDates" },
-        {
-          $group: {
-            _id: { $dayOfWeek: "$scheduledDates.date" },
-            bookings: { $sum: 1 },
-            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
-          }
-        },
-        {
-          $project: {
-            dayName: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ["$_id", 1] }, then: "Sunday" },
-                  { case: { $eq: ["$_id", 2] }, then: "Monday" },
-                  { case: { $eq: ["$_id", 3] }, then: "Tuesday" },
-                  { case: { $eq: ["$_id", 4] }, then: "Wednesday" },
-                  { case: { $eq: ["$_id", 5] }, then: "Thursday" },
-                  { case: { $eq: ["$_id", 6] }, then: "Friday" },
-                  { case: { $eq: ["$_id", 7] }, then: "Saturday" }
-                ],
-                default: "Unknown"
-              }
-            },
-            bookings: 1,
-            revenue: 1
-          }
-        },
-        { $sort: { _id: 1 } }
-      ])
-
-      return {
-        timeSlots: timeSlotData,
-        hourlyAnalysis: hourlyData,
-        dayOfWeekAnalysis: dayOfWeekData,
-        insights: {
-          peakTimeSlot: timeSlotData[0] || null,
-          peakHour: hourlyData.reduce((max, hour) => hour.bookings > max.bookings ? hour : max, { bookings: 0 }),
-          peakDay: dayOfWeekData.reduce((max, day) => day.bookings > max.bookings ? day : max, { bookings: 0 }),
-          totalUniqueTimeSlots: timeSlotData.length,
-        },
-        period,
-        filters: { sport: sport || 'all' }
-      }
-    } catch (error) {
-      console.log("Failed to get time slot analytics:", error)
-      throw error
-    }
-  },
-
-  async getBookingAnalytics({ venueId, sport, period = "month" }) {
-    try {
-      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
-      }
-
-      const dateRange = this.getDateRange(period)
-      const matchQuery = {
-        venueId: mongoose.Types.ObjectId(venueId),
-        createdAt: { $gte: dateRange.start, $lte: dateRange.end }
-      }
-
-      if (sport && sport !== 'all') {
-        matchQuery.sport = new RegExp(`^${sport}$`, "i")
-      }
-
-      // Booking status distribution
-      const statusDistribution = await Booking.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$bookingStatus",
-            count: { $sum: 1 },
-            revenue: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } }
-          }
-        }
-      ])
-
-      // Payment status distribution
-      const paymentDistribution = await Booking.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$paymentStatus",
-            count: { $sum: 1 },
-            amount: { $sum: "$totalAmount" }
-          }
-        }
-      ])
-
-      // Booking patterns
-      const bookingPatterns = await Booking.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$bookingPattern",
-            count: { $sum: 1 },
-            avgDuration: { $avg: "$durationInHours" },
-            avgAmount: { $avg: "$totalAmount" }
-          }
-        }
-      ])
-
-      // Customer retention (repeat bookings)
-      const customerRetention = await Booking.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$userId",
-            bookingCount: { $sum: 1 },
-            totalSpent: { $sum: { $cond: [{ $eq: ["$paymentStatus", "successful"] }, "$totalAmount", 0] } },
-            firstBooking: { $min: "$createdAt" },
-            lastBooking: { $max: "$createdAt" }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalCustomers: { $sum: 1 },
-            repeatCustomers: { $sum: { $cond: [{ $gt: ["$bookingCount", 1] }, 1, 0] } },
-            avgBookingsPerCustomer: { $avg: "$bookingCount" },
-            avgSpentPerCustomer: { $avg: "$totalSpent" }
-          }
-        }
-      ])
-
-      const retention = customerRetention[0] || {
-        totalCustomers: 0,
-        repeatCustomers: 0,
-        avgBookingsPerCustomer: 0,
-        avgSpentPerCustomer: 0
-      }
-
-      return {
-        statusDistribution,
-        paymentDistribution,
-        bookingPatterns,
-        customerInsights: {
-          ...retention,
-          retentionRate: retention.totalCustomers > 0 ? (retention.repeatCustomers / retention.totalCustomers) * 100 : 0
-        },
-        period,
-        filters: { sport: sport || 'all' }
-      }
-    } catch (error) {
-      console.log("Failed to get booking analytics:", error)
-      throw error
-    }
-  },
-
-  async getPerformanceAnalytics({ venueId, sport }) {
-    try {
-      if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
-        throw CustomErrorHandler.badRequest("Invalid Venue ID format")
-      }
-
-      const venue = await Venue.findById(venueId)
-      if (!venue) {
-        throw CustomErrorHandler.notFound("Venue not found")
-      }
-
-      const matchQuery = { venueId: mongoose.Types.ObjectId(venueId) }
-      if (sport && sport !== 'all') {
-        matchQuery.sport = new RegExp(`^${sport}$`, "i")
-      }
-
-      // Overall performance metrics
-      const [
-        totalBookings,
-        totalRevenue,
-        avgRating,
-        utilizationRate,
-        monthlyGrowth
-      ] = await Promise.all([
-        Booking.countDocuments(matchQuery),
-
-        Booking.aggregate([
-          { $match: { ...matchQuery, paymentStatus: "successful" } },
-          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
-        ]).then(result => result[0]?.total || 0),
-
-        // Mock rating - you might have a separate ratings collection
-        Promise.resolve(4.2),
-
-        // Calculate utilization rate
-        this.calculateUtilizationRate(venueId, sport),
-
-        // Monthly growth
-        this.calculateMonthlyGrowth(venueId, sport)
-      ])
-
-      // Performance benchmarks
-      const benchmarks = {
-        bookingTarget: 100, // Monthly target
-        revenueTarget: 50000, // Monthly target
-        utilizationTarget: 70, // Percentage
-        ratingTarget: 4.0
-      }
-
-      const performance = {
-        bookingPerformance: totalBookings / benchmarks.bookingTarget * 100,
-        revenuePerformance: totalRevenue / benchmarks.revenueTarget * 100,
-        utilizationPerformance: utilizationRate / benchmarks.utilizationTarget * 100,
-        ratingPerformance: avgRating / benchmarks.ratingTarget * 100
-      }
-
-      return {
-        metrics: {
-          totalBookings,
-          totalRevenue,
-          avgRating,
-          utilizationRate,
-          monthlyGrowth
-        },
-        benchmarks,
-        performance,
-        overallScore: Object.values(performance).reduce((sum, score) => sum + score, 0) / 4,
-        recommendations: this.generateRecommendations(performance, utilizationRate, monthlyGrowth)
-      }
-    } catch (error) {
-      console.log("Failed to get performance analytics:", error)
-      throw error
-    }
-  },
-
   // Helper methods
   getDateRange(period, startDate, endDate) {
     const now = new Date()
@@ -4618,8 +3175,6 @@ const ProviderServices = {
       throw error;
     }
   },
-
-  // ==================== ENHANCED NEARBY INDIVIDUALS ====================
   async getNearbyIndividuals(filters) {
     try {
       const {
@@ -4774,8 +3329,6 @@ const ProviderServices = {
       throw error;
     }
   },
-
-  // ==================== ENHANCED VENUE SEARCH ====================
   async searchVenuesWithFilters(filters) {
     try {
       const {
@@ -4987,8 +3540,6 @@ const ProviderServices = {
       throw error;
     }
   },
-
-  // ==================== ENHANCED INDIVIDUAL SEARCH ====================
   async searchIndividualsWithFilters(filters) {
     try {
       const {
@@ -5194,7 +3745,6 @@ const ProviderServices = {
     }
   },
 
-  // ==================== HELPER METHODS ====================
   buildFacilitiesFilter(facilities) {
     const filters = [];
     Object.entries(facilities).forEach(([key, value]) => {
@@ -5236,7 +3786,6 @@ const ProviderServices = {
     };
   },
 
-  // ==================== COMBINED SEARCH ====================
   async combinedSearchWithFilters(filters) {
     try {
       const { query, latitude, longitude, page = 1, radius = 25 } = filters;
