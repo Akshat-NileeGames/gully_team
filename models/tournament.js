@@ -298,14 +298,14 @@ const tournamentCategorySchema = new mongoose.Schema({
 const ballTypeSchema = new mongoose.Schema({
   name: {
     type: String,
-    enum: ["tennis", "leather", "others"],
+    enum: ["tennis", "leather", "others", "rubber"],
   },
 });
 
 const matchTypeSchema = new mongoose.Schema({
   name: {
     type: String,
-    enum: ["Tennis ball cricket match", "season ball cricket match"],
+    enum: ["Tennis ball cricket match", "season ball cricket match", "Football match"],
   },
 });
 
@@ -343,7 +343,7 @@ const tournamentSchema = new mongoose.Schema(
     },
     ballType: {
       type: ballTypeSchema,
-      required: true,
+      required: false,
     },
     pitchType: {
       type: pitchTypeSchema,
@@ -369,13 +369,21 @@ const tournamentSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    tournamentfor: {
+      type: String,
+      required: true,
+      enum: ['cricket', 'football'],
+      default: "cricket"
+    },
     ballCharges: {
       type: Number,
-      required: true,
+      required: false,
+      default: 0
     },
     breakfastCharges: {
       type: Number,
-      required: true,
+      required: false,
+      default: 0
     },
     stadiumAddress: {
       type: String,
@@ -420,8 +428,8 @@ const tournamentSchema = new mongoose.Schema(
     },
     organizer: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Replace "User" with the name of the actual model for the organizer.
-      required: false, // Optional: Set this to true if the field is mandatory.
+      ref: "User",
+      required: false,
     },
     isDeleted: {
       type: Boolean,

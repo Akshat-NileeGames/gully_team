@@ -17,9 +17,9 @@ import firebaseNotification from "../helpers/firebaseNotification.js";
 
 import moment from "moment";
 const tournamentServices = {
+
   async createTournament(data, userStartDate, userEndDate) {
     const userInfo = global.user;
-
     let coHostId1;
     let coHostId2;
 
@@ -58,21 +58,23 @@ const tournamentServices = {
     }
 
     let imagePath = "";
-    if (data.coverPhoto) {
-      imagePath = await ImageUploader.Upload(data.coverPhoto, "tournament");
-    }
+    // if (data.coverPhoto) {
+    //   imagePath = await ImageUploader.Upload(data.coverPhoto, "tournament");
+    // }
 
     const tournament = new Tournament({
       tournamentStartDateTime: userStartDate,
       tournamentEndDateTime: userEndDate,
       tournamentName: data.tournamentName,
       tournamentCategory: { name: data.tournamentCategory },
-      ballType: { name: data.ballType },
+      ballType: data.ballType ? { name: data.ballType } : { name: "rubber" },
+
       pitchType: { name: data.pitchType },
       email: userInfo.email,
       matchType: { name: data.matchType },
       tournamentPrize: { name: data.tournamentPrize },
       rules: data.rules,
+      tournamentfor: data.tournamentfor,
       disclaimer: data.disclaimer,
       fees: data.fees,
       ballCharges: data.ballCharges,
@@ -390,361 +392,7 @@ const tournamentServices = {
       }
     });
   },
-  //Code to send Email to user after purchasing sponsorship package
-  //   async setSponsor(data) {
 
-  //     const { tournamentId, SponsorshipPackageId } = data;
-
-  //     try {
-  //       const tour = await Tournament.findById(tournamentId); 
-
-  //       if (!tour) {
-  //         throw new Error("Tournament not found");
-  //       }
-
-  //       tour.isSponsorshippurchase = true;
-  //       tour.SponsorshipPackageId = SponsorshipPackageId;
-
-  //       const purchasedPackage=await Package.findById(SponsorshipPackageId);
-
-  //       await tour.save();
-  //       const htmlContent = `
-  //       <!DOCTYPE html>
-  //       <html lang="en">
-  //       <head>
-  //           <meta charset="UTF-8">
-  //           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  //           <title>Invoice</title>
-  //           <style>
-  //               body {
-  //                   font-family: Arial, sans-serif;
-  //                   margin: 0;
-  //                   padding: 0;
-  //                   background-color: #f9f9f9;
-  //               }
-  //               .container {
-  //                   max-width: 800px;
-  //                   margin: 20px auto;
-  //                   background-color: #fff;
-  //                   padding: 20px;
-  //                   border-radius: 8px;
-  //                   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  //               }
-  //               .header, .footer {
-  //                   text-align: center;
-  //               }
-  //               .header h1 {
-  //                   margin: 0;
-  //                   color: #333;
-  //               }
-  //               .company-info, .customer-info {
-  //                   display: flex;
-  //                   justify-content: space-between;
-  //                   margin-bottom: 20px;
-  //               }
-  //               .company-info div, .customer-info div {
-  //                   width: 48%;
-  //               }
-  //               .table {
-  //                   width: 100%;
-  //                   margin-bottom: 20px;
-  //                   border-collapse: collapse;
-  //               }
-  //               .table th, .table td {
-  //                   padding: 12px;
-  //                   border: 1px solid #ddd;
-  //                   text-align: left;
-  //               }
-  //               .table th {
-  //                   background-color: #f2f2f2;
-  //               }
-  //               .total {
-  //                   text-align: right;
-  //                   font-weight: bold;
-  //                   font-size: 18px;
-  //               }
-  //               .footer p {
-  //                   font-size: 14px;
-  //                   color: #777;
-  //               }
-  //           </style>
-  //       </head>
-  //       <body>
-  //           <div class="container">
-  //               <div class="header">
-  //                   <h1>Invoice</h1>
-  //               </div>
-  //               <div class="company-info">
-  //                   <div>
-  //                       <strong>Company Name</strong><br>
-  //                       Address: 123 Business St., City, Country<br>
-  //                       Phone: (123) 456-7890<br>
-  //                       Email: info@company.com
-  //                   </div>
-  //                   <div>
-  //                       <strong>Invoice #</strong>: ${tour._id}<br>
-  //                       <strong>Invoice Date</strong>: ${new Date().toLocaleDateString()}<br>
-  //                       <strong>Due Date</strong>: ${new Date(new Date().setDate(new Date().getDate() + 7)).toLocaleDateString()}
-  //                   </div>
-  //               </div>
-  //               <div class="customer-info">
-  //                   <div>
-  //                       <strong>Bill To:</strong><br>
-  //                       ${tour.user.fullName || 'Customer Name'}<br>
-  //                       Address: ${tour.user.address || 'Unknown Address'}<br>
-  //                       Phone: ${tour.user.phoneNumber || 'Unknown Phone'}<br>
-  //                       Email: ${tour.user.email || 'Unknown Email'}
-  //                   </div>
-  //               </div>
-  //               <table class="table">
-  //                   <thead>
-  //                       <tr>
-  //                           <th>Item Description</th>
-  //                           <th>Unit Price</th>
-  //                           <th>Quantity</th>
-  //                           <th>Total</th>
-  //                       </tr>
-  //                   </thead>
-  //                   <tbody>
-  //                       <tr>
-  //                           <td>${purchasedPackage.name}</td>
-  //                           <td>$${purchasedPackage.price}</td>
-  //                           <td>1</td>
-  //                           <td>$${purchasedPackage.price}</td>
-  //                       </tr>
-  //                   </tbody>
-  //               </table>
-  //               <div class="total">
-  //                   <p>Total: $${purchasedPackage.price}</p>
-  //               </div>
-  //               <div class="footer">
-  //                   <p>Thank you for your business!</p>
-  //               </div>
-  //           </div>
-  //       </body>
-  //       </html>`;
-
-  //     // Create a transporter
-  //     const transporter = nodemailer.createTransport({
-  //       service: 'gmail',
-  //       auth: {
-  //         user: 'nuzen2025@gmail.com',
-  //         pass: 'Anurag3007'
-  //       }
-  //     });
-
-  //     // Send email
-  //     await transporter.sendMail({
-  //       from: 'nuzen2025@gmail.com',
-  //       to: tour.user.email,
-  //       subject: 'Sponsorship Invoice',
-  //       html: htmlContent
-  //     });
-
-  //     return tour;
-  //   } catch (err) {
-  //     console.log("Error updating sponsorship:", err);
-  //     throw err;
-  //   }
-  // },
-
-
-
-  // async createTournament(data, userStartDate, userEndDate) {
-  //   const userInfo = global.user;
-
-  //   let coHostId1;
-  //   let coHostId2;
-
-  //   if (data.coHost1Phone) {
-  //     const existingUser = await User.findOne({ phoneNumber: data.coHost1Phone });
-
-  //     if (existingUser) {
-  //       coHostId1 = existingUser._id;
-  //     } else {
-  //       const newUser = new User({
-  //         fullName: data.coHost1Name || "",
-  //         phoneNumber: data.coHost1Phone,
-  //         registrationDate: new Date(),
-  //       });
-
-  //       const newUserData = await newUser.save();
-  //       coHostId1 = newUserData._id;
-  //     }
-  //   }
-
-  //   if (data.coHost2Phone) {
-  //     const existingUser = await User.findOne({ phoneNumber: data.coHost2Phone });
-
-  //     if (existingUser) {
-  //       coHostId2 = existingUser._id;
-  //     } else {
-  //       const newUser = new User({
-  //         fullName: data.coHost2Name || "",
-  //         phoneNumber: data.coHost2Phone,
-  //         registrationDate: new Date(),
-  //       });
-
-  //       const newUserData = await newUser.save();
-  //       coHostId2 = newUserData._id;
-  //     }
-  //   }
-
-  //   let imagePath = "";
-  //   if (data.coverPhoto) {
-  //     imagePath = await ImageUploader.Upload(data.coverPhoto, "tournament");
-  //   }
-
-  //   const tournament = new Tournament({
-  //     tournamentStartDateTime: userStartDate,
-  //     tournamentEndDateTime: userEndDate,
-  //     tournamentName: data.tournamentName,
-  //     tournamentCategory: { name: data.tournamentCategory },
-  //     ballType: { name: data.ballType },
-  //     pitchType: { name: data.pitchType },
-  //     email: userInfo.email,
-  //     matchType: { name: data.matchType },
-  //     tournamentPrize: { name: data.tournamentPrize },
-  //     rules: data.rules,
-  //     disclaimer: data.disclaimer,
-  //     fees: data.fees,
-  //     ballCharges: data.ballCharges,
-  //     breakfastCharges: data.breakfastCharges,
-  //     stadiumAddress: data.stadiumAddress,
-  //     tournamentLimit: data.tournamentLimit,
-  //     gameType: { name: data.gameType },
-  //     coverPhoto: imagePath,
-  //     locationHistory: {
-  //       point: {
-  //         coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
-  //       },
-  //       selectLocation: data.selectLocation,
-  //     },
-  //     // eliminatedTeamIds: data.eliminatedTeamIds || [], // Added eliminatedTeamIds field
-  //     user: userInfo.userId,
-  //     coHostId1: coHostId1,
-  //     coHostId2: coHostId2,
-  //     authority: userInfo.userId,
-  //     isActive: true, // Set active status to true during creation
-  //   });
-
-  //   const newTournament = await tournament.save();
-  //   await newTournament.populate("user");
-
-  //   const user = await User.findById(userInfo.userId);
-  //   user.isOrganizer = true;
-  //   const fcmToken = user.fcmToken;
-
-  //   await user.save();
-
-  //   return { newTournament, fcmToken };
-  // },
-
-  // const tournamentServices = {
-  //   async createTournament(data, userStartDate, userEndDate) {
-  //     const userInfo = global.user;
-
-  //     //code for coHost.
-
-  //     let coHostId1;
-  //     let coHostId2;
-
-  //     if (data.coHost1Phone) {
-  //       const existingUser = await User.exists({
-  //         phoneNumber: data.coHost1Phone,
-  //       });
-
-  //       if (existingUser) {
-  //         coHostId1 = existingUser._id;
-  //       } else {
-  //         const newUser = new User({
-  //           fullName: data.coHost1Name || "",
-  //           phoneNumber: data.coHost1Phone,
-  //           registrationDate: new Date(),
-  //         });
-
-  //         const newUserData = await newUser.save();
-  //         coHostId1 = newUserData._id;
-  //       }
-  //     }
-
-  //     if (data.coHost2Phone) {
-  //       const existingUser = await User.exists({
-  //         phoneNumber: data.coHost2Phone,
-  //       });
-
-  //       if (existingUser) {
-  //         coHostId2 = existingUser._id;
-  //       } else {
-  //         const newUser = new User({
-  //           fullName: data.coHost2Name || "",
-  //           phoneNumber: data.coHost2Phone,
-  //           registrationDate: new Date(),
-  //         });
-
-  //         const newUserData = await newUser.save();
-  //         coHostId2 = newUserData._id;
-  //       }
-  //     }
-
-  //     let imagePath = "";
-  //     if (data.coverPhoto) {
-  //       imagePath = await ImageUploader.Upload(data.coverPhoto, "tournament");
-  //     }
-
-  //     // tournament object
-  //     const tournament = new Tournament({
-  //       tournamentStartDateTime: userStartDate,
-  //       tournamentEndDateTime: userEndDate,
-  //       tournamentName: data.tournamentName,
-  //       tournamentCategory: { name: data.tournamentCategory },
-  //       ballType: { name: data.ballType },
-  //       pitchType: { name: data.pitchType },
-  //       email: userInfo.email,
-  //       matchType: { name: data.matchType },
-  //       tournamentPrize: { name: data.tournamentPrize },
-  //       rules: data.rules,
-  //       disclaimer: data.disclaimer,
-  //       fees: data.fees,
-  //       ballCharges: data.ballCharges,
-  //       breakfastCharges: data.breakfastCharges,
-  //       stadiumAddress: data.stadiumAddress,
-  //       tournamentLimit: data.tournamentLimit,
-  //       gameType: { name: data.gameType },
-  //       coverPhoto: imagePath,
-  //       locationHistory: {
-  //         // type: "Point",
-
-  //         point: {
-  //           coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
-  //         },
-  //         selectLocation: data.selectLocation,
-  //       },
-  //       user: userInfo.userId,
-  //       coHostId1: coHostId1,
-  //       coHostId2: coHostId2,
-  //       authority: userInfo.userId,
-  //     });
-
-  //     // Create a new instance of the HelpdeskTicket model
-  //     const newTournament = new Tournament(tournament);
-
-  //     // Save the new HelpdeskTicket and wait for the operation to complete
-  //     await newTournament.save();
-  //     newTournament.populate("user");
-
-  //     const user = await User.findById(userInfo.userId);
-  //     // Update the User as Organizer ;
-  //     user.isOrganizer = true;
-
-  //     // Retrieve FCM token this is for notification
-  //     const fcmToken = user.fcmToken;
-
-  //     // Save the updated user document
-  //     await user.save();
-  //     //this is for notification
-  //     return { newTournament, fcmToken };
-  //   },
 
 
   async editTournament(data, userStartDate, userEndDate, tournamentId) {

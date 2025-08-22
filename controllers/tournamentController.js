@@ -5,10 +5,8 @@ import { Tournament, User } from "../models/index.js";
 import { tournamentServices } from "../services/index.js";
 
 const tournamentController = {
+  //#region createTournament
   async createTournament(req, res, next) {
-    let test = req.query;
-    console.log(test); // Log incoming query parameters
-
     const tournamentSchema = Joi.object({
       tournamentStartDateTime: Joi.date().iso().required(),
       tournamentEndDateTime: Joi.date()
@@ -16,15 +14,16 @@ const tournamentController = {
         .min(Joi.ref("tournamentStartDateTime"))
         .required(),
       tournamentName: Joi.string().min(3).max(30).required(),
+      tournamentfor: Joi.string().required(),
       tournamentCategory: Joi.string().required(),
-      ballType: Joi.string().required(),
+      ballType: Joi.string().optional(),
       pitchType: Joi.string().required(),
       matchType: Joi.string().required(),
       tournamentPrize: Joi.string().required(),
       selectLocation: Joi.string().required(),
       fees: Joi.number().integer().min(0).required(),
-      ballCharges: Joi.number().min(0).required(),
-      breakfastCharges: Joi.number().integer().min(0).required(),
+      ballCharges: Joi.number().min(0).optional(),
+      breakfastCharges: Joi.number().integer().min(0).optional(),
       stadiumAddress: Joi.string().required(),
       tournamentLimit: Joi.number().integer().positive().required(),
       gameType: Joi.string().required(),
@@ -38,11 +37,8 @@ const tournamentController = {
       coverPhoto: Joi.string().optional().allow(null),
       //eliminatedTeamIds: Joi.array().items(Joi.string()).optional(), // Added field for eliminatedTeamIds
     });
-
     const { error } = tournamentSchema.validate(req.body);
-    if (error) {
-      return next(error);
-    }
+    if (error) throw CustomErrorHandler.validationError(`Failed to validate Request:${error}`);
 
     const TournamentNameExist = await Tournament.exists({
       tournamentName: req.body.tournamentName,
@@ -50,13 +46,10 @@ const tournamentController = {
     });
 
     if (TournamentNameExist) {
-      return next(
-        CustomErrorHandler.alreadyExist(
-          "This Tournament Name is already present."
-        )
-      );
+      throw next(CustomErrorHandler.alreadyExist(
+        "This Tournament Name is already present."
+      ))
     }
-
     const formatStartDate = (dateString) => {
       const date = new Date(dateString);
 
@@ -84,10 +77,8 @@ const tournamentController = {
       const notificationData = {
         title: "Gully Team",
         body: `${newTournament.tournamentName} Tournament created successfully! Get set for an epic showdown. Stay tuned for participants and let the games begin! 🏆`,
-        image: "", // Add an image URL if available
+        image: "",
       };
-
-      console.log("FCM Token:", fcmToken); // Log FCM Token
       if (fcmToken) {
         console.log("Sending notification...");
         await firebaseNotification.sendNotification(fcmToken, notificationData);
@@ -96,27 +87,13 @@ const tournamentController = {
         console.log("No FCM Token available. Skipping notification.");
       }
 
-      // Return response with all tournament parameters and notification body
       return res.status(200).json({
         success: true,
         message: "Tournament Created Successfully",
         data: newTournament,
       });
-      // Return response with tournament data and success message
-      return res.status(200).json({
-        success: true,
-        message: "Tournament Created Successfully",
-        data: {
-          // tournamentName: newTournament.tournamentName,
-          // tournamentCategory: newTournament.tournamentCategory,
-          // tournamentId: newTournament._id,
-          data: newTournament,
-          notificationData: notificationData, // Add notification data to response
-        },
-      });
     } catch (err) {
       console.log("Error in createTournament", err);
-      return next(err);
     }
   },
   // async createTournament(req, res, next) {
