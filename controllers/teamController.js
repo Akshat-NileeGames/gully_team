@@ -239,7 +239,6 @@ const teamController = {
       const { teamId } = req.params;
       const { newCaptainId, newRole, previousCaptainId, previousCaptainRole } = req.body;
 
-      // Validate the data
       if (!newCaptainId || !newRole || !previousCaptainId) {
         return res.status(400).json({
           success: false,

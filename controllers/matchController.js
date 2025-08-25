@@ -42,15 +42,15 @@ const matchController = {
   //   }
   // },
 
-
+  //#region createMatch
   async createMatch(req, res, next) {
-    // Validation
     const MatchSchema = Joi.object({
       tournamentId: Joi.string().min(3).max(30).required(),
       team1ID: Joi.string().min(3).max(30).required(),
       team2ID: Joi.string().min(3).max(30).required(),
       round: Joi.string().required(),
       matchNo: Joi.number().integer().required(),
+      matchlength: Joi.number().integer().allow(0).optional(),
       dateTime: Joi.date().iso().required(),
       winningTeamId: Joi.string().optional(),
       matchAuthority: Joi.string().required(),
@@ -58,9 +58,7 @@ const matchController = {
 
     const { error } = MatchSchema.validate(req.body);
 
-    if (error) {
-      return next(error);
-    }
+    if (error) return CustomErrorHandler.validationError(`Failed to validate the request:${error}`);
 
     try {
 
@@ -285,7 +283,6 @@ const matchController = {
       return res.status(200).json({
         success: true,
         message: "ScoreBoard Updated successfully",
-        isCurrentMatch: result.status === 'Live', // Add flag for frontend
         data: result,
       });
     } catch (err) {

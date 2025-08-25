@@ -17,7 +17,7 @@ const matchServices = {
 
   async createMatch(data) {
 
-    const { tournamentId, team1ID, team2ID, round, matchNo, dateTime, winningTeamId, matchAuthority } = data;
+    const { tournamentId, team1ID, team2ID, round, matchNo, dateTime, winningTeamId, matchAuthority, matchlength } = data;
     const userInfo = global.user;
     console.log(`The Team 1 id:${team1ID} and Team 2 id:${team2ID}`)
     const TournamentExist = await Tournament.findOne({ _id: tournamentId });
@@ -82,7 +82,8 @@ const matchServices = {
       tournament: tournamentId,
       team1: team1ID,
       team2: team2ID,
-      dateTime: standardizedDateTime, // Save as UTC
+      dateTime: standardizedDateTime,
+      matchlength: matchlength > 0 ? matchlength : null,
       Round: round,
       matchNo: matchNo,
       winningTeamId: winningTeamId,

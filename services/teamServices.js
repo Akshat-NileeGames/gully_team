@@ -90,9 +90,9 @@ const teamServices = {
 
       // Step 4: For each team, get the count of players in that team
       const teamsWithPlayerCount = await Promise.all(teams.map(async (team) => {
-        const playerCount = await Player.countDocuments({ team: team._id });  // Count players in the team
+        const playerCount = await Player.countDocuments({ team: team._id });
         return {
-          ...team.toObject(),  // Convert Mongoose document to plain object
+          ...team.toObject(),
           playersCount: playerCount,
         };
       }));
@@ -101,6 +101,7 @@ const teamServices = {
       throw err;
     }
   },
+
   // async getTeamsByPhoneNumber(phoneNumber) {
   //   try {
   //     // Step 1: Find all players associated with the given phone number
@@ -845,64 +846,47 @@ const teamServices = {
 
     return team;
   },
-  async changeCaptain(userId, teamId, newCaptainId, newRole, previousCaptainId, previousCaptainRole) {
-    // Fetch team data and populate players
+
+  async changeCaptain(userId, teamId, newCaptainId, newRole, previousCaptainId, previousCaptainRole,) {
     const team = await Team.findById(teamId).populate('players');
-    console.log("Fetched Team: ", team);  // Debugging log to verify team and players
+    if (!team) throw CustomErrorHandler.notFound("Team Not Found");
 
-    // Check if team exists
-    if (!team) {
-      throw CustomErrorHandler.notFound("Team Not Found");
-    }
+    if (!team.players || team.players.length === 0) throw CustomErrorHandler.notFound("No players found in the team");
 
-    // Ensure `players` array exists and is populated
-    if (!team.players || team.players.length === 0) {
-      throw CustomErrorHandler.notFound("No players found in the team");
-    }
-
-    // Find the current captain by comparing userId or _id with team.captain
     const currentCaptain = team.players.find(player => player._id.toString() === previousCaptainId);
-    console.log("Current Captain: ", currentCaptain);  // Debugging log to verify current captain
+    if (!currentCaptain) throw CustomErrorHandler.notFound("Current captain not found in the team");
 
-    // If there is no current captain, throw an error
-    if (!currentCaptain) {
-      throw CustomErrorHandler.notFound("Current captain not found in the team");
-    }
+    if (currentCaptain._id.toString() === newCaptainId) throw CustomErrorHandler.badRequest("This player is already the captain");
 
-    // If the new captain is the current captain, skip the update
-    if (currentCaptain._id.toString() === newCaptainId) {
-      throw CustomErrorHandler.badRequest("This player is already the captain");
-    }
-
-    // Find the new captain
     const newCaptain = team.players.find(player => player._id.toString() === newCaptainId);
-    if (!newCaptain) {
-      throw CustomErrorHandler.notFound("New captain not found in this team");
-    }
+    if (!newCaptain) throw CustomErrorHandler.notFound("New captain not found in this team");
 
-    // If there is a current captain, update their role to the specified new role (or default)
     if (currentCaptain) {
-      // Validate and update the previous captain's role
-      if (previousCaptainRole && !["Batsman", "Bowler", "All Rounder", "Wicket Keeper"].includes(previousCaptainRole)) {
-        throw CustomErrorHandler.badRequest("Previous captain's role must be one of 'Batsman', 'Bowler', 'All Rounder', or 'Wicket Keeper'");
+      const validRoles = [
+        "Batsman",
+        "Bowler",
+        "All Rounder",
+        "Wicket Keeper",
+        "Goal Keeper",
+        "Defender",
+        "Midfielder",
+        "Attacker",
+        "Striker"
+      ];
+
+      if (previousCaptainRole && !validRoles.includes(previousCaptainRole)) {
+        throw CustomErrorHandler.badRequest(
+          "Previous captain's role must be one of: " + validRoles.join(", ")
+        );
       }
 
-      // Update the role of the previous captain to a non-captain role
-      currentCaptain.role = previousCaptainRole || "Batsman"; // Default to "Batsman" if not provided
-      await currentCaptain.save();  // Save updated role for the previous captain
+      currentCaptain.role = previousCaptainRole || "Batsman";
+      await currentCaptain.save();
     }
-
-    // Update team with new captain
     team.captain = newCaptain._id;
-
-    // Optional: Update role of the new captain if a new role is provided
     newCaptain.role = newRole;
-    await newCaptain.save();  // Save updated role for the new captain
-
-    // Save the updated team
+    await newCaptain.save();
     await team.save();
-
-    // Return data with both previous and new captain details
     return {
       teamId: team._id,
       newCaptain: {

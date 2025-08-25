@@ -134,6 +134,10 @@ const matchSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    matchlength: {
+      type: Number,
+      required: false,
+    },
     matchType: {
       type: String,
       enum: ["Tournaments", "Challenged"]
