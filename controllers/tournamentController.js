@@ -38,7 +38,7 @@ const tournamentController = {
       //eliminatedTeamIds: Joi.array().items(Joi.string()).optional(), // Added field for eliminatedTeamIds
     });
     const { error } = tournamentSchema.validate(req.body);
-    if (error) throw CustomErrorHandler.validationError(`Failed to validate Request:${error}`);
+    if (error) return CustomErrorHandler.validationError(`Failed to validate Request:${error}`);
 
     const TournamentNameExist = await Tournament.exists({
       tournamentName: req.body.tournamentName,

@@ -678,7 +678,7 @@ const matchServices = {
         {
           $set: {
             scoreBoard: data.scoreBoard,
-            status: 'current' // Set status to 'current' when updating scoreboard
+            status: 'current'
           }
         },
         { new: true, runValidators: true }

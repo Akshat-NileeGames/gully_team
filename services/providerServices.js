@@ -1362,7 +1362,7 @@ const ProviderServices = {
       const { query, latitude, longitude, limit, radius } = filters
 
       // Search venues with smaller limit for combined results
-      const venueResults = await this.searchVenues({
+      const venueResults = await this.searchVenuesWithFilters({
         query,
         latitude,
         longitude,
@@ -1371,8 +1371,7 @@ const ProviderServices = {
         radius,
       });
 
-      // Search individuals with smaller limit for combined results
-      const individualResults = await this.searchIndividuals({
+      const individualResults = await this.searchIndividualsWithFilters({
         query,
         latitude,
         longitude,
