@@ -1068,7 +1068,6 @@ const otherServices = {
     });
 
     await payment.save();
-
     setTimeout(async () => {
 
       console.log("Sending email after 10 seconds...",);
@@ -1138,7 +1137,7 @@ const otherServices = {
       statusBadgeColor = "#fee2e2";
       statusMessage = `
       <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-        <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">❌ Payment Failed</p>
+        <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
         <p style="color: #b91c1c; margin: 0; font-size: 14px;">
           We were unable to process your payment for the subscription package. No charges have been made to your account.
         </p>
@@ -1151,10 +1150,10 @@ const otherServices = {
       ctaText = "Please retry your payment to activate your subscription and access all features.";
       ctaButtons = `
       <a href="#" class="cta-button" style="background-color: #2563eb;">
-        🔄 Retry Payment
+        Retry Payment
       </a>
       <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #059669;">
-        📧 Contact Support
+        Contact Support
       </a>
     `;
     } else if (PAYMENT_STATUS === "Pending") {
@@ -1163,7 +1162,7 @@ const otherServices = {
       statusBadgeColor = "#fef3c7";
       statusMessage = `
       <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-        <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏳ Payment Pending</p>
+        <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;"> Payment Pending</p>
         <p style="color: #92400e; margin: 0; font-size: 14px;">
           Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
         </p>
@@ -1176,7 +1175,7 @@ const otherServices = {
       ctaText = "You can check the status of your payment in your Transaction History.";
       ctaButtons = `
       <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-        📧 Contact Support
+        Contact Support
       </a>
     `;
     } else {
@@ -1186,7 +1185,7 @@ const otherServices = {
       statusBadgeColor = "#dcfce7";
       statusMessage = `
       <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
-        <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">✅ Payment Successful</p>
+        <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
         <p style="color: #166534; margin: 0; font-size: 14px;">
           Your payment has been successfully processed and your subscription is now active.
         </p>
@@ -1202,7 +1201,7 @@ const otherServices = {
         🏪 Access Dashboard
       </a>
       <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">
-        📧 Contact Support
+        Contact Support
       </a>
     `;
     }
@@ -1630,7 +1629,7 @@ const otherServices = {
 
               <!-- Payment Summary -->
               <div class="payment-summary">
-                <h3 class="payment-title">💰 Payment Breakdown</h3>
+                <h3 class="payment-title">Payment Breakdown</h3>
                 <table class="payment-table" role="presentation">
                   <tr>
                     <td class="payment-label">Package Name:</td>
@@ -1762,7 +1761,7 @@ const otherServices = {
 
               <!-- Additional Details -->
               <h3 class="section-title">
-                📋 Additional Details
+                Additional Details
               </h3>
               <table class="details-table" role="presentation">
                 ${shop.businesslicenseNumber ? `
@@ -1829,9 +1828,9 @@ const otherServices = {
               <!-- Info Section -->
               <div class="info-section">
                 <h3 class="info-title">
-                  ${PAYMENT_STATUS === "Failed" ? "❌ Payment Failed - What to Do Next" :
-          PAYMENT_STATUS === "Pending" ? "⏳ Payment Processing Information" :
-            "✅ What's Included in Your Subscription"}
+                  ${PAYMENT_STATUS === "Failed" ? "Payment Failed - What to Do Next" :
+          PAYMENT_STATUS === "Pending" ? " Payment Processing Information" :
+            "What's Included in Your Subscription"}
                 </h3>
                 <p class="info-text">
                   ${PAYMENT_STATUS === "Failed" ? `
@@ -1883,8 +1882,8 @@ const otherServices = {
                 <strong>© ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.</strong>
               </p>
               <p class="footer-text">
-                📧 Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
-                🌐 Website: <a href="#" class="footer-link">www.gullyteam.com</a>
+                Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
+                Website: <a href="#" class="footer-link">www.gullyteam.com</a>
               </p>
               <p class="footer-text">
                 For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
@@ -2048,19 +2047,19 @@ const otherServices = {
           color: "#16a34a",
           bg: "#dcfce7",
           border: "#86efac",
-          text: "✅ Payment Successful",
+          text: "Payment Successful",
         },
         pending: {
           color: "#92400e",
           bg: "#fef3c7",
           border: "#fbbf24",
-          text: "⏳ Payment Pending",
+          text: " Payment Pending",
         },
         failed: {
           color: "#dc2626",
           bg: "#fee2e2",
           border: "#f87171",
-          text: "❌ Payment Failed",
+          text: "Payment Failed",
         },
       }
       const config = statusConfig[status?.toLowerCase()] || statusConfig.pending
@@ -2077,19 +2076,19 @@ const otherServices = {
           color: "#16a34a",
           bg: "#dcfce7",
           border: "#86efac",
-          text: "✅ Booking Confirmed",
+          text: "Booking Confirmed",
         },
         pending: {
           color: "#92400e",
           bg: "#fef3c7",
           border: "#fbbf24",
-          text: "⏳ Booking Pending",
+          text: " Booking Pending",
         },
         cancelled: {
           color: "#dc2626",
           bg: "#fee2e2",
           border: "#f87171",
-          text: "❌ Booking Cancelled",
+          text: "Booking Cancelled",
         },
       }
       const config = statusConfig[status?.toLowerCase()] || statusConfig.pending
@@ -2150,17 +2149,17 @@ const otherServices = {
     const getWelcomeMessage = () => {
       if (isSuccessful) {
         return {
-          greeting: `Hello ${user.fullName || user.name}! 🎉`,
+          greeting: `Hello ${user.fullName || user.name}!`,
           message: "Great news! Your venue booking has been confirmed. We're excited to help you enjoy your sports session. Below are all the details of your booking."
         }
       } else if (isPending) {
         return {
-          greeting: `Hello ${user.fullName || user.name}! ⏳`,
+          greeting: `Hello ${user.fullName || user.name}!`,
           message: "Your booking request has been received and is currently being processed. We'll notify you once the payment is confirmed. Below are the details of your booking request."
         }
       } else {
         return {
-          greeting: `Hello ${user.fullName || user.name}! ❌`,
+          greeting: `Hello ${user.fullName || user.name}!`,
           message: "Unfortunately, there was an issue processing your booking payment. Don't worry - no charges have been made to your account. You can try booking again or contact our support team for assistance."
         }
       }
@@ -2170,7 +2169,7 @@ const otherServices = {
       if (isSuccessful) {
         return `
       <div class="next-steps">
-        <h3 class="next-steps-title">📋 What's Next?</h3>
+        <h3 class="next-steps-title">What's Next?</h3>
         <ul class="steps-list">
           <li class="step-item">
             <span class="checkmark">✓</span>
@@ -2194,22 +2193,22 @@ const otherServices = {
       } else if (isPending) {
         return `
       <div class="next-steps" style="background-color: #fef3c7; border: 1px solid #fbbf24;">
-        <h3 class="next-steps-title" style="color: #92400e;">⏳ What Happens Next?</h3>
+        <h3 class="next-steps-title" style="color: #92400e;"> What Happens Next?</h3>
         <ul class="steps-list">
           <li class="step-item" style="color: #92400e;">
-            <span class="checkmark" style="color: #f59e0b;">⏳</span>
+            <span class="checkmark" style="color: #f59e0b;"></span>
             We're processing your payment - this usually takes a few minutes
           </li>
           <li class="step-item" style="color: #92400e;">
-            <span class="checkmark" style="color: #f59e0b;">📧</span>
+            <span class="checkmark" style="color: #f59e0b;"></span>
             You'll receive a confirmation email once payment is successful
           </li>
           <li class="step-item" style="color: #92400e;">
-            <span class="checkmark" style="color: #f59e0b;">📱</span>
+            <span class="checkmark" style="color: #f59e0b;"></span>
             Check your app for real-time booking status updates
           </li>
           <li class="step-item" style="color: #92400e;">
-            <span class="checkmark" style="color: #f59e0b;">🤝</span>
+            <span class="checkmark" style="color: #f59e0b;"></span>
             Contact support if payment isn't confirmed within 30 minutes
           </li>
         </ul>
@@ -2218,22 +2217,22 @@ const otherServices = {
       } else {
         return `
       <div class="next-steps" style="background-color: #fee2e2; border: 1px solid #f87171;">
-        <h3 class="next-steps-title" style="color: #991b1b;">🔄 What You Can Do Next</h3>
+        <h3 class="next-steps-title" style="color: #991b1b;">What You Can Do Next</h3>
         <ul class="steps-list">
           <li class="step-item" style="color: #991b1b;">
-            <span class="checkmark" style="color: #dc2626;">🔄</span>
+            <span class="checkmark" style="color: #dc2626;"></span>
             Try booking again - the time slot is still available
           </li>
           <li class="step-item" style="color: #991b1b;">
-            <span class="checkmark" style="color: #dc2626;">💳</span>
+            <span class="checkmark" style="color: #dc2626;"></span>
             Check your payment method and try a different card if needed
           </li>
           <li class="step-item" style="color: #991b1b;">
-            <span class="checkmark" style="color: #dc2626;">🤝</span>
+            <span class="checkmark" style="color: #dc2626;"></span>
             Contact our support team for assistance with your booking
           </li>
           <li class="step-item" style="color: #991b1b;">
-            <span class="checkmark" style="color: #dc2626;">💰</span>
+            <span class="checkmark" style="color: #dc2626;"></span>
             Rest assured - no charges were made to your account
           </li>
         </ul>
@@ -2246,21 +2245,21 @@ const otherServices = {
       if (isSuccessful) {
         return `
       <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
-        Thank you for choosing Gully Team! 🏆<br>
+        Thank you for choosing Gully Team!<br>
         <em>We hope you have an amazing sports experience!</em>
       </p>
     `
       } else if (isPending) {
         return `
       <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
-        Thank you for your patience! ⏳<br>
+        Thank you for your patience!<br>
         <em>We'll update you as soon as your booking is confirmed.</em>
       </p>
     `
       } else {
         return `
       <p style="text-align: center; color: #6b7280; font-size: 16px; margin-top: 30px;">
-        We apologize for the inconvenience! 🙏<br>
+        We apologize for the inconvenience! <br>
         <em>Our support team is here to help you complete your booking.</em>
       </p>
     `
@@ -2743,7 +2742,7 @@ const otherServices = {
               ${isSuccessful ? `
               <!-- Scheduled Dates & Time Slots -->
               <h3 class="section-title">
-                📅 Scheduled Dates & Time Slots
+                Scheduled Dates & Time Slots
               </h3>
               <div class="schedule-container">
                 ${formatBookingSchedule(booking.scheduledDates)}
@@ -2752,7 +2751,7 @@ const otherServices = {
 
               <!-- Payment Breakdown -->
               <div class="payment-breakdown">
-                <h3 class="payment-breakdown-title">💰 Payment ${isSuccessful ? 'Breakdown' : isFailed ? 'Attempt Details' : 'Processing'}</h3>
+                <h3 class="payment-breakdown-title">Payment ${isSuccessful ? 'Breakdown' : isFailed ? 'Attempt Details' : 'Processing'}</h3>
                 <table class="payment-breakdown-table" role="presentation">
                   <tr>
                     <td class="payment-label">Base Amount:</td>
@@ -2779,7 +2778,7 @@ const otherServices = {
 
               <!-- Payment Details -->
               <h3 class="section-title">
-                💳 Payment Details
+                Payment Details
               </h3>
               
               ${getPaymentStatusBadge(paymentDetails.paymentStatus)}
@@ -2813,7 +2812,7 @@ const otherServices = {
               <!-- Retry Booking Section -->
               <div style="text-align: center; margin: 30px 0;">
                 <a href="#" class="retry-booking">
-                  🔄 Try Booking Again
+                  Try Booking Again
                 </a>
                 <p style="color: #6b7280; font-size: 14px; margin-top: 10px;">
                   The time slot is still available for booking
@@ -2826,7 +2825,7 @@ const otherServices = {
 
               <!-- Contact Support -->
               <div class="contact-section">
-  <h3 class="contact-title">🤝 Need Help?</h3>
+  <h3 class="contact-title">Need Help?</h3>
   <p class="contact-text">
     ${isSuccessful
           ? 'If you have any questions about your booking or need assistance, our support team is here to help:'
@@ -2835,7 +2834,7 @@ const otherServices = {
             : 'Having trouble with your booking? Our support team is here to help you complete your reservation:'
         }
     <br><br>
-    📧 Email: <a href="mailto:gullyteam33@gmail.com" style="color: #1e40af; text-decoration: none;">gullyteam33@gmail.com</a><br>
+    Email: <a href="mailto:gullyteam33@gmail.com" style="color: #1e40af; text-decoration: none;">gullyteam33@gmail.com</a><br>
     <br>
     For immediate venue-related queries, contact the venue directly at <strong>${venue.venue_contact}</strong>
   </p>
@@ -2850,8 +2849,8 @@ const otherServices = {
                 <strong>© ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.</strong>
               </p>
               <p class="footer-text">
-                📧 Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
-                🌐 Website: <a href="#" class="footer-link">www.gullyteam.com</a>
+                Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
+                Website: <a href="#" class="footer-link">www.gullyteam.com</a>
               </p>
             </div>
           </div>
@@ -3861,7 +3860,7 @@ const otherServices = {
 
       const contactResponse = await axios.post(endpoint, payload, { auth, headers });
       const contactId = contactResponse.data.id;
-      console.log("✅ Razorpay contact created:", contactId);
+      console.log("Razorpay contact created:", contactId);
       const fundAccountResponse = await axios.post(
         'https://api.razorpay.com/v1/fund_accounts',
         {
@@ -3875,7 +3874,6 @@ const otherServices = {
       );
 
       const fundAccountId = fundAccountResponse.data.id;
-      console.log("✅ Fund account created:", fundAccountId);
 
       await Venue.findByIdAndUpdate(venue._id, {
         razorpaycontactId: contactId,
@@ -3884,7 +3882,7 @@ const otherServices = {
 
       return true;
     } catch (error) {
-      console.error("❌ Failed to create Razorpay contact:", error.response?.data || error.message);
+      console.error("Failed to create Razorpay contact:", error.response?.data || error.message);
       throw new Error("Could not create contact on Razorpay");
     }
   },
@@ -4130,7 +4128,7 @@ const otherServices = {
       statusBadgeColor = "#fee2e2";
       statusMessage = `
         <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">❌ Payment Failed</p>
+          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
           <p style="color: #b91c1c; margin: 0; font-size: 14px;">
             We were unable to process your payment for the sports service subscription. No charges have been made to your account.
           </p>
@@ -4139,8 +4137,8 @@ const otherServices = {
       introText = `We regret to inform you that your payment for the ${purchasedPackage.name} subscription package could not be processed.`;
       ctaText = "Please retry your payment to activate your subscription and start offering your sports services.";
       ctaButtons = `
-        <a href="#" class="cta-button" style="background-color: #2563eb;">🔄 Retry Payment</a>
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #059669;">📧 Contact Support</a>
+        <a href="#" class="cta-button" style="background-color: #2563eb;">Retry Payment</a>
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #059669;">Contact Support</a>
       `;
     } else if (PAYMENT_STATUS === "Pending") {
       headerTitle = "Payment Pending - Verification in Progress";
@@ -4148,7 +4146,7 @@ const otherServices = {
       statusBadgeColor = "#fef3c7";
       statusMessage = `
         <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏳ Payment Pending</p>
+          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;"> Payment Pending</p>
           <p style="color: #92400e; margin: 0; font-size: 14px;">
             Your payment is being processed. This usually takes a few minutes, but may take up to 24 hours in some cases.
           </p>
@@ -4157,7 +4155,7 @@ const otherServices = {
       introText = `Thank you for purchasing the ${purchasedPackage.name} subscription package. Your payment is currently being processed.`;
       ctaText = "You can check the status of your payment in your Transaction History.";
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">📧 Contact Support</a>
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">Contact Support</a>
       `;
     } else {
       headerTitle = "Sports Service Subscription Successfully Activated!";
@@ -4165,7 +4163,7 @@ const otherServices = {
       statusBadgeColor = "#dcfce7";
       statusMessage = `
         <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">✅ Payment Successful</p>
+          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
           <p style="color: #166534; margin: 0; font-size: 14px;">
             Your payment has been successfully processed and your subscription is now active.
           </p>
@@ -4175,7 +4173,7 @@ const otherServices = {
       ctaText = "Thank you for joining us and trusting Gully Team with your sports service business!";
       ctaButtons = `
         <a href="#" class="cta-button" style="background-color: #16a34a;">🏆 Access Dashboard</a>
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">📧 Contact Support</a>
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">Contact Support</a>
       `;
     }
 
@@ -4186,7 +4184,7 @@ const otherServices = {
     } else if (PAYMENT_STATUS === "Pending") {
       subject = `Payment Pending - Your Gully Team Sports Service Subscription`;
     } else {
-      subject = `🎉 Welcome Back! Your Sports Service Subscription is Active`;
+      subject = `Welcome Back! Your Sports Service Subscription is Active`;
     }
 
     const mailOptions = {
@@ -4563,7 +4561,7 @@ const otherServices = {
             <!-- Content -->
             <div class="content">
               <!-- Welcome Message -->
-              <p class="welcome-text">Hello ${individual?.fullName || user.fullName}! 🏆</p>
+              <p class="welcome-text">Hello ${individual?.fullName || user.fullName}!</p>
               <p class="intro-text">${introText}</p>
 
               <!-- Status Message -->
@@ -4577,7 +4575,7 @@ const otherServices = {
 
               <!-- Payment Summary -->
               <div class="payment-summary">
-                <h3 class="payment-title">💰 Payment Breakdown</h3>
+                <h3 class="payment-title">Payment Breakdown</h3>
                 <table class="payment-table" role="presentation">
                   <tr>
                     <td class="payment-label">Package Name:</td>
@@ -4631,8 +4629,8 @@ const otherServices = {
                 <strong>© ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.</strong>
               </p>
               <p class="footer-text">
-                📧 Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
-                🌐 Website: <a href="#" class="footer-link">www.gullyteam.com</a>
+                Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
+                Website: <a href="#" class="footer-link">www.gullyteam.com</a>
               </p>
               <p class="footer-text">
                 For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
@@ -4723,7 +4721,7 @@ const otherServices = {
       statusBadgeColor = "#fee2e2";
       statusMessage = `
         <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">❌ Payment Failed</p>
+          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Failed</p>
           <p style="color: #b91c1c; margin: 0; font-size: 14px;">
             We were unable to process your payment for the venue subscription package. No charges have been made to your account.
           </p>
@@ -4732,8 +4730,8 @@ const otherServices = {
       introText = `We regret to inform you that your payment for the ${purchasedPackage.name} venue subscription package could not be processed.`;
       ctaText = "Please retry your payment to activate your venue subscription and start accepting bookings.";
       ctaButtons = `
-        <a href="#" class="cta-button" style="background-color: #2563eb;">🔄 Retry Payment</a>
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #059669;">📧 Contact Support</a>
+        <a href="#" class="cta-button" style="background-color: #2563eb;">Retry Payment</a>
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #059669;">Contact Support</a>
       `;
     } else if (PAYMENT_STATUS === "Pending") {
       headerTitle = "Payment Pending - Verification in Progress";
@@ -4741,7 +4739,7 @@ const otherServices = {
       statusBadgeColor = "#fef3c7";
       statusMessage = `
         <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏳ Payment Pending</p>
+          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;"> Payment Pending</p>
           <p style="color: #92400e; margin: 0; font-size: 14px;">
             Your payment is being processed. Your venue will be activated once processing is complete.
           </p>
@@ -4750,7 +4748,7 @@ const otherServices = {
       introText = `Thank you for purchasing the ${purchasedPackage.name} venue subscription package. Your payment is currently being processed.`;
       ctaText = "You can check the status of your payment in your Transaction History.";
       ctaButtons = `
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">📧 Contact Support</a>
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">Contact Support</a>
       `;
     } else {
       headerTitle = "Venue Subscription Successfully Activated!";
@@ -4758,7 +4756,7 @@ const otherServices = {
       statusBadgeColor = "#dcfce7";
       statusMessage = `
         <div style="background-color: #dcfce7; border: 1px solid #86efac; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">✅ Payment Successful</p>
+          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Payment Successful</p>
           <p style="color: #166534; margin: 0; font-size: 14px;">
             Your venue is now live and visible to sports enthusiasts looking for booking opportunities.
           </p>
@@ -4768,7 +4766,7 @@ const otherServices = {
       ctaText = "Thank you for joining us and trusting Gully Team with your venue management!";
       ctaButtons = `
         <a href="#" class="cta-button" style="background-color: #16a34a;">🏟️ Access Dashboard</a>
-        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">📧 Contact Support</a>
+        <a href="mailto:gullyteam33@gmail.com" class="cta-button" style="background-color: #2563eb;">Contact Support</a>
       `;
     }
 
@@ -5192,7 +5190,7 @@ const otherServices = {
 
               <!-- Payment Summary -->
               <div class="payment-summary">
-                <h3 class="payment-title">💰 Payment Summary</h3>
+                <h3 class="payment-title">Payment Summary</h3>
                 <table class="payment-table" role="presentation">
                   <tr>
                     <td class="payment-label">Package: ${purchasedPackage.name}</td>
@@ -5244,8 +5242,8 @@ const otherServices = {
                 <strong>© ${new Date().getFullYear()} Nilee Games and Future Technologies Pvt. Ltd.</strong>
               </p>
               <p class="footer-text">
-                📧 Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
-                🌐 Website: <a href="#" class="footer-link">www.gullyteam.com</a>
+                Support: <a href="mailto:gullyteam33@gmail.com" class="footer-link">gullyteam33@gmail.com</a> | 
+                Website: <a href="#" class="footer-link">www.gullyteam.com</a>
               </p>
               <p class="footer-text">
                 For payment queries, please include your Transaction ID: <strong>${TRANSACTION_ID}</strong>
@@ -5971,7 +5969,7 @@ const otherServices = {
             <!-- Content -->
             <div class="content">
               <!-- Welcome Message -->
-              <p class="welcome-text">Hello ${individualData.fullName || user.fullName}! 🏆</p>
+              <p class="welcome-text">Hello ${individualData.fullName || user.fullName}!</p>
               <p class="intro-text">${introText}</p>
 
               <!-- Status Message -->
@@ -6264,7 +6262,7 @@ const otherServices = {
       urgencyBadgeColor = "#fee2e2"
       urgencyMessage = `
           <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⚠️ Critical: Package Expires in ${daysUntilExpiration} day${daysUntilExpiration === 1 ? "" : "s"}!</p>
+            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Critical: Package Expires in ${daysUntilExpiration} day${daysUntilExpiration === 1 ? "" : "s"}!</p>
             <p style="color: #b91c1c; margin: 0; font-size: 14px;">
               Your venue will be removed from our platform if not renewed immediately.
             </p>
@@ -6276,7 +6274,7 @@ const otherServices = {
       urgencyBadgeColor = "#fef3c7"
       urgencyMessage = `
           <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-            <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏰ Package Expires in ${daysUntilExpiration} days</p>
+            <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Package Expires in ${daysUntilExpiration} days</p>
             <p style="color: #92400e; margin: 0; font-size: 14px;">
               Don't let your venue go offline. Renew now to continue receiving bookings.
             </p>
@@ -6288,7 +6286,7 @@ const otherServices = {
       urgencyBadgeColor = "#dbeafe"
       urgencyMessage = `
           <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 16px; margin: 20px 0;">
-            <p style="color: #1e40af; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">📅 Package Expires in ${daysUntilExpiration} days</p>
+            <p style="color: #1e40af; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Package Expires in ${daysUntilExpiration} days</p>
             <p style="color: #1e40af; margin: 0; font-size: 14px;">
               Plan ahead and renew your package to avoid any interruption in service.
             </p>
@@ -6298,8 +6296,8 @@ const otherServices = {
 
     const subject =
       daysUntilExpiration <= 3
-        ? `🚨 URGENT: Your Venue Package Expires in ${daysUntilExpiration} Day${daysUntilExpiration === 1 ? "" : "s"}!`
-        : `⏰ Reminder: Your Venue Package Expires in ${daysUntilExpiration} Days`
+        ? `URGENT: Your Venue Package Expires in ${daysUntilExpiration} Day${daysUntilExpiration === 1 ? "" : "s"}!`
+        : `Reminder: Your Venue Package Expires in ${daysUntilExpiration} Days`
 
     const mailOptions = {
       from: "gullyteam33@gmail.com",
@@ -6603,7 +6601,7 @@ const otherServices = {
 
                 <!-- Warning Section -->
                 <div class="warning-section">
-                  <h3 class="warning-title">⚠️ Important Notice</h3>
+                  <h3 class="warning-title">Important Notice</h3>
                   <p class="warning-text">
                     <strong>If your package is not renewed, your venue will no longer be visible on our platform.</strong>
                     This means you will stop receiving new bookings and your venue listing will be deactivated until renewal.
@@ -6614,7 +6612,7 @@ const otherServices = {
                 <div class="cta-section">
                   <a href="mailto:gullyteam33@gmail.com?subject=Package Renewal Request - ${venue.venue_name}" 
                      class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}">
-                    ${urgencyLevel === "critical" ? "🚨 Renew Now - Urgent!" : "🔄 Renew Package"}
+                    ${urgencyLevel === "critical" ? "Renew Now - Urgent!" : "Renew Package"}
                   </a>
                 </div>
 
@@ -6683,7 +6681,7 @@ const otherServices = {
       urgencyBadgeColor = "#fee2e2"
       urgencyMessage = `
         <div style="background-color: #fee2e2; border: 1px solid #f87171; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⚠️ Critical: Package Expires in ${daysUntilExpiration} day${daysUntilExpiration === 1 ? "" : "s"}!</p>
+          <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Critical: Package Expires in ${daysUntilExpiration} day${daysUntilExpiration === 1 ? "" : "s"}!</p>
           <p style="color: #b91c1c; margin: 0; font-size: 14px;">
             Your profile will be removed from our platform if not renewed immediately.
           </p>
@@ -6695,7 +6693,7 @@ const otherServices = {
       urgencyBadgeColor = "#fef3c7"
       urgencyMessage = `
         <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">⏰ Package Expires in ${daysUntilExpiration} days</p>
+          <p style="color: #92400e; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Package Expires in ${daysUntilExpiration} days</p>
           <p style="color: #92400e; margin: 0; font-size: 14px;">
             Don't let your profile go offline. Renew now to continue receiving client bookings.
           </p>
@@ -6707,7 +6705,7 @@ const otherServices = {
       urgencyBadgeColor = "#dbeafe"
       urgencyMessage = `
         <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 16px; margin: 20px 0;">
-          <p style="color: #1e40af; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">📅 Package Expires in ${daysUntilExpiration} days</p>
+          <p style="color: #1e40af; font-weight: bold; margin: 0 0 10px 0; font-size: 16px;">Package Expires in ${daysUntilExpiration} days</p>
           <p style="color: #1e40af; margin: 0; font-size: 14px;">
             Plan ahead and renew your package to avoid any interruption in service.
           </p>
@@ -6717,8 +6715,8 @@ const otherServices = {
 
     const subject =
       daysUntilExpiration <= 3
-        ? `🚨 URGENT: Your Service Provider Package Expires in ${daysUntilExpiration} Day${daysUntilExpiration === 1 ? "" : "s"}!`
-        : `⏰ Reminder: Your Service Provider Package Expires in ${daysUntilExpiration} Days`
+        ? `URGENT: Your Service Provider Package Expires in ${daysUntilExpiration} Day${daysUntilExpiration === 1 ? "" : "s"}!`
+        : `Reminder: Your Service Provider Package Expires in ${daysUntilExpiration} Days`
 
     const mailOptions = {
       from: "gullyteam33@gmail.com",
@@ -6991,7 +6989,7 @@ const otherServices = {
             <!-- Content -->
             <div class="content">
               <!-- Welcome Message -->
-              <p class="welcome-text">Hello ${individual.fullName}! 🏆</p>
+              <p class="welcome-text">Hello ${individual.fullName}!</p>
               <p class="intro-text">
                 We hope you've been successfully connecting with sports enthusiasts and growing your coaching business through our platform. 
                 We're writing to remind you that your current subscription package is approaching its expiration date.
@@ -7022,7 +7020,7 @@ const otherServices = {
 
               <!-- Warning Section -->
               <div class="warning-section">
-                <h3 class="warning-title">⚠️ Important Notice</h3>
+                <h3 class="warning-title">Important Notice</h3>
                 <p class="warning-text">
                   <strong>If your package is not renewed, your profile will no longer be visible on our platform.</strong>
                   This means potential clients won't be able to find you, and you will stop receiving new booking requests until renewal.
@@ -7033,7 +7031,7 @@ const otherServices = {
               <div class="cta-section">
                 <a href="mailto:gullyteam33@gmail.com?subject=Package Renewal Request - ${individual.fullName}" 
                    class="cta-button ${urgencyLevel === "critical" ? "urgent" : ""}">
-                  ${urgencyLevel === "critical" ? "🚨 Renew Now - Urgent!" : "🔄 Renew Package"}
+                  ${urgencyLevel === "critical" ? "Renew Now - Urgent!" : "Renew Package"}
                 </a>
               </div>
 
@@ -7208,7 +7206,7 @@ const otherServices = {
       orderId: result.id,
       userId: userInfo.userId,
       PackageId: data.PackageId,
-      amount: result.amount / 100, // Amount in INR
+      amount: result.amount / 100,
       amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
       coupon: data.coupon ?? "",
       tournamentId: data.tournamentId,
