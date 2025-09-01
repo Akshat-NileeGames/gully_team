@@ -9,7 +9,6 @@ import validateUser from "../middlewares/validateUser.js";
 router.post("/createTournament", validateUser, tournamentController.createTournament);
 
 router.put("/editTournament/:id", validateUser, tournamentController.editTournament);
-
 router.post("/getTournament", validateUser, tournamentController.getTournament);
 
 router.post("/setSponsor", validateUser, tournamentController.setSponsor);

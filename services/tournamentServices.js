@@ -674,7 +674,6 @@ const tournamentServices = {
     const { latitude, longitude, startDate, filter } = data;
 
     console.log("startDate", startDate);
-
     let startDateTime, endDateTime;
 
     let currentDate = new Date();

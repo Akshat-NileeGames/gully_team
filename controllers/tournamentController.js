@@ -404,6 +404,7 @@ const tournamentController = {
   /**
    * Edit an existing tournament
    */
+  //#region edittournament
   async editTournament(req, res, next) {
     const TournamentId = req.params.id;
 
@@ -512,7 +513,7 @@ const tournamentController = {
       return next(err);
     }
   },
-
+  //#region setSponsor
   async setSponsor(req, res, next) {
 
     const sponsor_schema = Joi.object({
@@ -1165,7 +1166,6 @@ const tournamentController = {
   async getTournament(req, res, next) {
     try {
       const result = await tournamentServices.getTournament(req.body);
-
       return res.status(200).json({
         sucess: true,
         message: "Tournament Retrieved Suessfully",
