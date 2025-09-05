@@ -1183,23 +1183,8 @@ const tournamentController = {
   async getTournamentById(req, res) {
     try {
       const { tournamentId } = req.params;
-
-      if (!tournamentId) {
-        return res.status(400).json({
-          success: false,
-          message: "Tournament ID is required",
-        });
-      }
-
       const tournamentData = await tournamentServices.getTournamentById(tournamentId);
-
-      if (!tournamentData) {
-        return res.status(404).json({
-          success: false,
-          message: "Tournament not found",
-        });
-      }
-
+      console.log(tournamentData);
       return res.status(200).json({
         success: true,
         data: tournamentData,

@@ -671,16 +671,13 @@ const tournamentServices = {
   // },
 
   async getTournament(data) {
-    const { latitude, longitude, startDate, filter } = data;
-
-    console.log("startDate", startDate);
+    const { latitude, longitude, startDate, filter, sport } = data;
     let startDateTime, endDateTime;
 
     let currentDate = new Date();
     let formattedDate = currentDate.toISOString().split("T")[0];
 
     let checkcondition = false;
-
     if (filter === "past") {
       // If startDate and endDate are not provided, get tournaments for the past 7 days, current date, and future 7 days
       startDateTime = new Date(`${formattedDate}T00:00:00.000Z`);
@@ -705,19 +702,6 @@ const tournamentServices = {
       endDateTime = new Date(`${formattedDate}T23:59:59.999Z`);
     }
 
-    //     let currentDate = new Date();
-    // let formattedDate = currentDate.toISOString().split('T')[0];
-    //     }
-    //     startDateTime = new Date(`${formattedDate}T00:00:00.000Z`);
-    //     //to get tournament of same day i am convertin enddate to the same date
-    //     endDateTime = new Date(`${formattedDate}T23:59:59.999Z`);
-    //     endDateTime.setDate(endDateTime.getDate() -1);
-
-    console.log("startDateTime", startDateTime);
-    console.log("endDateTime", endDateTime);
-    console.log("latitude", latitude);
-    console.log("longitude", longitude);
-
     let orCondition = [
       {
         tournamentStartDateTime: {
@@ -732,7 +716,7 @@ const tournamentServices = {
         },
       },
     ];
-
+    console.log(orCondition);
     // for current Tournament
     // Condition to use $or or an empty array based on a certain condition
     if (checkcondition || filter == "current") {
@@ -747,18 +731,6 @@ const tournamentServices = {
         },
       ];
     }
-
-    // for Past Tournament
-    // if ( filter=="past") {
-    //   orCondition = [
-    //     {
-    //       tournamentStartDateTime: {
-    //         $lt: endDateTime,
-    //       },
-    //     },
-    //   ];
-    // }
-
     let tournament_data = await Tournament.aggregate([
       {
         $geoNear: {
@@ -773,6 +745,7 @@ const tournamentServices = {
             isDeleted: false,
             isActive: true,
             $or: orCondition,
+            tournamentfor: sport,
             // $or: [
             //   {
             //     tournamentStartDateTime: {
@@ -1878,34 +1851,34 @@ const tournamentServices = {
 
   async getTournamentById(tournamentId) {
     // Query to retrieve subadmins for the current page
-    let tournament = await Tournament.find({ _id: tournamentId }).populate({
+    let tournament = await Tournament.findOne({ _id: tournamentId }).populate({
       path: "user",
       select: "email phoneNumber fullName locations.placeName", // Replace with the actual fields you want to include
     }); // Limit the number of documents per page
 
-    let tournamentData = tournament.map((entry) => ({
-      tournamentName: entry.tournamentName,
-      ballCharges: entry.ballCharges,
-      ballType: entry.ballType.name,
-      fees: entry.fees,
-      gameType: entry.gameType.name,
-      pitchType: entry.pitchType.name,
-      matchType: entry.matchType.name,
-      breakfastCharges: entry.breakfastCharges,
-      // latestLocation: entry.locationHistory.currentLocation.selectLocation,
-      stadiumAddress: entry.stadiumAddress,
-      tournamentCategory: entry.tournamentCategory.name,
-      tournamentStartDateTime: moment(entry.tournamentStartDateTime).format(
-        "DD-MM-YYYY",
-      ),
-      tournamentEndDateTime: moment(entry.tournamentEndDateTime).format(
-        "DD-MM-YYYY",
-      ),
-      tournamentLimit: entry.tournamentLimit,
-      tournamentPrize: entry.tournamentPrize.name,
-    }));
+    // let tournamentData = tournament.map((entry) => ({
+    //   tournamentName: entry.tournamentName,
+    //   ballCharges: entry.ballCharges,
+    //   ballType: entry.ballType.name,
+    //   fees: entry.fees,
+    //   gameType: entry.gameType.name,
+    //   pitchType: entry.pitchType.name,
+    //   matchType: entry.matchType.name,
+    //   breakfastCharges: entry.breakfastCharges,
+    //   // latestLocation: entry.locationHistory.currentLocation.selectLocation,
+    //   stadiumAddress: entry.stadiumAddress,
+    //   tournamentCategory: entry.tournamentCategory.name,
+    //   tournamentStartDateTime: moment(entry.tournamentStartDateTime).format(
+    //     "DD-MM-YYYY",
+    //   ),
+    //   tournamentEndDateTime: moment(entry.tournamentEndDateTime).format(
+    //     "DD-MM-YYYY",
+    //   ),
+    //   tournamentLimit: entry.tournamentLimit,
+    //   tournamentPrize: entry.tournamentPrize.name,
+    // }));
 
-    return tournamentData[0];
+    return tournament;
   },
 
   async getMatchesByTournamentId(TournamentId) {
