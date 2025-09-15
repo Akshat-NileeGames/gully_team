@@ -327,6 +327,39 @@ const matchController = {
       return next(err);
     }
   },
+  async updateFootballMatchData(req, res, next) {
+    let matchId = req.params.matchId;
+    let { winningTeamId } = req.body;
+
+    if (!matchId) {
+      return res.status(400).json({
+        success: false,
+        message: "Match ID is required.",
+      });
+    }
+
+    if (!winningTeamId) {
+      return res.status(400).json({
+        success: false,
+        message: "Winning Team ID is required.",
+      });
+    }
+    try {
+      const result = await matchServices.updateFootballMatchData(
+        matchId,
+        winningTeamId,
+      );
+
+      return res.status(200).json({
+        sucess: true,
+        message: "Team Match data  Updated Successfully",
+        data: { matches: result },
+      });
+    } catch (err) {
+      console.log(" Error in updateTeamMatchsData ", err);
+      return next(err);
+    }
+  },
 
   //DG
   // async updateTeamMatchsData(req, res, next) {
@@ -399,7 +432,7 @@ const matchController = {
       return next(err);
     }
   },
-
+  
   async topPerformers(req, res, next) {
     try {
       const result = await matchServices.topPerformers(req.body);

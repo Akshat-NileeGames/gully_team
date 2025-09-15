@@ -1127,8 +1127,282 @@ const matchServices = {
     return true;
   },
 
+  async updateFootballMatchData(matchId, winningTeamId) {
+    try {
+      // Find the match that hasn't been played yet
+      const match = await Match.findOne({
+        _id: matchId,
+        // status: { $ne: "played" },
+      }).populate(["team1", "team2"])
 
+      if (!match) {
+        throw CustomErrorHandler.notFound("Match not found or already played")
+      }
 
+      const scoreBoard = match.scoreBoard
+      if (!scoreBoard) {
+        throw CustomErrorHandler.badRequest("Match scoreboard data not found")
+      }
+
+      const homeTeam = scoreBoard.get("homeTeam") || {}
+      const awayTeam = scoreBoard.get("awayTeam") || {}
+      const matchEvents = scoreBoard.get("matchEvents") || []
+      const goals = scoreBoard.get("goals") || []
+      const cards = scoreBoard.get("cards") || []
+      const penaltyShootout = scoreBoard.get("penaltyShootout") || {}
+      const isPenaltyShootout = scoreBoard.get("isPenaltyShootout") || false
+
+      const homeScore = scoreBoard.get("homeScore") || 0
+      const awayScore = scoreBoard.get("awayScore") || 0
+
+      // Initialize player stats map
+      const playerStats = new Map()
+      const allPlayers = [...(homeTeam.players || []), ...(awayTeam.players || [])]
+
+      // Initialize all players with base stats
+      allPlayers.forEach((player) => {
+        if (player._id) {
+          playerStats.set(player._id.toString(), {
+            matchesPlayed: 1,
+            minutesPlayed: 0, // Keep as 0 as requested
+            goals: 0,
+            assists: 0,
+            saves: 0,
+            cleanSheets: 0,
+            penaltySaves: 0,
+            yellowCards: 0,
+            redCards: 0,
+            foulsCommitted: 0,
+            foulsSuffered: 0,
+            offsides: 0,
+          })
+        }
+      })
+
+      // Process goals from the goals array
+      goals.forEach((goal) => {
+        const scorerId = goal.scorerId?._id?.toString()
+        if (scorerId && playerStats.has(scorerId)) {
+          playerStats.get(scorerId).goals += 1
+        }
+
+        // Process assists
+        const assistId = goal.assistId?._id?.toString()
+        if (assistId && playerStats.has(assistId)) {
+          playerStats.get(assistId).assists += 1
+        }
+      })
+
+      // Process cards
+      cards.forEach((card) => {
+        const playerId = card.playerId?._id?.toString()
+        if (playerId && playerStats.has(playerId)) {
+          if (card.cardType === "Yellow") {
+            playerStats.get(playerId).yellowCards += 1
+          } else if (card.cardType === "Red") {
+            playerStats.get(playerId).redCards += 1
+          }
+        }
+      })
+
+      // Process penalty shootout
+      if (isPenaltyShootout && penaltyShootout.penalties) {
+        penaltyShootout.penalties.forEach((penalty) => {
+          const playerId = penalty.playerId?._id?.toString()
+          if (playerId && playerStats.has(playerId)) {
+            // Check if penalty was scored
+            if (penalty.result === "scored" || penalty.isScored === true) {
+              playerStats.get(playerId).goals += 1
+            }
+          }
+        })
+
+        // Count penalty saves for goalkeepers
+        const homeGoalkeeper = scoreBoard.get("homeTeamGoalKeeper")
+        const awayGoalkeeper = scoreBoard.get("awayTeamGoalKeeper")
+
+        let homePenaltySaves = 0
+        let awayPenaltySaves = 0
+
+        penaltyShootout.penalties.forEach((penalty) => {
+          if (penalty.result === "missed" || penalty.isScored === false) {
+            // Determine which team took the penalty and increment saves for opposing goalkeeper
+            const penaltyTeamId = penalty.teamId?._id?.toString()
+            const homeTeamId = match.team1._id.toString()
+
+            if (penaltyTeamId === homeTeamId) {
+              // Home team penalty, away goalkeeper gets save
+              awayPenaltySaves += 1
+            } else {
+              // Away team penalty, home goalkeeper gets save
+              homePenaltySaves += 1
+            }
+          }
+        })
+
+        // Update goalkeeper penalty saves
+        if (homeGoalkeeper?._id && playerStats.has(homeGoalkeeper._id.toString())) {
+          playerStats.get(homeGoalkeeper._id.toString()).penaltySaves += homePenaltySaves
+        }
+        if (awayGoalkeeper?._id && playerStats.has(awayGoalkeeper._id.toString())) {
+          playerStats.get(awayGoalkeeper._id.toString()).penaltySaves += awayPenaltySaves
+        }
+      }
+
+      // Process match events for saves, fouls, and other events
+      matchEvents.forEach((event) => {
+        const playerId = event.playerId?._id?.toString()
+        if (!playerId || !playerStats.has(playerId)) return
+
+        const stats = playerStats.get(playerId)
+
+        switch (event.eventType) {
+          case "goal_save":
+            stats.saves += 1
+            break
+
+          case "foul":
+            stats.foulsCommitted += 1
+            // Try to extract fouled player from description if available
+            // This is a basic implementation - you might need to adjust based on your data structure
+            break
+
+          case "offside":
+            stats.offsides += 1
+            break
+        }
+      })
+
+      // Calculate clean sheets for goalkeepers
+      const homeGoalkeepers = (homeTeam.players || []).filter((p) => p.role === "Goal Keeper")
+      const awayGoalkeepers = (awayTeam.players || []).filter((p) => p.role === "Goal Keeper")
+
+      // Home goalkeepers get clean sheet if away team scored 0 goals
+      if (awayScore === 0) {
+        homeGoalkeepers.forEach((gk) => {
+          if (gk._id && playerStats.has(gk._id.toString())) {
+            playerStats.get(gk._id.toString()).cleanSheets = 1
+          }
+        })
+      }
+
+      // Away goalkeepers get clean sheet if home team scored 0 goals
+      if (homeScore === 0) {
+        awayGoalkeepers.forEach((gk) => {
+          if (gk._id && playerStats.has(gk._id.toString())) {
+            playerStats.get(gk._id.toString()).cleanSheets = 1
+          }
+        })
+      }
+
+      // Update all player statistics in the database
+      const playerUpdatePromises = []
+      for (const [playerId, stats] of playerStats.entries()) {
+        const updatePromise = Player.findByIdAndUpdate(
+          playerId,
+          {
+            $inc: {
+              "footballStatistic.matchesPlayed": stats.matchesPlayed,
+              "footballStatistic.minutesPlayed": stats.minutesPlayed,
+              "footballStatistic.goals": stats.goals,
+              "footballStatistic.assists": stats.assists,
+              "footballStatistic.saves": stats.saves,
+              "footballStatistic.cleanSheets": stats.cleanSheets,
+              "footballStatistic.penaltySaves": stats.penaltySaves,
+              "footballStatistic.yellowCards": stats.yellowCards,
+              "footballStatistic.redCards": stats.redCards,
+              "footballStatistic.foulsCommitted": stats.foulsCommitted,
+              "footballStatistic.foulsSuffered": stats.foulsSuffered,
+              "footballStatistic.offsides": stats.offsides,
+            },
+          },
+          { new: true },
+        )
+        playerUpdatePromises.push(updatePromise)
+      }
+
+      // Execute all player updates
+      await Promise.all(playerUpdatePromises)
+
+      // Determine match result
+      let isTie = false
+      let actualWinningTeamId = null
+
+      if (isPenaltyShootout) {
+        // Result determined by penalty shootout
+        const homePenaltyScore = penaltyShootout.homeTeamScore || 0
+        const awayPenaltyScore = penaltyShootout.awayTeamScore || 0
+
+        if (homePenaltyScore > awayPenaltyScore) {
+          actualWinningTeamId = match.team1._id
+        } else if (awayPenaltyScore > homePenaltyScore) {
+          actualWinningTeamId = match.team2._id
+        } else {
+          isTie = true
+        }
+      } else {
+        // Regular time result
+        if (homeScore === awayScore) {
+          isTie = true
+        } else if (homeScore > awayScore) {
+          actualWinningTeamId = match.team1._id
+        } else {
+          actualWinningTeamId = match.team2._id
+        }
+      }
+
+      // Use provided winningTeamId if available, otherwise use calculated result
+      const finalWinningTeamId = winningTeamId || actualWinningTeamId
+
+      // Update team statistics
+      const team1UpdateData = {
+        $inc: {
+          "teamMatchsData.football.goals": homeScore,
+          "teamMatchsData.football.matchesPlayed": 1,
+          "teamMatchsData.football.wins": !isTie && match.team1._id.equals(finalWinningTeamId) ? 1 : 0,
+          "teamMatchsData.football.draws": isTie ? 1 : 0,
+          "teamMatchsData.football.losses": !isTie && !match.team1._id.equals(finalWinningTeamId) ? 1 : 0,
+        },
+      }
+
+      const team2UpdateData = {
+        $inc: {
+          "teamMatchsData.football.goals": awayScore,
+          "teamMatchsData.football.matchesPlayed": 1,
+          "teamMatchsData.football.wins": !isTie && match.team2._id.equals(finalWinningTeamId) ? 1 : 0,
+          "teamMatchsData.football.draws": isTie ? 1 : 0,
+          "teamMatchsData.football.losses": !isTie && !match.team2._id.equals(finalWinningTeamId) ? 1 : 0,
+        },
+      }
+
+      // Update both teams
+      await Promise.all([
+        Team.findByIdAndUpdate(match.team1._id, team1UpdateData),
+        Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
+      ])
+
+      // Update match status and result
+      match.status = "played"
+      match.isTie = isTie
+      match.winningTeamId = !isTie ? finalWinningTeamId : null
+
+      await match.save()
+
+      console.log("Football match data updated successfully with comprehensive player statistics.")
+
+      return {
+        success: true,
+        matchId: match._id,
+        finalScore: `${homeScore}-${awayScore}`,
+        winner: !isTie ? finalWinningTeamId : "Tie",
+        playersUpdated: playerStats.size,
+        isPenaltyShootout: isPenaltyShootout
+      };
+    } catch (error) {
+      console.error("Error updating football match data:", error)
+      throw error
+    }
+  },
 
   async teamRanking(ballType) {
     let teamsRanking;
