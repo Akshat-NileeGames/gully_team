@@ -24,10 +24,13 @@ router.put("/updateTeamMatchsData/:matchId", validateUser, matchController.updat
 router.put("/updateFootballMatchData/:matchId", validateUser, matchController.updateFootballMatchData);
 
 router.get("/teamRanking/:ballType", validateUser, matchController.teamRanking);
+router.get("/footballteamRanking", validateUser, matchController.getFootballTeamRankings);
 
-router.get("/playerRanking/:ballType/:skill", validateUser, matchController.playerRanking,);
+router.get("/playerRanking/:ballType/:skill", validateUser, matchController.playerRanking);
+router.get("/footballplayerRanking/:category", validateUser, matchController.footballplayerRanking)
 
 router.post("/topPerformers", validateUser, matchController.topPerformers);
+router.post("/footballtopPerformers", validateUser, matchController.getFootballTopPerformers);
 
 //nikhil
 // router.get(

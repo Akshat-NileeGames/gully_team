@@ -672,7 +672,6 @@ const matchServices = {
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
-
       const matchData = await Match.findByIdAndUpdate(
         MatchId,
         {
@@ -715,7 +714,6 @@ const matchServices = {
 
   //code by Nikhil
   async updateTeamMatchsData(matchId, winningTeamId) {
-    // Find the Match by ID
     const match = await Match.findOne({
       _id: matchId,
       status: { $ne: "played" },
@@ -1129,10 +1127,8 @@ const matchServices = {
 
   async updateFootballMatchData(matchId, winningTeamId) {
     try {
-      // Find the match that hasn't been played yet
       const match = await Match.findOne({
         _id: matchId,
-        // status: { $ne: "played" },
       }).populate(["team1", "team2"])
 
       if (!match) {
@@ -1164,17 +1160,13 @@ const matchServices = {
         if (player._id) {
           playerStats.set(player._id.toString(), {
             matchesPlayed: 1,
-            minutesPlayed: 0, // Keep as 0 as requested
             goals: 0,
             assists: 0,
-            saves: 0,
-            cleanSheets: 0,
-            penaltySaves: 0,
+            penaltyGoals: 0,
             yellowCards: 0,
             redCards: 0,
             foulsCommitted: 0,
             foulsSuffered: 0,
-            offsides: 0,
           })
         }
       })
@@ -1193,7 +1185,7 @@ const matchServices = {
         }
       })
 
-      // Process cards
+      // Process cards from cards array
       cards.forEach((card) => {
         const playerId = card.playerId?._id?.toString()
         if (playerId && playerStats.has(playerId)) {
@@ -1205,51 +1197,19 @@ const matchServices = {
         }
       })
 
-      // Process penalty shootout
+      // Process penalty shootout goals
       if (isPenaltyShootout && penaltyShootout.penalties) {
         penaltyShootout.penalties.forEach((penalty) => {
           const playerId = penalty.playerId?._id?.toString()
           if (playerId && playerStats.has(playerId)) {
-            // Check if penalty was scored
             if (penalty.result === "scored" || penalty.isScored === true) {
-              playerStats.get(playerId).goals += 1
+              playerStats.get(playerId).penaltyGoals += 1
             }
           }
         })
-
-        // Count penalty saves for goalkeepers
-        const homeGoalkeeper = scoreBoard.get("homeTeamGoalKeeper")
-        const awayGoalkeeper = scoreBoard.get("awayTeamGoalKeeper")
-
-        let homePenaltySaves = 0
-        let awayPenaltySaves = 0
-
-        penaltyShootout.penalties.forEach((penalty) => {
-          if (penalty.result === "missed" || penalty.isScored === false) {
-            // Determine which team took the penalty and increment saves for opposing goalkeeper
-            const penaltyTeamId = penalty.teamId?._id?.toString()
-            const homeTeamId = match.team1._id.toString()
-
-            if (penaltyTeamId === homeTeamId) {
-              // Home team penalty, away goalkeeper gets save
-              awayPenaltySaves += 1
-            } else {
-              // Away team penalty, home goalkeeper gets save
-              homePenaltySaves += 1
-            }
-          }
-        })
-
-        // Update goalkeeper penalty saves
-        if (homeGoalkeeper?._id && playerStats.has(homeGoalkeeper._id.toString())) {
-          playerStats.get(homeGoalkeeper._id.toString()).penaltySaves += homePenaltySaves
-        }
-        if (awayGoalkeeper?._id && playerStats.has(awayGoalkeeper._id.toString())) {
-          playerStats.get(awayGoalkeeper._id.toString()).penaltySaves += awayPenaltySaves
-        }
       }
 
-      // Process match events for saves, fouls, and other events
+      // Process match events for fouls and cards
       matchEvents.forEach((event) => {
         const playerId = event.playerId?._id?.toString()
         if (!playerId || !playerStats.has(playerId)) return
@@ -1257,43 +1217,40 @@ const matchServices = {
         const stats = playerStats.get(playerId)
 
         switch (event.eventType) {
-          case "goal_save":
-            stats.saves += 1
-            break
-
           case "foul":
+            // Player who committed the foul
             stats.foulsCommitted += 1
-            // Try to extract fouled player from description if available
-            // This is a basic implementation - you might need to adjust based on your data structure
+
+            // Extract the fouled player from description if available
+            // Looking for patterns like "General Foul by PLAYER1 on PLAYER2"
+            if (event.description) {
+              const foulPattern = /General Foul by .+ on (.+) -/
+              const match = event.description.match(foulPattern)
+              if (match) {
+                const fouledPlayerName = match[1].trim()
+
+                // Find the fouled player and increment their foulsSuffered
+                allPlayers.forEach((player) => {
+                  if (player.name === fouledPlayerName && player._id) {
+                    const fouledPlayerId = player._id.toString()
+                    if (playerStats.has(fouledPlayerId)) {
+                      playerStats.get(fouledPlayerId).foulsSuffered += 1
+                    }
+                  }
+                })
+              }
+            }
             break
 
-          case "offside":
-            stats.offsides += 1
+          case "yellow_card":
+            stats.yellowCards += 1
+            break
+
+          case "red_card":
+            stats.redCards += 1
             break
         }
       })
-
-      // Calculate clean sheets for goalkeepers
-      const homeGoalkeepers = (homeTeam.players || []).filter((p) => p.role === "Goal Keeper")
-      const awayGoalkeepers = (awayTeam.players || []).filter((p) => p.role === "Goal Keeper")
-
-      // Home goalkeepers get clean sheet if away team scored 0 goals
-      if (awayScore === 0) {
-        homeGoalkeepers.forEach((gk) => {
-          if (gk._id && playerStats.has(gk._id.toString())) {
-            playerStats.get(gk._id.toString()).cleanSheets = 1
-          }
-        })
-      }
-
-      // Away goalkeepers get clean sheet if home team scored 0 goals
-      if (homeScore === 0) {
-        awayGoalkeepers.forEach((gk) => {
-          if (gk._id && playerStats.has(gk._id.toString())) {
-            playerStats.get(gk._id.toString()).cleanSheets = 1
-          }
-        })
-      }
 
       // Update all player statistics in the database
       const playerUpdatePromises = []
@@ -1303,17 +1260,13 @@ const matchServices = {
           {
             $inc: {
               "footballStatistic.matchesPlayed": stats.matchesPlayed,
-              "footballStatistic.minutesPlayed": stats.minutesPlayed,
               "footballStatistic.goals": stats.goals,
               "footballStatistic.assists": stats.assists,
-              "footballStatistic.saves": stats.saves,
-              "footballStatistic.cleanSheets": stats.cleanSheets,
-              "footballStatistic.penaltySaves": stats.penaltySaves,
+              "footballStatistic.penaltyGoals": stats.penaltyGoals,
               "footballStatistic.yellowCards": stats.yellowCards,
               "footballStatistic.redCards": stats.redCards,
               "footballStatistic.foulsCommitted": stats.foulsCommitted,
               "footballStatistic.foulsSuffered": stats.foulsSuffered,
-              "footballStatistic.offsides": stats.offsides,
             },
           },
           { new: true },
@@ -1321,7 +1274,6 @@ const matchServices = {
         playerUpdatePromises.push(updatePromise)
       }
 
-      // Execute all player updates
       await Promise.all(playerUpdatePromises)
 
       // Determine match result
@@ -1329,7 +1281,6 @@ const matchServices = {
       let actualWinningTeamId = null
 
       if (isPenaltyShootout) {
-        // Result determined by penalty shootout
         const homePenaltyScore = penaltyShootout.homeTeamScore || 0
         const awayPenaltyScore = penaltyShootout.awayTeamScore || 0
 
@@ -1341,7 +1292,6 @@ const matchServices = {
           isTie = true
         }
       } else {
-        // Regular time result
         if (homeScore === awayScore) {
           isTie = true
         } else if (homeScore > awayScore) {
@@ -1351,10 +1301,8 @@ const matchServices = {
         }
       }
 
-      // Use provided winningTeamId if available, otherwise use calculated result
       const finalWinningTeamId = winningTeamId || actualWinningTeamId
 
-      // Update team statistics
       const team1UpdateData = {
         $inc: {
           "teamMatchsData.football.goals": homeScore,
@@ -1375,7 +1323,6 @@ const matchServices = {
         },
       }
 
-      // Update both teams
       await Promise.all([
         Team.findByIdAndUpdate(match.team1._id, team1UpdateData),
         Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
@@ -1388,7 +1335,7 @@ const matchServices = {
 
       await match.save()
 
-      console.log("Football match data updated successfully with comprehensive player statistics.")
+      console.log("Football match data updated successfully.")
 
       return {
         success: true,
@@ -1397,7 +1344,7 @@ const matchServices = {
         winner: !isTie ? finalWinningTeamId : "Tie",
         playersUpdated: playerStats.size,
         isPenaltyShootout: isPenaltyShootout
-      };
+      }
     } catch (error) {
       console.error("Error updating football match data:", error)
       throw error
@@ -1433,6 +1380,85 @@ const matchServices = {
     return teamsRanking;
   },
 
+  async getFootballTeamRankings() {
+    // const { , sortBy = "points" } = options
+    const limit = 20
+    try {
+      const teamRankings = await Team.aggregate([
+        {
+          $match: {
+            teamfor: "football",
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            teamLogo: 1,
+            teamName: 1,
+            registeredAt: "$createdAt",
+            matchesPlayed: { $ifNull: ["$teamMatchsData.football.matchesPlayed", 0] },
+            numberOfWins: { $ifNull: ["$teamMatchsData.football.wins", 0] },
+            draws: { $ifNull: ["$teamMatchsData.football.draws", 0] },
+            losses: { $ifNull: ["$teamMatchsData.football.losses", 0] },
+            goals: { $ifNull: ["$teamMatchsData.football.goals", 0] },
+            goalsConceded: { $ifNull: ["$teamMatchsData.football.goalsConceded", 0] },
+            cleanSheets: { $ifNull: ["$teamMatchsData.football.cleanSheets", 0] },
+          },
+        },
+        {
+          $addFields: {
+            points: {
+              $add: [{ $multiply: ["$wins", 3] }, { $multiply: ["$draws", 1] }],
+            },
+            goalDifference: { $subtract: ["$goals", "$goalsConceded"] },
+            winPercentage: {
+              $cond: {
+                if: { $gt: ["$matchesPlayed", 0] },
+                then: {
+                  $round: [{ $multiply: [{ $divide: ["$wins", "$matchesPlayed"] }, 100] }, 2],
+                },
+                else: 0,
+              },
+            },
+            goalsPerMatch: {
+              $cond: {
+                if: { $gt: ["$matchesPlayed", 0] },
+                then: {
+                  $round: [{ $divide: ["$goals", "$matchesPlayed"] }, 2],
+                },
+                else: 0,
+              },
+            },
+          },
+        },
+        // {
+        //   $sort: {
+        //     wins: { wins: -1, },
+        //   }
+        // },
+        {
+          $sort: (() => {
+            const sortOptions = {
+              wins: { wins: -1, }
+            };
+            return sortOptions.wins;
+          })(),
+        },
+        {
+          $limit: limit,
+        },
+        {
+          $addFields: {
+            rank: { $add: [{ $indexOfArray: [{ $range: [0, limit] }, "$_id"] }, 1] },
+          },
+        },
+      ])
+
+      return teamRankings
+    } catch (error) {
+      throw new Error(`Error fetching team rankings: ${error.message}`)
+    }
+  },
   async playerRanking(ballType, skill) {
     const sortingField = skill === "batting" ? `runs` : `wickets`;
     const playerRankingWithImage = await Player.aggregate([
@@ -1546,7 +1572,167 @@ const matchServices = {
     ]);
     return playerRankingWithImage;
   },
+  /**
+   * Get comprehensive player rankings for football
+   * @param {string} category - Ranking category (goals, assists, saves, matches_played)
+   * @param {Object} options - Additional options
+   * @returns {Array} Ranked players with statistics
+   */
+  // Updated footballplayerRanking service method
+  async footballplayerRanking(data) {
+    const { category } = data;
+    const limit = 30;
+    const position = null;
 
+    try {
+      const matchConditions = {
+        footballStatistic: { $exists: true },
+      }
+      if (position) {
+        matchConditions.role = position
+      }
+
+      const playerRankings = await Player.aggregate([
+        {
+          $match: matchConditions,
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "userDetails",
+          },
+        },
+        {
+          $lookup: {
+            from: "teams",
+            localField: "team",
+            foreignField: "_id",
+            as: "teamDetails",
+          },
+        },
+        {
+          $unwind: {
+            path: "$userDetails",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $unwind: {
+            path: "$teamDetails",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            playerName: { $ifNull: ["$userDetails.fullName", "$name"] },
+            profilePhoto: { $ifNull: ["$userDetails.profilePhoto", ""] },
+            teamName: { $ifNull: ["$teamDetails.teamName", ""] },
+            role: "$role",
+            goals: { $ifNull: ["$footballStatistic.goals", 0] },
+            assists: { $ifNull: ["$footballStatistic.assists", 0] },
+            saves: { $ifNull: ["$footballStatistic.saves", 0] },
+            matchesPlayed: { $ifNull: ["$footballStatistic.matchesPlayed", 0] },
+            minutesPlayed: { $ifNull: ["$footballStatistic.minutesPlayed", 0] },
+            cleanSheets: { $ifNull: ["$footballStatistic.cleanSheets", 0] },
+            penaltyGoals: { $ifNull: ["$footballStatistic.penaltyGoals", 0] },
+            penaltySaves: { $ifNull: ["$footballStatistic.penaltySaves", 0] },
+            yellowCards: { $ifNull: ["$footballStatistic.yellowCards", 0] },
+            redCards: { $ifNull: ["$footballStatistic.redCards", 0] },
+            foulsCommitted: { $ifNull: ["$footballStatistic.foulsCommitted", 0] },
+            foulsSuffered: { $ifNull: ["$footballStatistic.foulsSuffered", 0] },
+          },
+        },
+        {
+          $addFields: {
+            // Calculate performance metrics
+            goalsPerMatch: {
+              $cond: {
+                if: { $gt: ["$matchesPlayed", 0] },
+                then: { $round: [{ $divide: ["$goals", "$matchesPlayed"] }, 2] },
+                else: 0,
+              },
+            },
+            assistsPerMatch: {
+              $cond: {
+                if: { $gt: ["$matchesPlayed", 0] },
+                then: { $round: [{ $divide: ["$assists", "$matchesPlayed"] }, 2] },
+                else: 0,
+              },
+            },
+            savesPerMatch: {
+              $cond: {
+                if: { $gt: ["$matchesPlayed", 0] },
+                then: { $round: [{ $divide: ["$saves", "$matchesPlayed"] }, 2] },
+                else: 0,
+              },
+            },
+            foulsPerMatch: {
+              $cond: {
+                if: { $gt: ["$matchesPlayed", 0] },
+                then: { $round: [{ $divide: ["$foulsCommitted", "$matchesPlayed"] }, 2] },
+                else: 0,
+              },
+            },
+            overallRating: {
+              $round: [
+                {
+                  $add: [
+                    { $multiply: ["$goals", 3] },
+                    { $multiply: ["$assists", 2] },
+                    { $multiply: ["$saves", 1] },
+                    { $multiply: ["$cleanSheets", 2] },
+                    { $multiply: ["$penaltyGoals", 1] },
+                    { $multiply: ["$penaltySaves", 2] },
+                  ],
+                },
+                2,
+              ],
+            },
+          },
+        },
+        {
+          $sort: (() => {
+            const sortOptions = {
+              goals: { goals: -1, assists: -1 },
+              assists: { assists: -1, goals: -1 },
+              saves: { saves: -1, cleanSheets: -1 },
+              matches_played: { matchesPlayed: -1, goals: -1 },
+              overall: { overallRating: -1, goals: -1 },
+              fouls: { foulsCommitted: -1, yellowCards: -1 },
+              penalty_goals: { penaltyGoals: -1, goals: -1 },
+              penalty_saves: { penaltySaves: -1, saves: -1 },
+            };
+            return sortOptions[category] || sortOptions.goals;
+          })(),
+        },
+        {
+          $limit: limit,
+        },
+      ])
+
+      // Add rank to each player
+      playerRankings.forEach((player, index) => {
+        player.rank = index + 1
+      })
+
+      return playerRankings
+    } catch (error) {
+      throw new Error(`Error fetching player rankings: ${error.message}`)
+    }
+  },
+  async _getPlayerSortCriteria(category) {
+    const sortOptions = {
+      goals: { goals: -1, assists: -1 },
+      assists: { assists: -1, goals: -1 },
+      saves: { saves: -1, cleanSheets: -1 },
+      matches_played: { matchesPlayed: -1, goals: -1 },
+      overall: { overallRating: -1, goals: -1 },
+    }
+
+    return sortOptions[category] || sortOptions.goals
+  },
   //code by DG
   async topPerformers(data) {
     const { latitude, longitude, startDate, filter } = data;
@@ -1685,8 +1871,119 @@ const matchServices = {
     return top10Players;
   },
 
+  async getFootballTopPerformers(criteria) {
+    const { startDate, category = "overall", limit = 10 } = criteria;
 
+    try {
+      if (!startDate) {
+        throw new Error("Start date is required");
+      }
 
+      console.log("Start Date:", startDate);
+
+      // Use startDate as-is if it's a valid Date object or ISO string
+      const dateOnly = new Date(startDate);
+      if (isNaN(dateOnly.getTime())) {
+        throw new Error("Invalid start date format");
+      }
+
+      const startDateTime = new Date(dateOnly.setHours(0, 0, 0, 0));
+      const endDateTime = new Date(dateOnly.setHours(23, 59, 59, 999));
+
+      // Find matches on the specified date
+      const matches = await Match.find({
+        dateTime: { $gte: startDateTime, $lte: endDateTime },
+        isFinished: true,
+      }).populate([
+        {
+          path: "team1",
+          populate: {
+            path: "players",
+            populate: {
+              path: "userId",
+              select: "fullName profilePhoto",
+            },
+          },
+        },
+        {
+          path: "team2",
+          populate: {
+            path: "players",
+            populate: {
+              path: "userId",
+              select: "fullName profilePhoto",
+            },
+          },
+        },
+      ]);
+
+      if (matches.length === 0) {
+        return [];
+      }
+
+      const playerPerformances = [];
+
+      matches.forEach((match) => {
+        if (match.scoreBoard && match.scoreBoard.football) {
+          const team1Players = match.scoreBoard.football.team1?.players || [];
+          const team2Players = match.scoreBoard.football.team2?.players || [];
+
+          [...team1Players, ...team2Players].forEach((playerData) => {
+            if (playerData.playerId) {
+              const goals = playerData.goals || 0;
+              const assists = playerData.assists || 0;
+              const saves = playerData.saves || 0;
+
+              // Inline performance score logic (replacing async _calculatePerformanceScore)
+              let performanceScore = 0;
+              switch (category) {
+                case "goals":
+                  performanceScore = goals * 3 + assists * 1;
+                  break;
+                case "assists":
+                  performanceScore = assists * 3 + goals * 1;
+                  break;
+                case "saves":
+                  performanceScore = saves * 2;
+                  break;
+                case "overall":
+                default:
+                  performanceScore = goals * 3 + assists * 2 + saves * 1;
+                  break;
+              }
+
+              playerPerformances.push({
+                playerId: playerData.playerId,
+                playerName: playerData.playerName || playerData.name,
+                profilePhoto: playerData.profilePhoto || "",
+                matchId: match._id,
+                performanceDate: match.dateTime,
+                goals,
+                assists,
+                saves,
+                category,
+                performanceScore,
+              });
+            }
+          });
+        }
+      });
+
+      // Sort by score
+      const topPerformers = playerPerformances
+        .sort((a, b) => b.performanceScore - a.performanceScore)
+        .slice(0, limit);
+
+      // Assign ranks
+      topPerformers.forEach((performer, index) => {
+        performer.rank = index + 1;
+      });
+
+      return topPerformers;
+    } catch (error) {
+      throw new Error(`Error fetching top performers: ${error.message}`);
+    }
+  },
   //original code by nikhil
   // async topPerformers(data) {
   //   let { latitude, longitude, startDate, filter } = data;

@@ -80,7 +80,10 @@ const playerSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
-
+    penaltyGoals: {
+      type: Number,
+      default: 0
+    },
     yellowCards: {
       type: Number,
       default: 0

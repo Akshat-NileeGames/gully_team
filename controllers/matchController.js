@@ -415,7 +415,33 @@ const matchController = {
       return next(err);
     }
   },
+  async getFootballTeamRankings(req, res, next) {
+    // const schema = Joi.object({
+    //   limit: Joi.number().integer().min(1).max(100).default(20),
+    //   sortBy: Joi.string().valid("points", "wins", "goals", "goalDifference").default("points"),
+    // })
 
+    // const { error, value } = schema.validate(req.query)
+    // if (error) {
+    //   return next(CustomErrorHandler.validationError(error.details[0].message))
+    // }
+
+    try {
+      const rankings = await matchServices.getFootballTeamRankings()
+
+      return res.status(200).json({
+        success: true,
+        message: "Team rankings retrieved successfully",
+        data: {
+          teamsRanking: rankings,
+          totalTeams: rankings.length,
+        },
+      })
+    } catch (error) {
+      console.error("Error in getTeamRankings:", error)
+      return next(CustomErrorHandler.serverError(error.message))
+    }
+  },
   async playerRanking(req, res, next) {
     let ballType = req.params.ballType;
     let skill = req.params.skill;
@@ -432,7 +458,58 @@ const matchController = {
       return next(err);
     }
   },
-  
+
+  async footballplayerRanking(req, res, next) {
+
+    // const schema = Joi.object({
+    //   category: Joi.string().valid("goals", "assists", "saves", "matches_played", "overall").required(),
+    //   limit: Joi.number().integer().min(1).max(100).default(20),
+    //   position: Joi.string().valid("Goal Keeper", "Defender", "Midfielder", "Attacker", "Striker").optional(),
+    // })
+
+    // const { error, value } = schema.validate({
+    //   category: req.params.category,
+    //   ...req.query,
+    // })
+
+    // if (error) {
+    //   return next(CustomErrorHandler.validationError(error.details[0].message))
+    // }
+    const ranking = Joi.object({
+      category: Joi.string().valid(
+        "goals",
+        "assists",
+        "saves",
+        "matches_played",
+        "fouls",
+        "penalty_goals",
+        "penalty_saves"
+      ).required(),
+    });
+    const { error } = ranking.validate(req.params);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
+
+    try {
+      // const rankings = matchServices.footballplayerRanking(value.category, {
+      //   limit: value.limit,
+      //   position: value.position,
+      // })
+      const rankings = await matchServices.footballplayerRanking(req.params)
+
+      return res.status(200).json({
+        success: true,
+        message: "Player rankings retrieved successfully",
+        data: {
+          playerRanking: rankings,
+        },
+      })
+    } catch (error) {
+      console.error("Error in getPlayerRankings:", error)
+      return next(CustomErrorHandler.serverError(error.message))
+    }
+  },
+
+
   async topPerformers(req, res, next) {
     try {
       const result = await matchServices.topPerformers(req.body);
@@ -445,6 +522,41 @@ const matchController = {
     } catch (err) {
       console.error("Error in retrieving top performers:", err);
       return next(err);
+    }
+  },
+  async getFootballTopPerformers(req, res, next) {
+    // Validation schema
+    const schema = Joi.object({
+      startDate: Joi.date().iso().required(),
+      category: Joi.string().valid("goals", "assists", "saves", "overall").default("overall"),
+      limit: Joi.number().integer().min(1).max(50).default(10),
+    })
+
+    const { error, value } = schema.validate(req.body)
+    if (error) {
+      return next(CustomErrorHandler.validationError(error.details[0].message))
+    }
+
+    try {
+      const topPerformers = await matchServices.getFootballTopPerformers({
+        startDate: value.startDate,
+        category: value.category,
+        limit: value.limit,
+      })
+
+      return res.status(200).json({
+        success: true,
+        message: "Top performers retrieved successfully",
+        data: {
+          topPerformers: topPerformers,
+          date: value.startDate,
+          category: value.category,
+          totalPerformers: topPerformers.length,
+        },
+      })
+    } catch (error) {
+      console.error("Error in getTopPerformers:", error)
+      return next(CustomErrorHandler.serverError(error.message))
     }
   },
 

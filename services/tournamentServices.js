@@ -716,7 +716,6 @@ const tournamentServices = {
         },
       },
     ];
-    console.log(orCondition);
     // for current Tournament
     // Condition to use $or or an empty array based on a certain condition
     if (checkcondition || filter == "current") {
@@ -1196,7 +1195,6 @@ const tournamentServices = {
   //to get all Tournament Created by organizer
   async getAllTournamentByOrganizer() {
     let userInfo = global.user;
-    console.log("User ID from Token:", userInfo.userId);  // Log userId
 
     const currentDate = new Date();
 
@@ -1400,24 +1398,19 @@ const tournamentServices = {
     // Send notification to the tournament organizer
     const tournament = await Tournament.findById(tournamentID);
     const userId = tournament.user._id;
-    console.log("User id:", userId);
     const user = await User.findOne({ _id: userId });
     if (!user) {
       throw CustomErrorHandler.notFound("User not found.");
     }
     const fcmToken = user.fcmToken;
-    console.log("Organizer FCM Token:", fcmToken);
     if (fcmToken) {
       const notificationData = {
         title: "Gully Team",
         body: `${team.teamName} has sent you a join request for the ${tournament.tournamentName} tournament.`,
       };
 
-      console.log("Sending notification to organizer with token:", user.fcmToken);  // Log the FCM token
-
       try {
         const response = await firebaseNotification.sendNotification(fcmToken, notificationData);
-        console.log("Notification sent to the organizer successfully:", response);
       } catch (error) {
         console.error("Error sending notification:", error);
       }
