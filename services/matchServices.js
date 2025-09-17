@@ -2876,9 +2876,338 @@ const matchServices = {
 
   },
 
+  // async getFootballPerformance(data) {
+  //   try {
+  //     const { userId } = data;
 
+  //     const user = await User.findById(userId).select("phoneNumber").lean();
+  //     if (!user) throw CustomErrorHandler.notFound("User not found.");
+  //     const userPhoneNumber = user.phoneNumber;
+
+  //     // Get tournaments related to user and football
+  //     const userTournaments = await Tournament.find({
+  //       $or: [
+  //         { user: userId },
+  //         { tournamentfor: "football" },
+  //         { organizer: userId },
+  //         { coHostId1: userId },
+  //         { coHostId2: userId }
+  //       ],
+  //       isDeleted: false,
+  //     }, {
+  //       locationHistory: 0,
+  //       matches: 0,
+  //       payments: 0,
+  //     });
+  //     const tournamentIds = userTournaments.map(t => t._id);
+  //     // Get played matches where user participated
+  //     const matches = await Match.find({
+  //       tournament: { $in: tournamentIds },
+  //       status: "played",
+  //       scoreBoard: { $ne: null },
+  //       $or: [
+  //         { "scoreBoard.homeTeam.players.phoneNumber": userPhoneNumber },
+  //         { "scoreBoard.awayTeam.players.phoneNumber": userPhoneNumber },
+  //       ],
+  //     }, {
+  //       scoreBoard: 0
+  //     })
+  //     // .populate("tournament", "tournamentName tournamentStartDateTime tournamentEndDateTime")
+  //     // .lean();
+  //     // Latest 5 performances for recent form
+  //     const latestPerformances = await Match.find({
+  //       status: "played",
+  //       scoreBoard: { $ne: null },
+  //       $or: [
+  //         { "scoreBoard.homeTeam.players.phoneNumber": userPhoneNumber },
+  //         { "scoreBoard.awayTeam.players.phoneNumber": userPhoneNumber },
+  //       ],
+  //     })
+  //       .sort({ dateTime: -1 })
+  //       .limit(5)
+  //       .lean();
+  //     // console.log(latestPerformances);
+
+  //     const player = await Player.findOne({ phoneNumber: userPhoneNumber }).lean();
+  //     const latestMatchesData = latestPerformances.map(match => {
+  //       const team1Players = match?.scoreBoard?.homeTeam?.players || [];
+  //       const team2Players = match?.scoreBoard?.awayTeam?.players || [];
+
+  //       const allPlayers = team1Players.concat(team2Players);
+  //       const playerStats = allPlayers.find(p => p.phoneNumber === userPhoneNumber);
+  //       // const stats = playerStats?.footballStatistic || {};
+  //       const stats = player?.footballStatistic || {};
+  //       // console.log(playerStats);
+  //       console.log(player);
+  //       return {
+  //         _id: match._id,
+  //         dateTime: match.dateTime,
+  //         team1: match?.scoreBoard?.homeTeam?.teamName || 'N/A',
+  //         team2: match?.scoreBoard?.awayTeam?.teamName || 'N/A',
+  //         playerData: {
+  //           goals: stats.goals || 0,
+  //           assists: stats.assists || 0,
+  //           saves: stats.saves || 0,
+  //           yellowCards: stats.yellowCards || 0,
+  //           redCards: stats.redCards || 0,
+  //           foulsCommitted: stats.foulsCommitted || 0,
+  //           foulsSuffered: stats.foulsSuffered || 0,
+  //           penaltySaves: stats.penaltySaves || 0,
+  //           penaltyGoals: stats.penaltyGoals || 0,
+  //         }
+  //       };
+  //     });
+
+  //     // Get all performance data from Player collection
+  //     const allPerformances = await Player.find({
+  //       userId,
+  //       footballStatistic: { $exists: true }
+  //     }).lean();
+
+  //     // Calculate aggregated data
+  //     const aggregatedData = {
+  //       matchesPlayed: 0,
+  //       totalGoals: 0,
+  //       totalAssists: 0,
+  //       totalSaves: 0,
+  //       totalYellowCards: 0,
+  //       totalRedCards: 0,
+  //       totalFoulsCommitted: 0,
+  //       totalFoulsSuffered: 0,
+  //       totalPenaltySaves: 0,
+  //       totalPenaltyGoals: 0,
+  //     };
+
+  //     // Aggregate performance data from Player collection
+  //     allPerformances.forEach(perf => {
+  //       const stats = perf.footballStatistic || {};
+  //       aggregatedData.matchesPlayed += stats.matchesPlayed || 0;
+  //       aggregatedData.totalGoals += stats.goals || 0;
+  //       aggregatedData.totalAssists += stats.assists || 0;
+  //       aggregatedData.totalSaves += stats.saves || 0;
+  //       aggregatedData.totalYellowCards += stats.yellowCards || 0;
+  //       aggregatedData.totalRedCards += stats.redCards || 0;
+  //       aggregatedData.totalFoulsCommitted += stats.foulsCommitted || 0;
+  //       aggregatedData.totalFoulsSuffered += stats.foulsSuffered || 0;
+  //       aggregatedData.totalPenaltySaves += stats.penaltySaves || 0;
+  //       aggregatedData.totalPenaltyGoals += stats.penaltyGoals || 0;
+  //     });
+
+  //     // Enhanced recent form calculation with goals and assists focus
+  //     const recentFormData = latestMatchesData.map((match, index) => {
+  //       const goals = match.playerData?.goals || 0;
+  //       const assists = match.playerData?.assists || 0;
+
+  //       return {
+  //         matchIndex: index + 1,
+  //         goals,
+  //         assists,
+  //         totalContribution: goals + assists,
+  //         matchDate: match.dateTime,
+  //         performance: goals > 0 || assists > 0 ? 'positive' : 'neutral'
+  //       };
+  //     });
+
+  //     // Calculate recent form summary
+  //     const recentFormSummary = {
+  //       totalGoalsInRecentMatches: recentFormData.reduce((sum, match) => sum + match.goals, 0),
+  //       totalAssistsInRecentMatches: recentFormData.reduce((sum, match) => sum + match.assists, 0),
+  //       matchesWithContribution: recentFormData.filter(match => match.totalContribution > 0).length,
+  //       averageGoalsPerMatch: recentFormData.length > 0
+  //         ? (recentFormData.reduce((sum, match) => sum + match.goals, 0) / recentFormData.length).toFixed(2)
+  //         : 0,
+  //       averageAssistsPerMatch: recentFormData.length > 0
+  //         ? (recentFormData.reduce((sum, match) => sum + match.assists, 0) / recentFormData.length).toFixed(2)
+  //         : 0
+  //     };
+
+  //     return {
+  //       aggregatedData,
+  //       matches,
+  //       latestMatchesData,
+  //       userTournaments,
+  //       recentFormData,
+  //       recentFormSummary,
+  //     };
+
+  //   } catch (error) {
+  //     console.error("Failed to get Football Performance:", error);
+  //     throw error;
+  //   }
+  // },
+  async getFootballPerformance(data) {
+    try {
+      const { userId } = data;
+      const user = await User.findById(userId).select("phoneNumber").lean();
+      if (!user) {
+        throw new Error("User not found");
+      }
+      const userPhone = user.phoneNumber;
+
+      // 2. Get tournaments relevant for this user + football
+      const userTournaments = await Tournament.find({
+        $or: [
+          { user: userId },
+          { tournamentfor: "football" },
+          { organizer: userId },
+          { coHostId1: userId },
+          { coHostId2: userId }
+        ],
+        isDeleted: false
+      }).lean();
+
+      const tournamentIds = userTournaments.map(t => t._id);
+
+      // 3. Fetch matches played where user’s team is involved
+      //    and get latest 5 as well
+      const matches = await Match.find({
+        tournament: { $in: tournamentIds },
+        status: "played",
+        scoreBoard: { $ne: null },
+        $or: [
+          { "scoreBoard.homeTeam.players.phoneNumber": userPhone },
+          { "scoreBoard.awayTeam.players.phoneNumber": userPhone },
+        ],
+      })
+
+      const latestMatches = await Match.find({
+        status: "played",
+        scoreBoard: { $ne: null },
+        $or: [
+          { "scoreBoard.homeTeam.players.phoneNumber": userPhone },
+          { "scoreBoard.awayTeam.players.phoneNumber": userPhone }
+        ]
+      })
+        .sort({ dateTime: -1 })
+        .limit(5)
+        .lean();
+
+      // 4. To get stats from Player collection by team
+      //    First collect all team IDs from latestMatches for which user is involved
+      const teamIdsInLatest = latestMatches.map(m => {
+        const homeTeamId = m.scoreBoard?.homeTeam?._id;
+        const awayTeamId = m.scoreBoard?.awayTeam?._id;
+        // check which of these match user's team via Player.team
+        // We’ll filter later
+        return [homeTeamId, awayTeamId];
+      }).flat().filter(Boolean);
+
+      // 5. Fetch the Player doc for this user in those teams
+      const playerDocs = await Player.find({
+        userId: userId,
+        team: { $in: teamIdsInLatest }
+      }).lean();
+
+      // Might assume only one, but could be multiple if user plays in multiple teams
+      // Build a map by teamId to that player's stats
+      const playerStatsMap = {}; // { teamId: stats }
+      playerDocs.forEach(p => {
+        if (p.team && p.footballStatistic) {
+          playerStatsMap[String(p.team)] = p.footballStatistic;
+        }
+      });
+
+      // 6. Build latestMatchesData
+      const latestMatchesData = latestMatches.map(match => {
+        const homeTeam = match.scoreBoard?.homeTeam;
+        const awayTeam = match.scoreBoard?.awayTeam;
+
+        // Which team is the user's?
+        // Match against phone number (if unique) OR via playerStatsMap
+        let stats = null;
+
+        // Option A: via phoneNumber
+        const allPlayers = [
+          ...(homeTeam?.players || []),
+          ...(awayTeam?.players || [])
+        ];
+        const foundByPhone = allPlayers.find(p => p.phoneNumber === userPhone);
+        if (foundByPhone?.footballStatistic) {
+          stats = foundByPhone.footballStatistic;
+        }
+
+        // Option B: via Player.team
+        if (!stats) {
+          const homeId = homeTeam?._id;
+          const awayId = awayTeam?._id;
+          if (homeId && playerStatsMap[String(homeId)]) {
+            stats = playerStatsMap[String(homeId)];
+          } else if (awayId && playerStatsMap[String(awayId)]) {
+            stats = playerStatsMap[String(awayId)];
+          }
+        }
+
+        // If still null, fallback to zeros
+        stats = stats || {};
+
+        return {
+          _id: match._id,
+          dateTime: match.dateTime,
+          team1: homeTeam?.teamName || "N/A",
+          team2: awayTeam?.teamName || "N/A",
+          playerData: {
+            goals: stats.goals || 0,
+            assists: stats.assists || 0,
+            saves: stats.saves || 0,
+            yellowCards: stats.yellowCards || 0,
+            redCards: stats.redCards || 0,
+            foulsCommitted: stats.foulsCommitted || 0,
+            foulsSuffered: stats.foulsSuffered || 0,
+            penaltySaves: stats.penaltySaves || 0,
+            penaltyGoals: stats.penaltyGoals || 0,
+          }
+        };
+      });
+
+      // 7. Similarly aggregate full performance from Player collection
+      const allPlayerPerformances = await Player.find({
+        userId,
+        footballStatistic: { $exists: true }
+      }).lean();
+
+      const aggregatedData = {
+        matchesPlayed: 0,
+        totalGoals: 0,
+        totalAssists: 0,
+        totalSaves: 0,
+        totalYellowCards: 0,
+        totalRedCards: 0,
+        totalFoulsCommitted: 0,
+        totalFoulsSuffered: 0,
+        totalPenaltySaves: 0,
+        totalPenaltyGoals: 0,
+      };
+
+      allPlayerPerformances.forEach(p => {
+        const st = p.footballStatistic;
+        aggregatedData.matchesPlayed += st.matchesPlayed || 0;
+        aggregatedData.totalGoals += st.goals || 0;
+        aggregatedData.totalAssists += st.assists || 0;
+        aggregatedData.totalSaves += st.saves || 0;
+        aggregatedData.totalYellowCards += st.yellowCards || 0;
+        aggregatedData.totalRedCards += st.redCards || 0;
+        aggregatedData.totalFoulsCommitted += st.foulsCommitted || 0;
+        aggregatedData.totalFoulsSuffered += st.foulsSuffered || 0;
+        aggregatedData.totalPenaltySaves += st.penaltySaves || 0;
+        aggregatedData.totalPenaltyGoals += st.penaltyGoals || 0;
+      });
+
+      // 8. Return full performance result
+      return {
+        aggregatedData,
+        matches,
+        latestMatchesData,
+        userTournaments,
+        // plus other fields you need
+      };
+
+    } catch (err) {
+      console.error("Error in getFootballPerformance:", err);
+      throw err;
+    }
+  },
   async createChallengeMatch(data) {
-    const { team1ID, team2ID, dateTime } = data;
+    const { team1ID, team2ID, dateTime, challengeforSport } = data;
 
     const userInfo = global.user;
 
@@ -2932,6 +3261,7 @@ const matchServices = {
       captain1: userInfo.userId,
       captain2: teamData.userId,
       challengedBy: userInfo.userId,
+      challengeforSport: challengeforSport
       // dateTime: dateTime,
     });
 

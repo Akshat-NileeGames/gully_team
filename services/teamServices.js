@@ -1221,8 +1221,72 @@ const teamServices = {
     return looking;
   },
 
+  // async getAllNearByTeam(data) {
+  //   const { latitude, longitude } = data;
+  //   const userInfo = global.user;
+
+  //   const NearByTeams = await User.aggregate([
+  //     {
+  //       $geoNear: {
+  //         near: {
+  //           type: "Point",
+  //           coordinates: [parseFloat(longitude), parseFloat(latitude)],
+  //         },
+
+  //         distanceField: "distance",
+  //         spherical: true,
+  //         // distanceCalc: "dist.calculated",
+
+  //         query: {
+  //           isDeleted: false,
+  //           isNewUser: false,
+  //         },
+  //         key: "location", // Specify the index key
+  //       },
+  //     },
+  //     {
+  //       $addFields: {
+  //         distanceInKm: {
+  //           $divide: ["$distance", 1000],
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $match: {
+  //         distanceInKm: { $lt: 30 }, // Adjust as needed 3000 meaks 3km
+  //       },
+  //     },
+  //     {
+  //       $match: {
+  //         _id: { $ne: ObjectId(userInfo.userId) }, // Filter out the user with the specified userId
+  //       },
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: "teams", // Replace with the actual name of your teams collection
+  //         localField: "_id",
+  //         foreignField: "userId",
+  //         as: "teams",
+  //       },
+  //     },
+  //     {
+  //       $project: {
+  //         fullName: 1,
+  //         email: 1,
+  //         distanceInKm: 1,
+  //         "teams.teamName": 1,
+  //         "teams.teamLogo": 1,
+  //         "teams._id": 1,
+  //         // Add other fields you want to include in the result
+  //       },
+  //     },
+  //   ]);
+
+  //   return NearByTeams;
+  // },
+
   async getAllNearByTeam(data) {
-    const { latitude, longitude } = data;
+    const { latitude, longitude, sport } = data;
     const userInfo = global.user;
 
     const NearByTeams = await User.aggregate([
@@ -1232,16 +1296,13 @@ const teamServices = {
             type: "Point",
             coordinates: [parseFloat(longitude), parseFloat(latitude)],
           },
-
           distanceField: "distance",
           spherical: true,
-          // distanceCalc: "dist.calculated",
-
           query: {
             isDeleted: false,
             isNewUser: false,
           },
-          key: "location", // Specify the index key
+          key: "location",
         },
       },
       {
@@ -1253,20 +1314,33 @@ const teamServices = {
       },
       {
         $match: {
-          distanceInKm: { $lt: 30 }, // Adjust as needed 3000 meaks 3km
-        },
-      },
-      {
-        $match: {
-          _id: { $ne: ObjectId(userInfo.userId) }, // Filter out the user with the specified userId
+          distanceInKm: { $lt: 30 },
+          _id: { $ne: mongoose.Types.ObjectId(userInfo.userId) },
         },
       },
       {
         $lookup: {
-          from: "teams", // Replace with the actual name of your teams collection
+          from: "teams",
           localField: "_id",
           foreignField: "userId",
           as: "teams",
+        },
+      },
+      {
+        $unwind: "$teams", // Flatten the array to filter based on teamfor
+      },
+      {
+        $match: {
+          "teams.teamfor": sport,
+        },
+      },
+      {
+        $group: {
+          _id: "$_id",
+          fullName: { $first: "$fullName" },
+          email: { $first: "$email" },
+          distanceInKm: { $first: "$distanceInKm" },
+          teams: { $push: "$teams" },
         },
       },
       {
@@ -1277,14 +1351,13 @@ const teamServices = {
           "teams.teamName": 1,
           "teams.teamLogo": 1,
           "teams._id": 1,
-          // Add other fields you want to include in the result
+          "teams.teamfor": 1,
         },
       },
     ]);
 
     return NearByTeams;
   },
-
   async getTeamCount() {
     //Find the Banner
     const totalTeams = await Team.countDocuments();

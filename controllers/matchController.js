@@ -609,6 +609,26 @@ const matchController = {
       return next(err);
     }
   },
+  async getFootballPerformance(req, res, next) {
+    const user = Joi.object({
+      userId: Joi.string().required()
+    });
+    const { error } = user.validate(req.params);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
+    try {
+
+      const result = await matchServices.getFootballPerformance(req.params);
+
+      return res.status(200).json({
+        success: true,
+        message: "Player Performance retrieved successfully.",
+        data: { performance: result },
+      });
+    } catch (err) {
+      console.error("Error in myPerformance:", err);
+      return next(err);
+    }
+  },
 
 
 
@@ -620,7 +640,9 @@ const matchController = {
     const MatchSchema = Joi.object({
       team1ID: Joi.string().min(3).max(30).required(),
       team2ID: Joi.string().min(3).max(30).required(),
+      challengeforSport: Joi.string().required(),
       // dateTime: Joi.date().iso().required(),
+
     });
 
     const { error } = MatchSchema.validate(req.body);

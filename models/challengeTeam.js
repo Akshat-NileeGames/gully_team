@@ -48,6 +48,12 @@ const challengeTeamSchema = new mongoose.Schema({
   msg: {
     type: String,
   },
+  challengeforSport: {
+    type: String,
+    enum: ['cricket', 'football'],
+    default: 'cricket',
+    required: true,
+  },
   scoreBoard: {
     type: {
       team1: {

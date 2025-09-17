@@ -41,6 +41,7 @@ router.post("/footballtopPerformers", validateUser, matchController.getFootballT
 
 //DG
 router.post("/myPerformance/:userId", validateUser, matchController.myPerformance,);
+router.get("/getmyFootballPerformance/:userId", validateUser, matchController.getFootballPerformance);
 
 // to create challenge match
 router.post("/createChallengeMatch", validateUser, matchController.createChallengeMatch,);
