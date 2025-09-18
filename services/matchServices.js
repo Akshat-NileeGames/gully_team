@@ -274,7 +274,8 @@ const matchServices = {
 
     const matchData = await Match.find({ scoreBoard: { $ne: null } })
       .select("tournament team1 team2 _id")
-      .populate("tournament", "tournamentName")
+      .populate("tournament", "tournamentName tournamentfor")
+
       .populate({
         path: "team1",
         populate: {
@@ -342,6 +343,7 @@ const matchServices = {
           matchId: match._id,
           tournamentId,
           tournamentName: match.tournament.tournamentName,
+          tournamentfor: match.tournament.tournamentfor,
           teamId,
         };
       }
