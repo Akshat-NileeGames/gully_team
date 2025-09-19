@@ -46,7 +46,7 @@ const tournamentController = {
     });
 
     if (TournamentNameExist) {
-      throw next(CustomErrorHandler.alreadyExist(
+      return next(CustomErrorHandler.alreadyExist(
         "This Tournament Name is already present."
       ))
     }

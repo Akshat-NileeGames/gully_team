@@ -4,6 +4,7 @@ class CustomErrorHandler extends Error {
     this.status = status;
     this.message = msg;
   }
+  
 
   static alreadyExist(message) {
     return new CustomErrorHandler(409, message);
