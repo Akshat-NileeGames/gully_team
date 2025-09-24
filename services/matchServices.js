@@ -1127,20 +1127,16 @@ const matchServices = {
     return true;
   },
 
-  async updateFootballMatchData(matchId, winningTeamId) {
+  async updateFootballMatchData(data) {
     try {
+      const { matchId, winningTeamId } = data;
       const match = await Match.findOne({
         _id: matchId,
       }).populate(["team1", "team2"])
-
-      if (!match) {
-        throw CustomErrorHandler.notFound("Match not found or already played")
-      }
+      if (!match) throw CustomErrorHandler.notFound("Match not found or already played");
 
       const scoreBoard = match.scoreBoard
-      if (!scoreBoard) {
-        throw CustomErrorHandler.badRequest("Match scoreboard data not found")
-      }
+      if (!scoreBoard) throw CustomErrorHandler.badRequest("Match scoreboard data not found");
 
       const homeTeam = scoreBoard.get("homeTeam") || {}
       const awayTeam = scoreBoard.get("awayTeam") || {}
@@ -1149,15 +1145,15 @@ const matchServices = {
       const cards = scoreBoard.get("cards") || []
       const penaltyShootout = scoreBoard.get("penaltyShootout") || {}
       const isPenaltyShootout = scoreBoard.get("isPenaltyShootout") || false
+      const isExtraTime = scoreBoard.get("isExtraTime") || false
+      const extraTime = scoreBoard.get("extraTime") || false
 
       const homeScore = scoreBoard.get("homeScore") || 0
       const awayScore = scoreBoard.get("awayScore") || 0
 
-      // Initialize player stats map
       const playerStats = new Map()
       const allPlayers = [...(homeTeam.players || []), ...(awayTeam.players || [])]
 
-      // Initialize all players with base stats
       allPlayers.forEach((player) => {
         if (player._id) {
           playerStats.set(player._id.toString(), {
@@ -1173,21 +1169,18 @@ const matchServices = {
         }
       })
 
-      // Process goals from the goals array
       goals.forEach((goal) => {
         const scorerId = goal.scorerId?._id?.toString()
         if (scorerId && playerStats.has(scorerId)) {
           playerStats.get(scorerId).goals += 1
         }
 
-        // Process assists
         const assistId = goal.assistId?._id?.toString()
         if (assistId && playerStats.has(assistId)) {
           playerStats.get(assistId).assists += 1
         }
       })
 
-      // Process cards from cards array
       cards.forEach((card) => {
         const playerId = card.playerId?._id?.toString()
         if (playerId && playerStats.has(playerId)) {
@@ -1199,7 +1192,6 @@ const matchServices = {
         }
       })
 
-      // Process penalty shootout goals
       if (isPenaltyShootout && penaltyShootout.penalties) {
         penaltyShootout.penalties.forEach((penalty) => {
           const playerId = penalty.playerId?._id?.toString()
@@ -1211,7 +1203,6 @@ const matchServices = {
         })
       }
 
-      // Process match events for fouls and cards
       matchEvents.forEach((event) => {
         const playerId = event.playerId?._id?.toString()
         if (!playerId || !playerStats.has(playerId)) return
@@ -1220,18 +1211,13 @@ const matchServices = {
 
         switch (event.eventType) {
           case "foul":
-            // Player who committed the foul
             stats.foulsCommitted += 1
-
-            // Extract the fouled player from description if available
-            // Looking for patterns like "General Foul by PLAYER1 on PLAYER2"
             if (event.description) {
               const foulPattern = /General Foul by .+ on (.+) -/
               const match = event.description.match(foulPattern)
               if (match) {
                 const fouledPlayerName = match[1].trim()
 
-                // Find the fouled player and increment their foulsSuffered
                 allPlayers.forEach((player) => {
                   if (player.name === fouledPlayerName && player._id) {
                     const fouledPlayerId = player._id.toString()
@@ -1254,7 +1240,6 @@ const matchServices = {
         }
       })
 
-      // Update all player statistics in the database
       const playerUpdatePromises = []
       for (const [playerId, stats] of playerStats.entries()) {
         const updatePromise = Player.findByIdAndUpdate(
@@ -1279,39 +1264,38 @@ const matchServices = {
       await Promise.all(playerUpdatePromises)
 
       // Determine match result
-      let isTie = false
-      let actualWinningTeamId = null
+      let isMatchDraw = false;
 
       if (isPenaltyShootout) {
-        const homePenaltyScore = penaltyShootout.homeTeamScore || 0
-        const awayPenaltyScore = penaltyShootout.awayTeamScore || 0
+        const homePenaltyScore = penaltyShootout?.homeTeamScore ?? 0;
+        const awayPenaltyScore = penaltyShootout?.awayTeamScore ?? 0;
 
-        if (homePenaltyScore > awayPenaltyScore) {
-          actualWinningTeamId = match.team1._id
-        } else if (awayPenaltyScore > homePenaltyScore) {
-          actualWinningTeamId = match.team2._id
-        } else {
-          isTie = true
+        if (homePenaltyScore === awayPenaltyScore) {
+          isMatchDraw = true;
         }
+
+      } else if (isExtraTime) {
+        const homeExtraScore = (extraTime?.firstHalf?.homeGoals ?? 0) + (extraTime?.secondHalf?.homeGoals ?? 0);
+        const awayExtraScore = (extraTime?.firstHalf?.awayGoals ?? 0) + (extraTime?.secondHalf?.awayGoals ?? 0);
+
+        if (homeExtraScore === awayExtraScore) {
+          isMatchDraw = true;
+        }
+
       } else {
         if (homeScore === awayScore) {
-          isTie = true
-        } else if (homeScore > awayScore) {
-          actualWinningTeamId = match.team1._id
-        } else {
-          actualWinningTeamId = match.team2._id
+          isMatchDraw = true;
         }
       }
 
-      const finalWinningTeamId = winningTeamId || actualWinningTeamId
 
       const team1UpdateData = {
         $inc: {
           "teamMatchsData.football.goals": homeScore,
           "teamMatchsData.football.matchesPlayed": 1,
-          "teamMatchsData.football.wins": !isTie && match.team1._id.equals(finalWinningTeamId) ? 1 : 0,
-          "teamMatchsData.football.draws": isTie ? 1 : 0,
-          "teamMatchsData.football.losses": !isTie && !match.team1._id.equals(finalWinningTeamId) ? 1 : 0,
+          "teamMatchsData.football.wins": !isMatchDraw && match.team1._id.equals(winningTeamId) ? 1 : 0,
+          "teamMatchsData.football.draws": isMatchDraw ? 1 : 0,
+          "teamMatchsData.football.losses": !isMatchDraw && !match.team1._id.equals(winningTeamId) ? 1 : 0,
         },
       }
 
@@ -1319,9 +1303,9 @@ const matchServices = {
         $inc: {
           "teamMatchsData.football.goals": awayScore,
           "teamMatchsData.football.matchesPlayed": 1,
-          "teamMatchsData.football.wins": !isTie && match.team2._id.equals(finalWinningTeamId) ? 1 : 0,
-          "teamMatchsData.football.draws": isTie ? 1 : 0,
-          "teamMatchsData.football.losses": !isTie && !match.team2._id.equals(finalWinningTeamId) ? 1 : 0,
+          "teamMatchsData.football.wins": !isMatchDraw && match.team2._id.equals(winningTeamId) ? 1 : 0,
+          "teamMatchsData.football.draws": isMatchDraw ? 1 : 0,
+          "teamMatchsData.football.losses": !isMatchDraw && !match.team2._id.equals(winningTeamId) ? 1 : 0,
         },
       }
 
@@ -1332,8 +1316,8 @@ const matchServices = {
 
       // Update match status and result
       match.status = "played"
-      match.isTie = isTie
-      match.winningTeamId = !isTie ? finalWinningTeamId : null
+      match.isMatchDraw = isMatchDraw
+      match.winningTeamId = !isMatchDraw ? winningTeamId : null
 
       await match.save()
 
@@ -1343,7 +1327,7 @@ const matchServices = {
         success: true,
         matchId: match._id,
         finalScore: `${homeScore}-${awayScore}`,
-        winner: !isTie ? finalWinningTeamId : "Tie",
+        winner: !isMatchDraw ? winningTeamId : "Tie",
         playersUpdated: playerStats.size,
         isPenaltyShootout: isPenaltyShootout
       }

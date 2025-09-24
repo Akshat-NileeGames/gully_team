@@ -134,6 +134,7 @@ const matchSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+
     matchlength: {
       type: Number,
       required: false,
@@ -147,7 +148,10 @@ const matchSchema = new mongoose.Schema(
       ref: "Team",
       default: null,
     },
-    isTie: { type: Boolean, default: false },
+    isMatchDraw: {
+      type: Boolean,
+      default: false
+    },
     matchAuthority: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

@@ -5,6 +5,16 @@ import { Tournament, User } from "../models/index.js";
 import { tournamentServices } from "../services/index.js";
 
 const tournamentController = {
+
+  /**
+  * @function createTournament
+  * @description Handles tournament creation: validates input, checks for duplicates,
+  * formats dates, persists data, and sends notification if needed.
+  * @param {Object} req - Express request object containing tournament data in `req.body`
+  * @param {Object} res - Express response object
+  * @param {Function} next - Express next middleware function
+  * @returns {Object} JSON response with success status and created tournament data
+  */
   //#region createTournament
   async createTournament(req, res, next) {
     const tournamentSchema = Joi.object({

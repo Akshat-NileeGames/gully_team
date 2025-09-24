@@ -21,7 +21,7 @@ router.get("/getOpponentOld/:tournamentId/:teamId", validateUser, matchControlle
 router.post("/updateScoreBoard/:matchId", validateUser, matchController.updateScoreBoard);
 
 router.put("/updateTeamMatchsData/:matchId", validateUser, matchController.updateTeamMatchsData,);
-router.put("/updateFootballMatchData/:matchId", validateUser, matchController.updateFootballMatchData);
+router.post("/updateFootballMatchData/", validateUser, matchController.updateFootballMatchData);
 
 router.get("/teamRanking/:ballType", validateUser, matchController.teamRanking);
 router.get("/footballteamRanking", validateUser, matchController.getFootballTeamRankings);

@@ -328,27 +328,30 @@ const matchController = {
     }
   },
   async updateFootballMatchData(req, res, next) {
-    let matchId = req.params.matchId;
-    let { winningTeamId } = req.body;
+    // let matchId = req.params.matchId;
+    // let { winningTeamId } = req.body;
 
-    if (!matchId) {
-      return res.status(400).json({
-        success: false,
-        message: "Match ID is required.",
-      });
-    }
+    // if (!matchId) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Match ID is required.",
+    //   });
+    // }
 
-    if (!winningTeamId) {
-      return res.status(400).json({
-        success: false,
-        message: "Winning Team ID is required.",
-      });
-    }
+    // if (!winningTeamId) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Winning Team ID is required.",
+    //   });
+    // }
+    const match = Joi.object({
+      matchId: Joi.string().required(),
+      winningTeamId: Joi.string().allow(null).optional()
+    });
+    const { error } = match.validate(req.body);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
     try {
-      const result = await matchServices.updateFootballMatchData(
-        matchId,
-        winningTeamId,
-      );
+      const result = await matchServices.updateFootballMatchData(req.body);
 
       return res.status(200).json({
         sucess: true,
