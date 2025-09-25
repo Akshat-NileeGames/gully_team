@@ -50,16 +50,16 @@ const tournamentController = {
     const { error } = tournamentSchema.validate(req.body);
     if (error) return CustomErrorHandler.validationError(`Failed to validate Request:${error}`);
 
-    const TournamentNameExist = await Tournament.exists({
-      tournamentName: req.body.tournamentName,
-      isCompleted: false,
-    });
+    // const TournamentNameExist = await Tournament.exists({
+    //   tournamentName: req.body.tournamentName,
+    //   isCompleted: false,
+    // });
 
-    if (TournamentNameExist) {
-      return next(CustomErrorHandler.alreadyExist(
-        "This Tournament Name is already present."
-      ))
-    }
+    // if (TournamentNameExist) {
+    //   return next(CustomErrorHandler.alreadyExist(
+    //     "This Tournament Name is already present."
+    //   ))
+    // }
     const formatStartDate = (dateString) => {
       const date = new Date(dateString);
 

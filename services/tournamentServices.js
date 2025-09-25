@@ -22,7 +22,7 @@ const tournamentServices = {
     const userInfo = global.user;
     let coHostId1;
     let coHostId2;
-
+    console.log(data.tournamentfor);
     if (data.coHost1Phone) {
       const existingUser = await User.findOne({ phoneNumber: data.coHost1Phone });
 
@@ -68,7 +68,6 @@ const tournamentServices = {
       tournamentName: data.tournamentName,
       tournamentCategory: { name: data.tournamentCategory },
       ballType: data.ballType ? { name: data.ballType } : { name: "rubber" },
-
       pitchType: { name: data.pitchType },
       email: userInfo.email,
       matchType: { name: data.matchType },
