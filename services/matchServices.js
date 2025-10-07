@@ -722,410 +722,128 @@ const matchServices = {
     });
 
     if (!match) {
-      // Handle the case where the Match is not found
       throw CustomErrorHandler.notFound("Match Not Found");
     }
 
-    // Find the Tournament which type, tennis or leather ball
-    const tournament = await Tournament.findById(match.tournament).select(
-      "ballType"
-    );
-
+    const tournament = await Tournament.findById(match.tournament).select("ballType");
     const balltype = tournament.ballType.name;
 
-    // Update Team 1 player data
+    const scoreBoard = match.scoreBoard;
+    const team1Data = scoreBoard.get('team1');
+    const team2Data = scoreBoard.get('team2');
+    const firstInnings = scoreBoard.get('firstInnings');
+    const secondInnings = scoreBoard.get('secondInnings');
 
-    let Team1Players = match.scoreBoard.team1.players;
+    for (const player of team1Data.players || []) {
+      await this.updatePlayerStats(player, balltype);
+    }
 
-    for (const teamPlayer1 of Team1Players) {
-      if (balltype == "leather") {
-        let isCentury = 0;
-        let isHalfCentury = 0;
+    for (const player of team2Data.players || []) {
+      await this.updatePlayerStats(player, balltype);
+    }
 
-        if (teamPlayer1.batting.runs >= 50 && teamPlayer1.batting.runs < 100) {
-          isHalfCentury = 1;
-        } else if (
-          teamPlayer1.batting.runs >= 100 &&
-          teamPlayer1.batting.runs < 200
-        ) {
-          isCentury = 1;
-        } else if (
-          teamPlayer1.batting.runs >= 200 &&
-          teamPlayer1.batting.runs < 300
-        ) {
-          isCentury = 2;
-        } else if (
-          teamPlayer1.batting.runs >= 300 &&
-          teamPlayer1.batting.runs < 400
-        ) {
-          isCentury = 3;
-        } else if (
-          teamPlayer1.batting.runs >= 400 &&
-          teamPlayer1.batting.runs < 500
-        ) {
-          isCentury = 4;
-        }
+    const totalBalls1 = (firstInnings?.overs || 0) * 6 + (firstInnings?.balls || 0);
+    const totalBalls2 = (secondInnings?.overs || 0) * 6 + (secondInnings?.balls || 0);
 
-        const player1 = await Player.findByIdAndUpdate(
-          teamPlayer1._id,
-          {
-            $inc: {
-              "battingStatistic.leather.runs": teamPlayer1.batting.runs,
-              "battingStatistic.leather.balls": teamPlayer1.batting.balls,
-              "battingStatistic.leather.fours": teamPlayer1.batting.fours,
-              "battingStatistic.leather.sixes": teamPlayer1.batting.sixes,
+    const winningteam1 = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
+    const winningteam2 = secondInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
 
-              "battingStatistic.leather.century": isCentury,
-              "battingStatistic.leather.halfCentury": isHalfCentury,
-              "battingStatistic.leather.out": teamPlayer1.batting.outType
-                ? 1
-                : 0,
-              "battingStatistic.leather.innings": 1,
+    const teamStatsPath = balltype === 'leather' ? 'teamMatchsData.leather' : 'teamMatchsData.tennis';
 
-              "bowlingStatistic.leather.runs": teamPlayer1.bowling.runs,
-              "bowlingStatistic.leather.wickets": teamPlayer1.bowling.wickets,
-              "bowlingStatistic.leather.Over": teamPlayer1.bowling.currentOver,
-              "bowlingStatistic.leather.maidens": teamPlayer1.bowling.maidens,
-              "bowlingStatistic.leather.fours": teamPlayer1.bowling.fours,
-              "bowlingStatistic.leather.sixes": teamPlayer1.bowling.sixes,
-              "bowlingStatistic.leather.wides": teamPlayer1.bowling.wides,
-              "bowlingStatistic.leather.noBalls": teamPlayer1.bowling.noBalls,
-              "bowlingStatistic.leather.innings": 1,
-            },
-          },
-          { new: true } // bowlingStatisticThis option returns the updated document
-        );
-      } else {
-        let isCentury = 0;
-        let isHalfCentury = 0;
-
-        if (teamPlayer1.batting.runs >= 50 && teamPlayer1.batting.runs < 100) {
-          isHalfCentury = 1;
-        } else if (
-          teamPlayer1.batting.runs >= 100 &&
-          teamPlayer1.batting.runs < 200
-        ) {
-          isCentury = 1;
-        } else if (
-          teamPlayer1.batting.runs >= 200 &&
-          teamPlayer1.batting.runs < 300
-        ) {
-          isCentury = 2;
-        } else if (
-          teamPlayer1.batting.runs >= 300 &&
-          teamPlayer1.batting.runs < 400
-        ) {
-          isCentury = 3;
-        } else if (
-          teamPlayer1.batting.runs >= 400 &&
-          teamPlayer1.batting.runs < 500
-        ) {
-          isCentury = 4;
-        }
-
-        const player1 = await Player.findByIdAndUpdate(
-          teamPlayer1._id,
-          {
-            $inc: {
-              "battingStatistic.tennis.runs": teamPlayer1.batting.runs,
-              "battingStatistic.tennis.balls": teamPlayer1.batting.balls,
-              "battingStatistic.tennis.fours": teamPlayer1.batting.fours,
-              "battingStatistic.tennis.sixes": teamPlayer1.batting.sixes,
-
-              "battingStatistic.tennis.century": isCentury,
-              "battingStatistic.tennis.halfCentury": isHalfCentury,
-              "battingStatistic.tennis.out": teamPlayer1.batting.outType
-                ? 1
-                : 0,
-              "battingStatistic.tennis.innings": 1,
-
-              "bowlingStatistic.tennis.runs": teamPlayer1.bowling.runs,
-              "bowlingStatistic.tennis.wickets": teamPlayer1.bowling.wickets,
-              "bowlingStatistic.tennis.Over": teamPlayer1.bowling.currentOver,
-              "bowlingStatistic.tennis.maidens": teamPlayer1.bowling.maidens,
-              "bowlingStatistic.tennis.fours": teamPlayer1.bowling.fours,
-              "bowlingStatistic.tennis.sixes": teamPlayer1.bowling.sixes,
-              "bowlingStatistic.tennis.wides": teamPlayer1.bowling.wides,
-              "bowlingStatistic.tennis.noBalls": teamPlayer1.bowling.noBalls,
-              "bowlingStatistic.tennis.innings": 1,
-            },
-          },
-          { new: true } // This option returns the updated document
-        );
+    await Team.findByIdAndUpdate(firstInnings?.battingTeam?._id, {
+      $inc: {
+        [`${teamStatsPath}.runs`]: firstInnings?.totalScore || 0,
+        [`${teamStatsPath}.wins`]: winningteam1,
+        [`${teamStatsPath}.${balltype === 'leather' ? 'balls' : 'overs'}`]: totalBalls1,
+        [`${teamStatsPath}.wickets`]: firstInnings?.totalWickets || 0,
+        [`${teamStatsPath}.innings`]: 1,
       }
-    }
+    });
 
-    // Update Team 2 player data
-
-    let Team2Players = match.scoreBoard.team2.players;
-
-    for (const teamPlayer2 of Team2Players) {
-      if (balltype == "leather") {
-        let isCentury = 0;
-        let isHalfCentury = 0;
-
-        if (teamPlayer2?.batting?.runs >= 50 && teamPlayer2?.batting?.runs < 100) {
-          isHalfCentury = 1;
-        } else if (
-          teamPlayer2?.batting?.runs >= 100 &&
-          teamPlayer2?.batting?.runs < 200
-        ) {
-          isCentury = 1;
-        } else if (
-          teamPlayer2?.batting?.runs >= 200 &&
-          teamPlayer2?.batting.runs < 300
-        ) {
-          isCentury = 2;
-        } else if (
-          teamPlayer2?.batting?.runs >= 300 &&
-          teamPlayer2?.batting?.runs < 400
-        ) {
-          isCentury = 3;
-        } else if (
-          teamPlayer2.batting.runs >= 400 &&
-          teamPlayer2.batting.runs < 500
-        ) {
-          isCentury = 4;
-        }
-
-        const player2 = await Player.findByIdAndUpdate(
-          teamPlayer2._id,
-          {
-            $inc: {
-              "battingStatistic.leather.runs": teamPlayer2.batting.runs,
-              "battingStatistic.leather.balls": teamPlayer2.batting.balls,
-              "battingStatistic.leather.fours": teamPlayer2.batting.fours,
-              "battingStatistic.leather.sixes": teamPlayer2.batting.sixes,
-
-              "battingStatistic.leather.century": isCentury,
-              "battingStatistic.leather.halfCentury": isHalfCentury,
-              "battingStatistic.leather.out": teamPlayer2.batting.outType
-                ? 1
-                : 0,
-
-              "bowlingStatistic.leather.runs": teamPlayer2.bowling.runs,
-              "bowlingStatistic.leather.wickets": teamPlayer2.bowling.wickets,
-              "bowlingStatistic.leather.Over": teamPlayer2.bowling.currentOver,
-              "bowlingStatistic.leather.maidens": teamPlayer2.bowling.maidens,
-              "bowlingStatistic.leather.fours": teamPlayer2.bowling.fours,
-              "bowlingStatistic.leather.sixes": teamPlayer2.bowling.sixes,
-              "bowlingStatistic.leather.wides": teamPlayer2.bowling.wides,
-              "bowlingStatistic.leather.noBalls": teamPlayer2.bowling.noBalls,
-
-              "bowlingStatistic.leather.innings": 1,
-              "battingStatistic.leather.innings": 1,
-            },
-          },
-          { new: true } // This option returns the updated document
-        );
-      } else {
-        let isCentury = 0;
-        let isHalfCentury = 0;
-
-        if (teamPlayer2.batting.runs >= 50 && teamPlayer2.batting.runs < 100) {
-          isHalfCentury = 1;
-        } else if (
-          teamPlayer2.batting.runs >= 100 &&
-          teamPlayer2.batting.runs < 200
-        ) {
-          isCentury = 1;
-        } else if (
-          teamPlayer2.batting.runs >= 200 &&
-          teamPlayer2.batting.runs < 300
-        ) {
-          isCentury = 2;
-        } else if (
-          teamPlayer2.batting.runs >= 300 &&
-          teamPlayer2.batting.runs < 400
-        ) {
-          isCentury = 3;
-        } else if (
-          teamPlayer2.batting.runs >= 400 &&
-          teamPlayer2.batting.runs < 500
-        ) {
-          isCentury = 4;
-        }
-
-        const player1 = await Player.findByIdAndUpdate(
-          teamPlayer2._id,
-          {
-            $inc: {
-              "battingStatistic.tennis.runs": teamPlayer2.batting.runs,
-              "battingStatistic.tennis.balls": teamPlayer2.batting.balls,
-              "battingStatistic.tennis.fours": teamPlayer2.batting.fours,
-              "battingStatistic.tennis.sixes": teamPlayer2.batting.sixes,
-
-              "battingStatistic.tennis.century": isCentury,
-              "battingStatistic.tennis.halfCentury": isHalfCentury,
-              "battingStatistic.tennis.out": teamPlayer2.batting.outType
-                ? 1
-                : 0,
-
-              "bowlingStatistic.tennis.runs": teamPlayer2.bowling.runs,
-              "bowlingStatistic.tennis.wickets": teamPlayer2.bowling.wickets,
-              "bowlingStatistic.tennis.Over": teamPlayer2.bowling.currentOver,
-              "bowlingStatistic.tennis.maidens": teamPlayer2.bowling.maidens,
-              "bowlingStatistic.tennis.fours": teamPlayer2.bowling.fours,
-              "bowlingStatistic.tennis.sixes": teamPlayer2.bowling.sixes,
-              "bowlingStatistic.tennis.wides": teamPlayer2.bowling.wides,
-              "bowlingStatistic.tennis.noBalls": teamPlayer2.bowling.noBalls,
-
-              "bowlingStatistic.tennis.innings": 1,
-              "battingStatistic.tennis.innings": 1,
-            },
-          },
-          { new: true } // This option returns the updated document
-        );
+    await Team.findByIdAndUpdate(secondInnings?.battingTeam?._id, {
+      $inc: {
+        [`${teamStatsPath}.runs`]: secondInnings?.totalScore || 0,
+        [`${teamStatsPath}.wins`]: winningteam2,
+        [`${teamStatsPath}.${balltype === 'leather' ? 'balls' : 'overs'}`]: totalBalls2,
+        [`${teamStatsPath}.wickets`]: secondInnings?.totalWickets || 0,
+        [`${teamStatsPath}.innings`]: 1,
       }
-    }
-
-    let totalBalls1 =
-      match.scoreBoard.firstInnings.overs * 6 +
-      match.scoreBoard.firstInnings.balls;
-    let totalBalls2 =
-      match.scoreBoard.secondInnings.overs * 6 +
-      match.scoreBoard.secondInnings.balls;
-
-    let winningteam1 = 0;
-    let winningteam2 = 0;
-    if (match.scoreBoard.firstInnings.battingTeam._id == winningTeamId) {
-      winningteam1 = 1;
-    }
-    if (match.scoreBoard.secondInnings.battingTeam._id == winningTeamId) {
-      winningteam2 = 1;
-    }
-
-    //if ball is leather update team data
-    if (balltype == "leather") {
-      const team1 = await Team.findByIdAndUpdate(
-        match.scoreBoard.firstInnings.battingTeam._id,
-        {
-          $inc: {
-            "teamMatchsData.leather.runs":
-              match.scoreBoard.firstInnings.totalScore || 0,
-            "teamMatchsData.leather.wins": winningteam1 || 0,
-            "teamMatchsData.leather.balls": totalBalls1 || 0,
-            "teamMatchsData.leather.wickets":
-              match.scoreBoard.firstInnings.totalWickets || 0,
-            "teamMatchsData.leather.innings": 1,
-          },
-        },
-        { new: true } // This option returns the updated document
-      );
-      const team2 = await Team.findByIdAndUpdate(
-        match.scoreBoard.secondInnings.battingTeam._id,
-        {
-          $inc: {
-            "teamMatchsData.leather.runs":
-              match.scoreBoard.secondInnings.totalScore || 0,
-            "teamMatchsData.leather.wins": winningteam2 || 0,
-            "teamMatchsData.leather.balls": totalBalls2 || 0,
-            "teamMatchsData.leather.wickets":
-              match.scoreBoard.secondInnings.totalWickets || 0,
-            "teamMatchsData.leather.innings": 1,
-          },
-        },
-        { new: true } // This option returns the updated document
-      );
-    }
-
-    if (balltype == "tennis") {
-      const team1 = await Team.findByIdAndUpdate(
-        match.scoreBoard.firstInnings.battingTeam._id,
-        {
-          $inc: {
-            "teamMatchsData.tennis.runs":
-              match.scoreBoard.firstInnings.totalScore || 0,
-            "teamMatchsData.tennis.wins": winningteam1 || 0,
-            "teamMatchsData.tennis.overs": totalBalls1 || 0,
-            "teamMatchsData.tennis.wickets":
-              match.scoreBoard.firstInnings.totalWickets || 0,
-            "teamMatchsData.tennis.innings": 1,
-          },
-        },
-        { new: true } // This option returns the updated document
-      );
-      const team2 = await Team.findByIdAndUpdate(
-        match.scoreBoard.secondInnings.battingTeam._id,
-        {
-          $inc: {
-            "teamMatchsData.tennis.runs":
-              match.scoreBoard.secondInnings.totalScore || 0,
-            "teamMatchsData.tennis.wins": winningteam2 || 0,
-            "teamMatchsData.tennis.overs": totalBalls2 || 0,
-            "teamMatchsData.tennis.wickets":
-              match.scoreBoard.secondInnings.totalWickets || 0,
-            "teamMatchsData.tennis.innings": 1,
-          },
-        },
-        { new: true } // This option returns the updated document
-      );
-    }
+    });
 
     match.status = "played";
-    match.winningTeamId = winningTeamId || "";
+    match.winningTeamId = winningTeamId;
+    await match.save();
 
-    console.log("Current Tournament id:", tournament._id);
-    const tournament_data = await RegisteredTeam.find({
-      tournament: tournament._id,
-      status: "Accepted",
-      // isEliminated:false,
-    });
-    const teamorgfmc = tournament_data.map((team) => team.user.fcmToken);
-    console.log("FMC Token:", teamorgfmc);
+    const tournamentTeams = await RegisteredTeam.find({ tournament: tournament._id, status: "Accepted" }).populate('team user');
+    const teamFcmTokens = tournamentTeams.map(t => t.user?.fcmToken).filter(Boolean);
 
-    const winnerTeamName = await Team.findById(winningTeamId).select('teamName');
-    console.log("Winner Team Name:", winnerTeamName.teamName);
+    const winnerTeam = await Team.findById(winningTeamId).select('teamName');
 
-    // Calculate differences and determine win type of the match that will be used for 
-    let winningMessage = '';
-    let opponentTeam = null;
+    const isWinnerFirstInnings = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString();
+    const runDiff = (firstInnings?.totalScore || 0) - (secondInnings?.totalScore || 0);
+    const wicketsRemaining = 10 - (secondInnings?.totalWickets || 0);
+    const winType = runDiff === 0 ? ' ' : isWinnerFirstInnings ? `by ${runDiff} runs` : `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
 
-    if (match.scoreBoard.firstInnings.battingTeam._id.toString() === winningTeamId.toString()) {
-      const runDifference = match.scoreBoard.firstInnings.totalScore - match.scoreBoard.secondInnings.totalScore;
-      if (runDifference === 0) {
-        //show nothing if match run difference is 0 or it has tie
-        winningMessage = ' ';
-      } else {
-        winningMessage = `by ${runDifference} runs`;
-      }
+    const opponentTeam = isWinnerFirstInnings
+      ? tournamentTeams.find(t => t.team._id.toString() === secondInnings?.battingTeam?._id?.toString())
+      : tournamentTeams.find(t => t.team._id.toString() === firstInnings?.battingTeam?._id?.toString());
 
-      opponentTeam = tournament_data.find(
-        (team) => team.team._id.toString() === match.scoreBoard.secondInnings.battingTeam._id.toString()
-      );
-    } else {
-      const wicketsRemaining = 10 - match.scoreBoard.secondInnings.totalWickets;
+    const opponentTeamName = opponentTeam?.team?.teamName || "Opponent";
 
-      winningMessage = `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
-      opponentTeam = tournament_data.find(
-        (team) => team.team._id.toString() === match.scoreBoard.firstInnings.battingTeam._id.toString()
-      );
-    }
-
-    const opponentTeamName = opponentTeam ? opponentTeam.team.teamName : "Opponent";
-    console.log("Opponent Team Name:", opponentTeamName);
-
-    if (teamorgfmc) {
-      const notificationData = {
+    if (teamFcmTokens.length) {
+      const notification = {
         title: `Hey Participants!`,
-        body: `${winnerTeamName.teamName} has won the match against ${opponentTeamName} ${winningMessage}`,
+        body: `${winnerTeam?.teamName} has won the match against ${opponentTeamName} ${winType}`,
       };
 
       try {
-        const sendNotifications = teamorgfmc.map((fcmToken) => {
-          return firebaseNotification.sendNotification(fcmToken, notificationData);
-        });
-
-        await Promise.all(sendNotifications);
-        console.log("Notifications sent successfully!");
-
+        await Promise.all(teamFcmTokens.map(token => firebaseNotification.sendNotification(token, notification)));
+        console.log("Notifications sent!");
       } catch (error) {
-        console.error("Error sending notification:", error);
+        console.error("Notification error:", error);
       }
     }
-    await match.save();
+
     return true;
   },
+
+  async updatePlayerStats(player, balltype) {
+    if (!player?.batting || !player?.bowling) return;
+
+    let isHalfCentury = player.batting.runs >= 50 && player.batting.runs < 100 ? 1 : 0;
+    let isCentury = 0;
+    if (player.batting.runs >= 100 && player.batting.runs < 200) isCentury = 1;
+    else if (player.batting.runs < 300) isCentury = 2;
+    else if (player.batting.runs < 400) isCentury = 3;
+    else if (player.batting.runs < 500) isCentury = 4;
+
+    const prefix = `battingStatistic.${balltype}`;
+    const bowlPrefix = `bowlingStatistic.${balltype}`;
+
+    await Player.findByIdAndUpdate(player._id, {
+      $inc: {
+        [`${prefix}.runs`]: player.batting.runs,
+        [`${prefix}.balls`]: player.batting.balls,
+        [`${prefix}.fours`]: player.batting.fours,
+        [`${prefix}.sixes`]: player.batting.sixes,
+        [`${prefix}.century`]: isCentury,
+        [`${prefix}.halfCentury`]: isHalfCentury,
+        [`${prefix}.out`]: player.batting.outType ? 1 : 0,
+        [`${prefix}.innings`]: 1,
+
+        [`${bowlPrefix}.runs`]: player.bowling.runs,
+        [`${bowlPrefix}.wickets`]: player.bowling.wickets,
+        [`${bowlPrefix}.Over`]: player.bowling.currentOver,
+        [`${bowlPrefix}.maidens`]: player.bowling.maidens,
+        [`${bowlPrefix}.fours`]: player.bowling.fours,
+        [`${bowlPrefix}.sixes`]: player.bowling.sixes,
+        [`${bowlPrefix}.wides`]: player.bowling.wides,
+        [`${bowlPrefix}.noBalls`]: player.bowling.noBalls,
+        [`${bowlPrefix}.innings`]: 1,
+      }
+    }, { new: true });
+  },
+
 
   async updateFootballMatchData(data) {
     try {

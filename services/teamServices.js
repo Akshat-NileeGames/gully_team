@@ -1544,11 +1544,13 @@ const teamServices = {
 
       for (const registeredTeam of registeredTeams) {
         const team = registeredTeam.team;
+        if (!team?._id) continue;
+
         const matches = await Match.find({
           tournament: tournamentId,
           status: 'played',
           $or: [{ team1: team._id }, { team2: team._id }],
-        }).populate('scoreBoard.team1 scoreBoard.team2');
+        });
 
         let matchesPlayed = 0;
         let wins = 0;
@@ -1561,21 +1563,27 @@ const teamServices = {
         let teamNetRunRate = 0;
 
         for (const match of matches) {
+          const scoreBoard = match.scoreBoard;
+          if (!scoreBoard) continue;
+
+          const team1 = scoreBoard.get('team1');
+          const team2 = scoreBoard.get('team2');
+          const firstInnings = scoreBoard.get('firstInnings');
+          const secondInnings = scoreBoard.get('secondInnings');
+
+          if (!team1?._id || !team2?._id || !firstInnings || !secondInnings) continue;
+
+          const isTeam1 = team1._id.toString() === team._id.toString();
+          const teamData = isTeam1 ? firstInnings : secondInnings;
+          const opponentData = isTeam1 ? secondInnings : firstInnings;
+
+          if (!teamData || !opponentData) continue;
+
           matchesPlayed++;
-
-          const isTeam1 = match.scoreBoard.team1._id.toString() === team._id.toString();
-
-          const teamData = isTeam1 ? match.scoreBoard.firstInnings : match.scoreBoard.secondInnings;
-          const opponentData = isTeam1 ? match.scoreBoard.secondInnings : match.scoreBoard.firstInnings;
-
-          if (!teamData || !opponentData) {
-            console.error(`Invalid scoreBoard data for Match ID: ${match._id}`);
-            continue;
-          }
-
 
           const teamRuns = teamData.totalScore || 0;
           const opponentRuns = opponentData.totalScore || 0;
+
           totalRunsScored += teamRuns;
           totalRunsConceded += opponentRuns;
 
@@ -1585,30 +1593,27 @@ const teamServices = {
           totalBallsFaced += teamBallsFaced;
           totalBallsBowled += opponentBallsFaced;
 
-          // Handle tie case
           if (match.isTie) {
             ties++;
-          } else if (match.winningTeamId && match.winningTeamId.toString() === team._id.toString()) {
+          } else if (match.winningTeamId?.toString() === team._id.toString()) {
             wins++;
           } else {
             losses++;
           }
+
           if (teamRuns === opponentRuns) {
             teamNetRunRate += 0.15;
-
           }
         }
 
-        const oversPlayed = (totalBallsFaced / 6).toFixed(2);
-        const oversBowled = (totalBallsBowled / 6).toFixed(2);
-        const runRateScored = totalBallsFaced > 0 ? (totalRunsScored / parseFloat(oversPlayed)).toFixed(2) : 0;
-        const runRateConceded = totalBallsBowled > 0 ? (totalRunsConceded / parseFloat(oversBowled)).toFixed(2) : 0;
+        const oversPlayed = totalBallsFaced / 6;
+        const oversBowled = totalBallsBowled / 6;
+        const runRateScored = totalBallsFaced > 0 ? (totalRunsScored / oversPlayed) : 0;
+        const runRateConceded = totalBallsBowled > 0 ? (totalRunsConceded / oversBowled) : 0;
 
-        let netRunRate = (parseFloat(runRateScored) - parseFloat(runRateConceded)).toFixed(2);
-
+        let netRunRate = runRateScored - runRateConceded;
         if (teamNetRunRate !== 0) {
-          netRunRate = (parseFloat(netRunRate) + teamNetRunRate).toFixed(2);
-
+          netRunRate += teamNetRunRate;
         }
 
         pointsTable.push({
@@ -1620,15 +1625,13 @@ const teamServices = {
           wins,
           losses,
           ties,
-          points: wins * 2 + ties * 0.15,
-          netRunRate,
+          points: (wins * 2) + (ties * 0.15),
+          netRunRate: netRunRate.toFixed(2),
         });
       }
 
       pointsTable.sort((a, b) => {
-        if (b.points !== a.points) {
-          return b.points - a.points;
-        }
+        if (b.points !== a.points) return b.points - a.points;
         return parseFloat(b.netRunRate) - parseFloat(a.netRunRate);
       });
 
@@ -1638,7 +1641,7 @@ const teamServices = {
 
       return pointsTable;
     } catch (error) {
-      console.error('Error in getPointsTable:', error.message);
+      console.error('Error in getPointsTable:', error);
       throw new Error(error.message);
     }
   }

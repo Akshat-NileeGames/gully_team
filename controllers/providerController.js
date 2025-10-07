@@ -1359,7 +1359,7 @@ const ProviderController = {
   async releaseLockedSlots(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
-      sport: Joi.string().required(),
+      sport: Joi.string().allow(null).required(),
       date: Joi.string()
         .pattern(/^\d{4}-\d{2}-\d{2}$/) // Same date format as locking
         .required(),
