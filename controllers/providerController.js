@@ -723,7 +723,7 @@ const ProviderController = {
   async getTodayBookings(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
-      sport: Joi.string().optional(), // Optional sport filtering
+      sport: Joi.string().allow('').optional()
     })
 
     const { error } = validation.validate(req.body)
@@ -854,7 +854,7 @@ const ProviderController = {
   async getDashboardAnalytics(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
-      sport: Joi.string().optional(),
+      sport: Joi.string().allow('').optional(),
       period: Joi.string().valid("week", "month", "quarter", "year").default("month"), // Time period options
       startDate: Joi.date().optional(), // Custom date range
       endDate: Joi.date().optional(),
@@ -1359,14 +1359,14 @@ const ProviderController = {
   async releaseLockedSlots(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
-      sport: Joi.string().allow(null).required(),
+      sport: Joi.string().allow('').required(),
       date: Joi.string()
-        .pattern(/^\d{4}-\d{2}-\d{2}$/) // Same date format as locking
+        .pattern(/^\d{4}-\d{2}-\d{2}$/)
         .required(),
       startTime: Joi.string().required(),
       endTime: Joi.string().required(),
       playableArea: Joi.number().min(1).required(),
-      sessionId: Joi.string().required(), // Must match the locking session
+      sessionId: Joi.string().required(),
     })
 
     const { error } = validation.validate(req.body)

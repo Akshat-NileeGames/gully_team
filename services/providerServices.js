@@ -1506,6 +1506,7 @@ const ProviderServices = {
     ]);
     return venue;
   },
+
   async getAvailableSlots({ venueId, sport, date, playableArea, userId }) {
     try {
       const venue = await Venue.findById(venueId)
@@ -1535,9 +1536,7 @@ const ProviderServices = {
         }
       }
 
-      // Generate all potential slots for the day
       const allSlots = this.generateTimeSlots(dayTiming.openTime, dayTiming.closeTime)
-      // Apply time-based filtering for current date
       const currentDate = DateTime.now()
       const isToday = requestedDate.hasSame(currentDate, "day")
       let filteredSlots = allSlots
@@ -1555,7 +1554,6 @@ const ProviderServices = {
       const start = new Date(queryDate.setHours(0, 0, 0, 0))
       const end = new Date(queryDate.setHours(23, 59, 59, 999))
 
-      // Get both confirmed bookings and locked slots
       const existingBookings = await Booking.find({
         venueId: venueId,
         sport: sport,
@@ -1570,7 +1568,6 @@ const ProviderServices = {
         "scheduledDates.date": { $gte: start, $lte: end },
       }).lean()
 
-      // Extract booked and locked slots
       const bookedSlotsForPlayableArea = new Set()
       const lockedSlotsForPlayableArea = new Set()
       const userLockedSlots = new Set()
@@ -1597,12 +1594,10 @@ const ProviderServices = {
         })
       })
 
-      // Filter available slots
       const availableSlots = filteredSlots
         .filter((slot) => {
           const slotKey = `${slot.startTime}-${slot.endTime}`
           const isBooked = bookedSlotsForPlayableArea.has(slotKey)
-          // const isLockedByOther = lockedSlotsForPlayableArea.has(slotKey) && !userLockedSlots.has(slotKey)
 
           return !isBooked
         })
@@ -2421,21 +2416,95 @@ const ProviderServices = {
     return !booking
   },
 
-  generateTimeSlots(openTime, closeTime) {
+  // generateTimeSlots(openTime, closeTime) {
+  //   const slots = []
+  //   let start = DateTime.fromFormat(openTime, "HH:mm")
+  //   let end = DateTime.fromFormat(closeTime, "HH:mm")
+  //   if (end <= start) {
+  //     end = end.plus({ days: 1 })
+  //   }
+
+  //   let current = start
+  //   while (current < end) {
+  //     const slotEnd = current.plus({ hours: 1 })
+  //     if (slotEnd <= end) {
+  //       slots.push({
+  //         startTime: current.toFormat("HH:mm"),
+  //         endTime: slotEnd.toFormat("HH:mm"),
+  //       })
+  //     }
+  //     current = slotEnd
+  //   }
+
+  //   return slots
+  // },
+  // generateTimeSlots(openTime, closeTime, durationInMinutes = 60) {
+  //   const slots = []
+  //   let start = DateTime.fromFormat(openTime, "HH:mm")
+  //   let end = DateTime.fromFormat(closeTime, "HH:mm")
+
+  //   if (end <= start) {
+  //     end = end.plus({ days: 1 })
+  //   }
+
+  //   let current = start
+  //   while (current < end) {
+  //     const slotEnd = current.plus({ minutes: durationInMinutes })
+
+  //     if (slotEnd <= end) {
+  //       slots.push({
+  //         startTime: current.toFormat("HH:mm"),
+  //         endTime: slotEnd.toFormat("HH:mm"),
+  //       })
+  //     } else {
+  //       // Optional: Add partial slot if there's at least 30 minutes remaining
+  //       const remainingMinutes = end.diff(current, "minutes").toObject().minutes
+  //       if (remainingMinutes >= 30) {
+  //         slots.push({
+  //           startTime: current.toFormat("HH:mm"),
+  //           endTime: end.toFormat("HH:mm"),
+  //           isPartial: true, // Optional flag to indicate it's not full duration
+  //         })
+  //       }
+  //       break
+  //     }
+
+  //     current = slotEnd
+  //   }
+
+  //   return slots
+  // },
+  generateTimeSlots(openTime, closeTime, durationInMinutes = 60) {
     const slots = []
-    const start = DateTime.fromFormat(openTime, "HH:mm")
-    const end = DateTime.fromFormat(closeTime, "HH:mm")
+    let start = DateTime.fromFormat(openTime, "HH:mm")
+    let end = DateTime.fromFormat(closeTime, "HH:mm")
+
+    // Handle overnight (e.g. 22:00 to 01:00)
+    if (end <= start) {
+      end = end.plus({ days: 1 })
+    }
 
     let current = start
     while (current < end) {
-      const slotEnd = current.plus({ hours: 1 })
+      const slotEnd = current.plus({ minutes: durationInMinutes })
+
+      // If full duration fits, push normal slot
       if (slotEnd <= end) {
         slots.push({
           startTime: current.toFormat("HH:mm"),
           endTime: slotEnd.toFormat("HH:mm"),
+          isPartial: false,
         })
+        current = slotEnd
+      } else {
+        // Remaining time (partial slot)
+        slots.push({
+          startTime: current.toFormat("HH:mm"),
+          endTime: end.toFormat("HH:mm"),
+          isPartial: true,
+        })
+        break
       }
-      current = slotEnd
     }
 
     return slots
