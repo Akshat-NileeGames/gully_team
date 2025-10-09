@@ -715,96 +715,98 @@ const matchServices = {
   // },
 
   //code by Nikhil
-  async updateTeamMatchsData(matchId, winningTeamId) {
-    const match = await Match.findOne({
-      _id: matchId,
-      status: { $ne: "played" },
-    });
+  async updateTeamMatchsData(data) {
+    try {
+      const { matchId, winningTeamId, isDraw } = data;
+      const match = await Match.findOne({
+        _id: matchId
+      });
 
-    if (!match) {
-      throw CustomErrorHandler.notFound("Match Not Found");
-    }
+      if (!match) throw CustomErrorHandler.notFound("Match Not Found");
 
-    const tournament = await Tournament.findById(match.tournament).select("ballType");
-    const balltype = tournament.ballType.name;
+      const tournament = await Tournament.findById(match.tournament).select("ballType");
+      const balltype = tournament.ballType.name;
 
-    const scoreBoard = match.scoreBoard;
-    const team1Data = scoreBoard.get('team1');
-    const team2Data = scoreBoard.get('team2');
-    const firstInnings = scoreBoard.get('firstInnings');
-    const secondInnings = scoreBoard.get('secondInnings');
+      const scoreBoard = match.scoreBoard;
+      const team1Data = scoreBoard.get('team1');
+      const team2Data = scoreBoard.get('team2');
+      const firstInnings = scoreBoard.get('firstInnings');
+      const secondInnings = scoreBoard.get('secondInnings');
 
-    for (const player of team1Data.players || []) {
-      await this.updatePlayerStats(player, balltype);
-    }
-
-    for (const player of team2Data.players || []) {
-      await this.updatePlayerStats(player, balltype);
-    }
-
-    const totalBalls1 = (firstInnings?.overs || 0) * 6 + (firstInnings?.balls || 0);
-    const totalBalls2 = (secondInnings?.overs || 0) * 6 + (secondInnings?.balls || 0);
-
-    const winningteam1 = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
-    const winningteam2 = secondInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
-
-    const teamStatsPath = balltype === 'leather' ? 'teamMatchsData.leather' : 'teamMatchsData.tennis';
-
-    await Team.findByIdAndUpdate(firstInnings?.battingTeam?._id, {
-      $inc: {
-        [`${teamStatsPath}.runs`]: firstInnings?.totalScore || 0,
-        [`${teamStatsPath}.wins`]: winningteam1,
-        [`${teamStatsPath}.${balltype === 'leather' ? 'balls' : 'overs'}`]: totalBalls1,
-        [`${teamStatsPath}.wickets`]: firstInnings?.totalWickets || 0,
-        [`${teamStatsPath}.innings`]: 1,
+      for (const player of team1Data.players || []) {
+        await this.updatePlayerStats(player, balltype);
       }
-    });
 
-    await Team.findByIdAndUpdate(secondInnings?.battingTeam?._id, {
-      $inc: {
-        [`${teamStatsPath}.runs`]: secondInnings?.totalScore || 0,
-        [`${teamStatsPath}.wins`]: winningteam2,
-        [`${teamStatsPath}.${balltype === 'leather' ? 'balls' : 'overs'}`]: totalBalls2,
-        [`${teamStatsPath}.wickets`]: secondInnings?.totalWickets || 0,
-        [`${teamStatsPath}.innings`]: 1,
+      for (const player of team2Data.players || []) {
+        await this.updatePlayerStats(player, balltype);
       }
-    });
 
-    match.status = "played";
-    match.winningTeamId = winningTeamId;
-    await match.save();
+      const totalBalls1 = (firstInnings?.overs || 0) * 6 + (firstInnings?.balls || 0);
+      const totalBalls2 = (secondInnings?.overs || 0) * 6 + (secondInnings?.balls || 0);
 
-    const tournamentTeams = await RegisteredTeam.find({ tournament: tournament._id, status: "Accepted" }).populate('team user');
-    const teamFcmTokens = tournamentTeams.map(t => t.user?.fcmToken).filter(Boolean);
+      const winningteam1 = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
+      const winningteam2 = secondInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
 
-    const winnerTeam = await Team.findById(winningTeamId).select('teamName');
+      const teamStatsPath = balltype === 'leather' ? 'teamMatchsData.leather' : 'teamMatchsData.tennis';
 
-    const isWinnerFirstInnings = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString();
-    const runDiff = (firstInnings?.totalScore || 0) - (secondInnings?.totalScore || 0);
-    const wicketsRemaining = 10 - (secondInnings?.totalWickets || 0);
-    const winType = runDiff === 0 ? ' ' : isWinnerFirstInnings ? `by ${runDiff} runs` : `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
+      await Team.findByIdAndUpdate(firstInnings?.battingTeam?._id, {
+        $inc: {
+          [`${teamStatsPath}.runs`]: firstInnings?.totalScore || 0,
+          [`${teamStatsPath}.wins`]: winningteam1,
+          [`${teamStatsPath}.${balltype === 'leather' ? 'balls' : 'overs'}`]: totalBalls1,
+          [`${teamStatsPath}.wickets`]: firstInnings?.totalWickets || 0,
+          [`${teamStatsPath}.innings`]: 1,
+        }
+      });
 
-    const opponentTeam = isWinnerFirstInnings
-      ? tournamentTeams.find(t => t.team._id.toString() === secondInnings?.battingTeam?._id?.toString())
-      : tournamentTeams.find(t => t.team._id.toString() === firstInnings?.battingTeam?._id?.toString());
+      await Team.findByIdAndUpdate(secondInnings?.battingTeam?._id, {
+        $inc: {
+          [`${teamStatsPath}.runs`]: secondInnings?.totalScore || 0,
+          [`${teamStatsPath}.wins`]: winningteam2,
+          [`${teamStatsPath}.${balltype === 'leather' ? 'balls' : 'overs'}`]: totalBalls2,
+          [`${teamStatsPath}.wickets`]: secondInnings?.totalWickets || 0,
+          [`${teamStatsPath}.innings`]: 1,
+        }
+      });
 
-    const opponentTeamName = opponentTeam?.team?.teamName || "Opponent";
+      match.status = "played";
+      match.winningTeamId = winningTeamId;
+      await match.save();
 
-    if (teamFcmTokens.length) {
-      const notification = {
-        title: `Hey Participants!`,
-        body: `${winnerTeam?.teamName} has won the match against ${opponentTeamName} ${winType}`,
-      };
+      const tournamentTeams = await RegisteredTeam.find({ tournament: tournament._id, status: "Accepted" }).populate('team user');
+      const teamFcmTokens = tournamentTeams.map(t => t.user?.fcmToken).filter(Boolean);
 
-      try {
-        await Promise.all(teamFcmTokens.map(token => firebaseNotification.sendNotification(token, notification)));
-        console.log("Notifications sent!");
-      } catch (error) {
-        console.error("Notification error:", error);
+      const winnerTeam = await Team.findById(winningTeamId).select('teamName');
+
+      const isWinnerFirstInnings = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString();
+      const runDiff = (firstInnings?.totalScore || 0) - (secondInnings?.totalScore || 0);
+      const wicketsRemaining = 10 - (secondInnings?.totalWickets || 0);
+      const winType = runDiff === 0 ? ' ' : isWinnerFirstInnings ? `by ${runDiff} runs` : `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
+
+      const opponentTeam = isWinnerFirstInnings
+        ? tournamentTeams.find(t => t.team._id.toString() === secondInnings?.battingTeam?._id?.toString())
+        : tournamentTeams.find(t => t.team._id.toString() === firstInnings?.battingTeam?._id?.toString());
+
+      const opponentTeamName = opponentTeam?.team?.teamName || "Opponent";
+
+      if (teamFcmTokens.length) {
+        const notification = {
+          title: `Hey Participants!`,
+          body: `${winnerTeam?.teamName} has won the match against ${opponentTeamName} ${winType}`,
+        };
+
+        try {
+          await Promise.all(teamFcmTokens.map(token => firebaseNotification.sendNotification(token, notification)));
+          console.log("Notifications sent!");
+        } catch (error) {
+          console.error("Notification error:", error);
+        }
       }
+
+      return true;
+    } catch (error) {
+      console.log(`Failed to Update Data:${error}`);
     }
-
-    return true;
   },
 
   async updatePlayerStats(player, balltype) {
@@ -1032,7 +1034,7 @@ const matchServices = {
         Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
       ])
 
-      // Update match status and result
+      console.log("match update is called");
       match.status = "played"
       match.isMatchDraw = isMatchDraw
       match.winningTeamId = !isMatchDraw ? winningTeamId : null

@@ -33,7 +33,6 @@ router.get("/getLookingByID", validateUser, teamController.getLookingByID);
 
 router.post("/getAllNearByTeam", validateUser, teamController.getAllNearByTeam);
 
-//Todo:need 
 router.get("/pointsTable/:tournamentId", validateUser, teamController.getPointsTable);
 
 

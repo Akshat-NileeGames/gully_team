@@ -295,27 +295,31 @@ const matchController = {
   //upadateTeamMatchsData by nikhil
 
   async updateTeamMatchsData(req, res, next) {
-    let matchId = req.params.matchId;
-    let { winningTeamId } = req.body;
+    // let matchId = req.params.matchId;
+    const matchSchema = Joi.object({
+      matchId: Joi.string().required(),
+      winningTeamId: Joi.string().optional(),
+      isDraw: Joi.boolean().default(false).optional()
+    });
+    const { error } = matchSchema.validate(req.body);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
+    // let { winningTeamId } = req.body;
 
-    if (!matchId) {
-      return res.status(400).json({
-        success: false,
-        message: "Match ID is required.",
-      });
-    }
+    // if (!matchId) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Match ID is required.",
+    //   });
+    // }
 
-    if (!winningTeamId) {
-      return res.status(400).json({
-        success: false,
-        message: "Winning Team ID is required.",
-      });
-    }
+    // if (!winningTeamId) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Winning Team ID is required.",
+    //   });
+    // }
     try {
-      const result = await matchServices.updateTeamMatchsData(
-        matchId,
-        winningTeamId,
-      );
+      const result = await matchServices.updateTeamMatchsData(req.body);
 
       return res.status(200).json({
         sucess: true,

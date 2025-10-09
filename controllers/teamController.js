@@ -1,6 +1,6 @@
 import Joi from "joi";
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js";
-import { Team } from "../models/index.js";
+import { Team, Tournament } from "../models/index.js";
 import { adminService, teamServices } from "../services/index.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
 
@@ -523,13 +523,25 @@ const teamController = {
 
   async getPointsTable(req, res, next) {
     try {
-      const { tournamentId } = req.params;
+      const tournamentSchema = Joi.object({
+        tournamentId: Joi.string().required()
+      });
+      const { error } = tournamentSchema.validate(req.params);
+      if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
+      const tournamentSports = await Tournament.findById(req.params.tournamentId);
+      let pointsTable;
 
-      if (!tournamentId) {
-        return next(CustomErrorHandler.badRequest('Tournament ID is required'));
+      if (tournamentSports.tournamentfor === "cricket") {
+        pointsTable = await teamServices.getPointsTable(req.params);
+      } else if (tournamentSports.tournamentfor === "football") {
+        pointsTable = await teamServices.getFootballPointsTable(req.params);
+      } else {
+        return next(
+          CustomErrorHandler.validationError(
+            `Unsupported sport type: ${tournamentSports.tournamentfor}`
+          )
+        );
       }
-
-      const pointsTable = await teamServices.getPointsTable(tournamentId);
 
       res.status(200).json({
         success: true,

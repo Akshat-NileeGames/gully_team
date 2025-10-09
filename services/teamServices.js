@@ -1533,8 +1533,9 @@ const teamServices = {
   //   }
   // },
 
-  async getPointsTable(tournamentId) {
+  async getPointsTable(data) {
     try {
+      const { tournamentId } = data;
       const registeredTeams = await RegisteredTeam.find({
         tournament: tournamentId,
         status: 'Accepted',
@@ -1560,7 +1561,7 @@ const teamServices = {
         let totalRunsConceded = 0;
         let totalBallsFaced = 0;
         let totalBallsBowled = 0;
-        let teamNetRunRate = 0;
+        let teamNetRunRateBonus = 0;
 
         for (const match of matches) {
           const scoreBoard = match.scoreBoard;
@@ -1593,7 +1594,7 @@ const teamServices = {
           totalBallsFaced += teamBallsFaced;
           totalBallsBowled += opponentBallsFaced;
 
-          if (match.isTie) {
+          if (match.isMatchDraw === true) {
             ties++;
           } else if (match.winningTeamId?.toString() === team._id.toString()) {
             wins++;
@@ -1602,7 +1603,7 @@ const teamServices = {
           }
 
           if (teamRuns === opponentRuns) {
-            teamNetRunRate += 0.15;
+            teamNetRunRateBonus += 0.15;
           }
         }
 
@@ -1612,8 +1613,8 @@ const teamServices = {
         const runRateConceded = totalBallsBowled > 0 ? (totalRunsConceded / oversBowled) : 0;
 
         let netRunRate = runRateScored - runRateConceded;
-        if (teamNetRunRate !== 0) {
-          netRunRate += teamNetRunRate;
+        if (teamNetRunRateBonus !== 0) {
+          netRunRate += teamNetRunRateBonus;
         }
 
         pointsTable.push({
@@ -1625,11 +1626,10 @@ const teamServices = {
           wins,
           losses,
           ties,
-          points: (wins * 2) + (ties * 0.15),
+          points: (wins * 2) + (ties * 1),
           netRunRate: netRunRate.toFixed(2),
         });
       }
-
       pointsTable.sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         return parseFloat(b.netRunRate) - parseFloat(a.netRunRate);
@@ -1644,7 +1644,170 @@ const teamServices = {
       console.error('Error in getPointsTable:', error);
       throw new Error(error.message);
     }
+  },
+  async getFootballPointsTable(data) {
+    try {
+      const { tournamentId } = data;
+
+      const registeredTeams = await RegisteredTeam.find({
+        tournament: tournamentId,
+        status: 'Accepted',
+      }).populate('team');
+
+      const pointsTable = [];
+
+      for (const registeredTeam of registeredTeams) {
+        const team = registeredTeam.team;
+        if (!team?._id) continue;
+
+        const matches = await Match.find({
+          tournament: tournamentId,
+          status: 'played',
+          $or: [{ team1: team._id }, { team2: team._id }],
+        });
+
+        let matchesPlayed = 0;
+        let wins = 0;
+        let ties = 0;
+        let losses = 0;
+        let goalsFor = 0;
+        let goalsAgainst = 0;
+
+        for (const match of matches) {
+          const scoreBoard = match.scoreBoard;
+          if (!scoreBoard) continue;
+
+          const team1 = scoreBoard.get('homeTeam');
+          const team2 = scoreBoard.get('awayTeam');
+
+          if (!team1?._id || !team2?._id) continue;
+
+          const isHome = team1._id.toString() === team._id.toString();
+          const isAway = team2._id.toString() === team._id.toString();
+          if (!isHome && !isAway) {
+            continue;
+          }
+
+          matchesPlayed++;
+
+          let homeScore = 0;
+          let awayScore = 0;
+
+          const firstHalf = scoreBoard.get('firstHalf');
+          if (firstHalf) {
+            homeScore += firstHalf.homeGoals || 0;
+            awayScore += firstHalf.awayGoals || 0;
+          }
+
+          const secondHalf = scoreBoard.get('secondHalf');
+          if (secondHalf) {
+            homeScore += secondHalf.homeGoals || 0;
+            awayScore += secondHalf.awayGoals || 0;
+          }
+
+          const extraTime = scoreBoard.get('extraTime');
+          if (extraTime) {
+
+            if (extraTime.firstHalf) {
+              homeScore += extraTime.firstHalf.homeGoals || 0;
+              awayScore += extraTime.firstHalf.awayGoals || 0;
+            }
+
+            if (extraTime.secondHalf) {
+              homeScore += extraTime.secondHalf.homeGoals || 0;
+              awayScore += extraTime.secondHalf.awayGoals || 0;
+            }
+
+            homeScore += extraTime.homeGoals || 0;
+            awayScore += extraTime.awayGoals || 0;
+          }
+
+
+          const penaltyShootout = scoreBoard.get('penaltyShootout');
+          let homeWonPenalty = false;
+          let awayWonPenalty = false;
+
+          if (penaltyShootout && homeScore === awayScore) {
+            const homePenaltyScore = penaltyShootout.homeTeamScore || 0;
+            const awayPenaltyScore = penaltyShootout.awayTeamScore || 0;
+
+            if (homePenaltyScore > awayPenaltyScore) {
+              homeWonPenalty = true;
+            } else if (awayPenaltyScore > homePenaltyScore) {
+              awayWonPenalty = true;
+            }
+          }
+
+          let teamGoals, opponentGoals;
+          if (isHome) {
+            teamGoals = homeScore;
+            opponentGoals = awayScore;
+          } else {
+            teamGoals = awayScore;
+            opponentGoals = homeScore;
+          }
+
+          goalsFor += teamGoals;
+          goalsAgainst += opponentGoals;
+
+          if (teamGoals > opponentGoals) {
+            wins++;
+          } else if (teamGoals < opponentGoals) {
+            losses++;
+          } else {
+            if (penaltyShootout) {
+              if ((isHome && homeWonPenalty) || (isAway && awayWonPenalty)) {
+                wins++;
+              } else if ((isHome && awayWonPenalty) || (isAway && homeWonPenalty)) {
+                losses++;
+              } else {
+                ties++;
+              }
+            } else {
+              ties++;
+            }
+          }
+        }
+
+        const goalDifference = goalsFor - goalsAgainst;
+        const points = wins * 3 + ties * 1;
+
+        pointsTable.push({
+          rank: 0,
+          teamId: team._id.toString(),
+          teamName: team.teamName,
+          teamLogo: team.teamLogo,
+          matchesPlayed,
+          wins,
+          losses,
+          ties,
+          goalsFor,
+          goalsAgainst,
+          goalDifference,
+          points,
+        });
+      }
+
+      // Sort by points, then goal difference, then goals for
+      pointsTable.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.goalDifference !== a.goalDifference)
+          return b.goalDifference - a.goalDifference;
+        return b.goalsFor - a.goalsFor;
+      });
+
+      // Assign ranks
+      pointsTable.forEach((team, idx) => {
+        team.rank = idx + 1;
+      });
+
+      return pointsTable;
+    } catch (error) {
+      console.error('Error in getFootballPointsTable:', error);
+      throw new Error(error.message);
+    }
   }
+
 };
 
 export default teamServices;
