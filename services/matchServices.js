@@ -366,13 +366,18 @@ const matchServices = {
     return MatchExist;
   },
 
-  async getSingleMatch(matchId) {
-
-    const MatchExist = await Match.findById(new mongoose.Types.ObjectId(matchId));
-    if (!MatchExist) {
-      throw CustomErrorHandler.notFound("This Match is Not Found.");
+  async getSingleMatch(data) {
+    try {
+      const { matchId } = data;
+      console.log(matchId);
+      const MatchExist = await Match.findById(matchId);
+      if (!MatchExist) {
+        throw CustomErrorHandler.notFound("This Match is Not Found.");
+      }
+      return MatchExist;
+    } catch (error) {
+      console.log(`Failed to get Single Match :${error}`);
     }
-    return MatchExist;
   },
 
 
@@ -668,14 +673,14 @@ const matchServices = {
   //   }
   // },
 
-  async updateScoreBoard(data, MatchId) {
+  async updateScoreBoard(data, matchId) {
     try {
       // Validate input data
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
       const matchData = await Match.findByIdAndUpdate(
-        MatchId,
+        matchId,
         {
           $set: {
             scoreBoard: data.scoreBoard,
@@ -718,9 +723,7 @@ const matchServices = {
   async updateTeamMatchsData(data) {
     try {
       const { matchId, winningTeamId, isDraw } = data;
-      const match = await Match.findOne({
-        _id: matchId
-      });
+      const match = await Match.findOne({ _id: matchId });
 
       if (!match) throw CustomErrorHandler.notFound("Match Not Found");
 
@@ -744,8 +747,13 @@ const matchServices = {
       const totalBalls1 = (firstInnings?.overs || 0) * 6 + (firstInnings?.balls || 0);
       const totalBalls2 = (secondInnings?.overs || 0) * 6 + (secondInnings?.balls || 0);
 
-      const winningteam1 = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
-      const winningteam2 = secondInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
+      let winningteam1 = 0;
+      let winningteam2 = 0;
+
+      if (!isDraw) {
+        winningteam1 = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
+        winningteam2 = secondInnings?.battingTeam?._id?.toString() === winningTeamId.toString() ? 1 : 0;
+      }
 
       const teamStatsPath = balltype === 'leather' ? 'teamMatchsData.leather' : 'teamMatchsData.tennis';
 
@@ -770,33 +778,54 @@ const matchServices = {
       });
 
       match.status = "played";
-      match.winningTeamId = winningTeamId;
+      match.winningTeamId = isDraw ? null : winningTeamId;
+      match.isMatchDraw = isDraw ? true : false;
       await match.save();
 
-      const tournamentTeams = await RegisteredTeam.find({ tournament: tournament._id, status: "Accepted" }).populate('team user');
+      const tournamentTeams = await RegisteredTeam.find({
+        tournament: tournament._id,
+        status: "Accepted"
+      }).populate('team user');
+
       const teamFcmTokens = tournamentTeams.map(t => t.user?.fcmToken).filter(Boolean);
 
-      const winnerTeam = await Team.findById(winningTeamId).select('teamName');
+      let notification;
 
-      const isWinnerFirstInnings = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString();
-      const runDiff = (firstInnings?.totalScore || 0) - (secondInnings?.totalScore || 0);
-      const wicketsRemaining = 10 - (secondInnings?.totalWickets || 0);
-      const winType = runDiff === 0 ? ' ' : isWinnerFirstInnings ? `by ${runDiff} runs` : `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
-
-      const opponentTeam = isWinnerFirstInnings
-        ? tournamentTeams.find(t => t.team._id.toString() === secondInnings?.battingTeam?._id?.toString())
-        : tournamentTeams.find(t => t.team._id.toString() === firstInnings?.battingTeam?._id?.toString());
-
-      const opponentTeamName = opponentTeam?.team?.teamName || "Opponent";
-
-      if (teamFcmTokens.length) {
-        const notification = {
-          title: `Hey Participants!`,
-          body: `${winnerTeam?.teamName} has won the match against ${opponentTeamName} ${winType}`,
+      if (isDraw) {
+        notification = {
+          title: "Match Result",
+          body: `The match between ${firstInnings?.battingTeam?.teamName || 'Team A'} and ${secondInnings?.battingTeam?.teamName || 'Team B'} ended in a draw.`
         };
+      } else {
+        const winnerTeam = await Team.findById(winningTeamId).select('teamName');
 
+        const isWinnerFirstInnings = firstInnings?.battingTeam?._id?.toString() === winningTeamId.toString();
+        const runDiff = (firstInnings?.totalScore || 0) - (secondInnings?.totalScore || 0);
+        const wicketsRemaining = 10 - (secondInnings?.totalWickets || 0);
+        const winType = runDiff === 0
+          ? ''
+          : isWinnerFirstInnings
+            ? `by ${runDiff} runs`
+            : `by ${wicketsRemaining} wicket${wicketsRemaining > 1 ? 's' : ''}`;
+
+        const opponentTeam = isWinnerFirstInnings
+          ? tournamentTeams.find(t => t.team._id.toString() === secondInnings?.battingTeam?._id?.toString())
+          : tournamentTeams.find(t => t.team._id.toString() === firstInnings?.battingTeam?._id?.toString());
+
+        const opponentTeamName = opponentTeam?.team?.teamName || "Opponent";
+
+        notification = {
+          title: "Hey Participants!",
+          body: `${winnerTeam?.teamName} has won the match against ${opponentTeamName} ${winType}`
+        };
+      }
+
+      // Send notification
+      if (teamFcmTokens.length && notification) {
         try {
-          await Promise.all(teamFcmTokens.map(token => firebaseNotification.sendNotification(token, notification)));
+          await Promise.all(teamFcmTokens.map(token =>
+            firebaseNotification.sendNotification(token, notification)
+          ));
           console.log("Notifications sent!");
         } catch (error) {
           console.error("Notification error:", error);
@@ -805,10 +834,9 @@ const matchServices = {
 
       return true;
     } catch (error) {
-      console.log(`Failed to Update Data:${error}`);
+      console.log(`Failed to Update Data: ${error}`);
     }
   },
-
   async updatePlayerStats(player, balltype) {
     if (!player?.batting || !player?.bowling) return;
 
@@ -983,7 +1011,6 @@ const matchServices = {
 
       await Promise.all(playerUpdatePromises)
 
-      // Determine match result
       let isMatchDraw = false;
 
       if (isPenaltyShootout) {
@@ -1056,6 +1083,7 @@ const matchServices = {
       throw error
     }
   },
+
 
   async teamRanking(ballType) {
     let teamsRanking;

@@ -115,9 +115,13 @@ const matchController = {
   },
 
   async getSingleMatch(req, res, next) {
-    let matchId = req.params.matchId;
     try {
-      const result = await matchServices.getSingleMatch(matchId);
+      const matchSchema = Joi.object({
+        matchId: Joi.string().required()
+      });
+      const { error } = matchSchema.validate(req.params);
+      if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
+      const result = await matchServices.getSingleMatch(req.params);
 
       return res.status(200).json({
         success: true,
@@ -276,9 +280,14 @@ const matchController = {
   // },
 
   async updateScoreBoard(req, res, next) {
-    let MatchId = req.params.matchId;
+
     try {
-      const result = await matchServices.updateScoreBoard(req.body, MatchId);
+      const match = Joi.object({
+        matchId: Joi.string().required()
+      });
+      const { error } = match.validate(req.params);
+      if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
+      const result = await matchServices.updateScoreBoard(req.body, req.params.matchId);
 
       return res.status(200).json({
         success: true,
@@ -298,26 +307,12 @@ const matchController = {
     // let matchId = req.params.matchId;
     const matchSchema = Joi.object({
       matchId: Joi.string().required(),
-      winningTeamId: Joi.string().optional(),
+      winningTeamId: Joi.string().allow('').optional(),
       isDraw: Joi.boolean().default(false).optional()
     });
     const { error } = matchSchema.validate(req.body);
-    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
-    // let { winningTeamId } = req.body;
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
 
-    // if (!matchId) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Match ID is required.",
-    //   });
-    // }
-
-    // if (!winningTeamId) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Winning Team ID is required.",
-    //   });
-    // }
     try {
       const result = await matchServices.updateTeamMatchsData(req.body);
 
@@ -332,22 +327,6 @@ const matchController = {
     }
   },
   async updateFootballMatchData(req, res, next) {
-    // let matchId = req.params.matchId;
-    // let { winningTeamId } = req.body;
-
-    // if (!matchId) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Match ID is required.",
-    //   });
-    // }
-
-    // if (!winningTeamId) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Winning Team ID is required.",
-    //   });
-    // }
     const match = Joi.object({
       matchId: Joi.string().required(),
       winningTeamId: Joi.string().allow(null).optional()

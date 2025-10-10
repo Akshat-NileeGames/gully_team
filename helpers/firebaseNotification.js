@@ -25,8 +25,8 @@ class firebaseNotification {
       let response="failed";
   try {
     response = await messaging.send(message);
-    console.log('Successfully sent message:', response);
-    console.log("send message");
+    // console.log('Successfully sent message:', response);
+    // console.log("send message");
   } catch (error) {
     console.error('Error sending message:', error);
     return response;

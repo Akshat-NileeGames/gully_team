@@ -20,7 +20,7 @@ router.get("/getOpponentOld/:tournamentId/:teamId", validateUser, matchControlle
 
 router.post("/updateScoreBoard/:matchId", validateUser, matchController.updateScoreBoard);
 
-router.put("/updateTeamMatchsData/:matchId", validateUser, matchController.updateTeamMatchsData,);
+router.post("/updateTeamMatchsData", validateUser, matchController.updateTeamMatchsData,);
 router.post("/updateFootballMatchData/", validateUser, matchController.updateFootballMatchData);
 
 router.get("/teamRanking/:ballType", validateUser, matchController.teamRanking);
