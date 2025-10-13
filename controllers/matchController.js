@@ -70,7 +70,6 @@ const matchController = {
         matchNo: req.body.matchNo,
       });
 
-      console.log(`The Team 1 id:${req.body.team1ID} and Team 2 id:${req.body.team2ID}`)
       if (MatchExist) {
         return next(
           CustomErrorHandler.alreadyExist("This Match already exists.")
@@ -136,29 +135,23 @@ const matchController = {
 
   async editMatch(req, res, next) {
     let MatchId = req.params.matchId;
-
-    // Validation
+    console.log("these api is called");
     const MatchSchema = Joi.object({
       tournamentId: Joi.string().min(3).max(30).required(),
       team1ID: Joi.string().min(3).max(30).required(),
       team2ID: Joi.string().min(3).max(30).required(),
-      round: Joi.string().required(), // Adjust min and max values based on your requirements
-      matchNo: Joi.number().integer().required(), // Adjust min and max values based on your requirements
+      round: Joi.string().required(),
+      matchNo: Joi.number().integer().required(),
       dateTime: Joi.date().iso().required(),
-      winningTeamId: Joi.string().optional(), //DG
+      winningTeamId: Joi.string().optional(),
+      matchlength: Joi.number().integer().allow(0).optional(),
     });
 
     const { error } = MatchSchema.validate(req.body);
 
-    if (error) {
-      return next(error);
-    }
-
+    if (error) return CustomErrorHandler.validationError(`Failed to validate the request:${error}`);
     try {
-
-
       const result = await matchServices.editMatch(req.body, MatchId);
-
       return res.status(200).json({
         success: true,
         message: "Match edited successfully",

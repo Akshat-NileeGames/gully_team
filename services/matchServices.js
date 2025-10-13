@@ -528,18 +528,16 @@ const matchServices = {
   },
 
   async editMatch(data, MatchId) {
-    // Ensure the dateTime is standardized
+
     const userInfo = global.user;
 
-    // Find the Match by ID and ensure it belongs to the correct tournament
     const MatchExist = await Match.findOne({
       _id: MatchId,
       tournament: data.tournamentId,
     });
 
-    if (!MatchExist) {
-      throw CustomErrorHandler.notFound("Match Not Found");
-    }
+    if (!MatchExist) throw CustomErrorHandler.notFound("Match Not Found");
+
     const formatDateTime = (dateTimeString) => {
       const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
       if (!parsedDate.isValid) {
@@ -550,21 +548,20 @@ const matchServices = {
     };
 
     const standardizedDateTime = formatDateTime(data.dateTime);
-    console.log("Edit Match - Original DateTime:", data.dateTime);
-    console.log("Edit Match - Formatted DateTime:", standardizedDateTime);
+    // console.log("Edit Match - Original DateTime:", data.dateTime);
+    // console.log("Edit Match - Formatted DateTime:", standardizedDateTime);
 
-
-    // Update the match fields
     MatchExist.team1 = data.team1ID;
     MatchExist.team2 = data.team2ID;
     MatchExist.Round = data.round;
     MatchExist.matchNo = data.matchNo;
     MatchExist.dateTime = standardizedDateTime;
-
-    // Save the updated document
+    if (data.matchlength) {
+      MatchExist.matchlength = data.matchlength;
+    }
+  
     const matchData = await MatchExist.save();
 
-    //Send Notification to both team organizers about match Changes
     const [team1org, team2org] = await Promise.all([
       User.findById(MatchExist.team1.userId),
       User.findById(MatchExist.team2.userId)

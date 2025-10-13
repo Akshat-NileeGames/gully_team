@@ -9,8 +9,8 @@ router.post("/createMatch", validateUser, matchController.createMatch);
 router.get("/getMatches/:tournamentId", matchController.getMatches);
 router.get("/getMatch/:matchId", matchController.getSingleMatch);
 // router.get("/editMatch/:matchId", matchController.editMatch);
-router.put("/editMatch/:matchId", validateUser, matchController.editMatch); // Corrected to PUT
-router.delete("/deleteMatch/:matchId", validateUser, matchController.deleteMatch); // Added Delete Match
+router.put("/editMatch/:matchId", validateUser, matchController.editMatch); 
+router.delete("/deleteMatch/:matchId", validateUser, matchController.deleteMatch);
 
 router.get("/getOpponentTournamentId", validateUser, matchController.getOpponentTournamentId);
 
