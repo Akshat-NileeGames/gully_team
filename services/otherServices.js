@@ -3908,7 +3908,7 @@ const otherServices = {
 
       const user = individual ? await User.findById(individual.userId) : await User.findById(userInfo.userId);
       if (!user) throw CustomErrorHandler.notFound("User Not Found");
-
+      console.log(data.PackageId);
       const purchasedPackage = await Package.findById(data.PackageId);
       if (!purchasedPackage) throw CustomErrorHandler.notFound("Package Not Found");
 

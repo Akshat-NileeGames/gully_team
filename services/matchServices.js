@@ -672,10 +672,10 @@ const matchServices = {
 
   async updateScoreBoard(data, matchId) {
     try {
-      // Validate input data
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
+      console.log(matchId);
       const matchData = await Match.findByIdAndUpdate(
         matchId,
         {
@@ -3065,11 +3065,11 @@ const matchServices = {
     return await MatchExist.save();
   },
 
-  async updateChallengeScoreBoard(data, MatchId) {
+  async updateChallengeScoreBoard(data, matchId) {
     // const userInfo = global.user;
 
     // Find the tournament by ID
-    const match = await ChallengeTeam.findById(MatchId);
+    const match = await ChallengeTeam.findById(matchId);
 
     if (!match) {
       // Handle the case where the tournament is not found

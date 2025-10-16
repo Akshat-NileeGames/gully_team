@@ -677,12 +677,15 @@ const matchController = {
   },
 
   async updateChallengeScoreBoard(req, res, next) {
-    let MatchId = req.params.matchId;
-    // console.log(req.body.scoreBoard.partnerships);
+    const match = Joi.object({
+      matchId: Joi.string().required()
+    });
+    const { error } = match.validate(req.params);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
     try {
       const result = await matchServices.updateChallengeScoreBoard(
         req.body,
-        MatchId,
+        req.params.matchId,
       );
 
       return res.status(200).json({

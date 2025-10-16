@@ -52,7 +52,7 @@ router.get("/getChallengeMatch", validateUser, matchController.getChallengeMatch
 router.post("/updateChallengeMatch/:matchId/:status", validateUser, matchController.updateChallengeMatch,);
 
 // to update score board of challenge match
-router.post("/updateChallengeScoreBoard/:matchId", validateUser, matchController.updateChallengeScoreBoard,);
+router.post("/updateChallengeScoreBoard/:matchId", validateUser, matchController.updateChallengeScoreBoard);
 
 router.get("/getChallengeMatchPerformance/:matchId", validateUser, matchController.getChallengeMatchPerformance,);
 
