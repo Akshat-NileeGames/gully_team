@@ -26,18 +26,10 @@ const challengeTeamSchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-
-  winningTeamId: {
-    type: String,
-    default: "Pending",
-  },
   endDate: {
     type: String,
   },
   updateDateTime: {
-    type: String,
-  },
-  venue: {
     type: String,
   },
   status: {
@@ -55,73 +47,13 @@ const challengeTeamSchema = new mongoose.Schema({
     required: true,
   },
   scoreBoard: {
-    type: {
-      team1: {
-        type: {},
-      },
-      team2: {
-        type: {},
-      },
-      matchId: {
-        type: String,
-      },
-      tossWonBy: {
-        type: mongoose.Schema.Types.ObjectId,
-      },
-      electedTo: {
-        type: String,
-        enum: ["Bat", "Bowl"],
-      },
-      firstInnings: {},
-      secondInnings: {},
-      isChallenge: {
-        type: Boolean,
-        default: true,
-      },
-      totalOvers: {
-        type: Number,
-      },
-      extras: {
-        type: {},
-        default: null,
-      },
-      overCompleted: {
-        type: Boolean,
-        default: false,
-      },
-      partnerships: {
-        type: {},
-        default: null,
-      },
-      strikerId: {
-        type: mongoose.Schema.Types.ObjectId,
-      },
-      nonStrikerId: {
-        type: mongoose.Schema.Types.ObjectId,
-      },
-      bowlerId: {
-        type: mongoose.Schema.Types.ObjectId,
-      },
-      ballsToBowl: { type: Number },
-      currentOver: { type: Number },
-      currentBall: { type: Number },
-      currentInnings: { type: Number },
-      currentInningsScore: { type: Number },
-      currentInningsWickets: { type: Number },
-      lastEventType: { type: String },
-      firstInningHistory: {
-        type: Object,
-        required: false,
-        default: null,
-      },
-
-      secondInningHistory: {
-        type: Object,
-        required: false,
-        default: null,
-      },
-    },
-    default: null,
+    type: Map,
+    of: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  matchlength: {
+    type: Number,
+    required: false,
   },
   Round: {
     type: String,
@@ -133,6 +65,20 @@ const challengeTeamSchema = new mongoose.Schema({
     required: true,
     default: 0,
   },
+  winningTeamId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Team",
+    default: null,
+  },
+  isMatchDraw: {
+    type: Boolean,
+    default: false
+  },
+  matchAuthority: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  }
 });
 // challengeTeamSchema.plugin(autopopulate);
 challengeTeamSchema.set("timestamps", true);

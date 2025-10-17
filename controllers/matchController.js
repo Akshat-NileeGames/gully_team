@@ -621,7 +621,9 @@ const matchController = {
       team2ID: Joi.string().min(3).max(30).required(),
       challengeforSport: Joi.string().required(),
       // dateTime: Joi.date().iso().required(),
-
+      matchlength: Joi.number().integer().allow(0).optional(),
+      winningTeamId: Joi.string().optional(),
+      matchAuthority: Joi.string().optional(),
     });
 
     const { error } = MatchSchema.validate(req.body);
@@ -663,6 +665,7 @@ const matchController = {
     const status = req.params.status;
 
     try {
+
       const result = await matchServices.updateChallengeMatch(matchId, status);
 
       return res.status(200).json({
