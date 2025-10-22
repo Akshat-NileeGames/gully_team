@@ -616,21 +616,16 @@ const matchController = {
 
   async createChallengeMatch(req, res, next) {
     //validation
-    const MatchSchema = Joi.object({
+    const challengeSchema = Joi.object({
       team1ID: Joi.string().min(3).max(30).required(),
       team2ID: Joi.string().min(3).max(30).required(),
       challengeforSport: Joi.string().required(),
       // dateTime: Joi.date().iso().required(),
       matchlength: Joi.number().integer().allow(0).optional(),
-      winningTeamId: Joi.string().optional(),
-      matchAuthority: Joi.string().optional(),
+      matchAuthority: Joi.string().required(),
     });
-
-    const { error } = MatchSchema.validate(req.body);
-
-    if (error) {
-      return next(error);
-    }
+    const { error } = challengeSchema.validate(req.body);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
     try {
       const result = await matchServices.createChallengeMatch(req.body);
       return res.status(200).json({
@@ -703,13 +698,17 @@ const matchController = {
   },
 
   async finishChallengeMatch(req, res, next) {
-    let matchId = req.params.matchId;
-    let { winningTeamId } = req.body;
+    const matchSchema = Joi.object({
+      matchId: Joi.string().required(),
+      winningTeamId: Joi.string().allow('').optional(),
+      isDraw: Joi.boolean().default(false).optional()
+    });
+    const { error } = matchSchema.validate(req.body);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
     // console.log(req.body.scoreBoard.partnerships);
     try {
       const result = await matchServices.finishChallengeMatch(
-        matchId,
-        winningTeamId,
+        req.body
       );
 
       return res.status(200).json({

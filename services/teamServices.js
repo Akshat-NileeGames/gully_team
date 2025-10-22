@@ -1307,9 +1307,7 @@ const teamServices = {
       },
       {
         $addFields: {
-          distanceInKm: {
-            $divide: ["$distance", 1000],
-          },
+          distanceInKm: { $divide: ["$distance", 1000] },
         },
       },
       {
@@ -1326,21 +1324,31 @@ const teamServices = {
           as: "teams",
         },
       },
-      {
-        $unwind: "$teams", // Flatten the array to filter based on teamfor
-      },
+      { $unwind: "$teams" },
       {
         $match: {
           "teams.teamfor": sport,
         },
       },
       {
-        $group: {
-          _id: "$_id",
-          fullName: { $first: "$fullName" },
-          email: { $first: "$email" },
-          distanceInKm: { $first: "$distanceInKm" },
-          teams: { $push: "$teams" },
+        $lookup: {
+          from: "players",
+          let: { playerIds: "$teams.players" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ["$_id", "$$playerIds"],
+                },
+              },
+            },
+          ],
+          as: "teamsPopulatedPlayers",
+        },
+      },
+      {
+        $addFields: {
+          "teams.players": "$teamsPopulatedPlayers",
         },
       },
       {
@@ -1352,10 +1360,19 @@ const teamServices = {
           "teams.teamLogo": 1,
           "teams._id": 1,
           "teams.teamfor": 1,
+          "teams.players": 1,
+        },
+      },
+      {
+        $group: {
+          _id: "$_id",
+          fullName: { $first: "$fullName" },
+          email: { $first: "$email" },
+          distanceInKm: { $first: "$distanceInKm" },
+          teams: { $push: "$teams" },
         },
       },
     ]);
-
     return NearByTeams;
   },
   async getTeamCount() {

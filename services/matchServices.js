@@ -2938,7 +2938,7 @@ const matchServices = {
     }
   },
   async createChallengeMatch(data) {
-    const { team1ID, team2ID, dateTime, challengeforSport } = data;
+    const { team1ID, team2ID, dateTime, challengeforSport, matchlength, matchAuthority } = data;
 
     const userInfo = global.user;
 
@@ -2955,48 +2955,44 @@ const matchServices = {
       throw CustomErrorHandler.alreadyExist("Challenge Match Already Exist.");
     }
 
-    //we are checking team1 player is present in team2.
 
-    const team1 = await Team?.findById(team1ID);
-    const team2 = await Team?.findById(team2ID);
+    // const team1 = await Team?.findById(team1ID);
+    // const team2 = await Team?.findById(team2ID);
 
-    let team1Players = team1.players;
-    let team2Players = team2.players;
+    // let team1Players = team1.players;
+    // let team2Players = team2.players;
 
-    // Function to check if any player from `team2` is present in `team1`
-    function isPlayerPresentInTeam2(team1Players, team2Players) {
-      // Extracting the array of player phoneNumber from `team1`
-      const team1PlayerIds = team1Players.map((player) => player.phoneNumber);
+    // function isPlayerPresentInTeam2(team1Players, team2Players) {
+    //   const team1PlayerIds = team1Players.map((player) => player.phoneNumber);
 
-      for (const player of team2Players) {
-        if (team1PlayerIds.includes(player.phoneNumber)) {
-          console.log(
-            `Player with  ${player.phoneNumber} is present in both Team `
-          );
-          throw CustomErrorHandler.alreadyExist(
-            `Player with  Phone Number ${player.phoneNumber} present in both Team `
-          );
-          //return true;
-        }
-      }
-      return false; // No player from `team2` is present in `team1`
-    }
+    //   for (const player of team2Players) {
+    //     if (team1PlayerIds.includes(player.phoneNumber)) {
+    //       console.log(
+    //         `Player with  ${player.phoneNumber} is present in both Team `
+    //       );
+    //       throw CustomErrorHandler.alreadyExist(
+    //         `Player with  Phone Number ${player.phoneNumber} present in both Team `
+    //       );
+    //     }
+    //   }
+    //   return false;
+    // }
 
-    // Call the function passing `team1` and `team2` as arguments
-    const isPlayerPresent = isPlayerPresentInTeam2(team1Players, team2Players);
+    // const isPlayerPresent = isPlayerPresentInTeam2(team1Players, team2Players);
 
-    // Create a new instance of the Match model
     const newMatch = new ChallengeTeam({
       team1: team1ID,
       team2: team2ID,
       captain1: userInfo.userId,
       captain2: teamData.userId,
       challengedBy: userInfo.userId,
-      challengeforSport: challengeforSport
+      challengeforSport: challengeforSport,
+      matchlength: matchlength,
+      winningTeamId: null,
+      matchAuthority: matchAuthority
       // dateTime: dateTime,
     });
 
-    // Save the new Match and wait for the operation to complete
     const matchdata = await newMatch.save();
     return matchdata;
   },
@@ -3082,18 +3078,23 @@ const matchServices = {
     return matchData;
   },
 
-  async finishChallengeMatch(MatchId, winningTeamId) {
-    // const userInfo = global.user;
-    // Find the tournament by ID
-    const match = await ChallengeTeam.findById(MatchId);
-    if (!match) {
-      // Handle the case where the tournament is not found
-      throw CustomErrorHandler.notFound("Match Not Found");
+  async finishChallengeMatch(data) {
+    try {
+      const { matchId, winningTeamId } = data;
+      // const userInfo = global.user;
+      // Find the tournament by ID
+      const match = await ChallengeTeam.findById(matchId);
+      if (!match) {
+        // Handle the case where the tournament is not found
+        throw CustomErrorHandler.notFound("Match Not Found");
+      }
+      match.winningTeamId = winningTeamId;
+      // Save the updated user document
+      let matchData = await match.save();
+      return matchData;
+    } catch (error) {
+      console.log(`Failed to updat challenge match:${error}`);
     }
-    match.winningTeamId = winningTeamId;
-    // Save the updated user document
-    let matchData = await match.save();
-    return matchData;
   },
 
   async getChallengeMatchPerformance(MatchId) {

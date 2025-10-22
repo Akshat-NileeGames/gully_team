@@ -20,7 +20,7 @@ router.get("/getOpponentOld/:tournamentId/:teamId", validateUser, matchControlle
 
 router.post("/updateScoreBoard/:matchId", validateUser, matchController.updateScoreBoard);
 
-router.post("/updateTeamMatchsData", validateUser, matchController.updateTeamMatchsData,);
+router.post("/updateTeamMatchsData", validateUser, matchController.updateTeamMatchsData);
 router.post("/updateFootballMatchData/", validateUser, matchController.updateFootballMatchData);
 
 router.get("/teamRanking/:ballType", validateUser, matchController.teamRanking);
@@ -49,13 +49,13 @@ router.post("/createChallengeMatch", validateUser, matchController.createChallen
 router.get("/getChallengeMatch", validateUser, matchController.getChallengeMatch,);
 
 //to chnage the status of challenge match eg. pending, Accepted,Denied
-router.post("/updateChallengeMatch/:matchId/:status", validateUser, matchController.updateChallengeMatch,);
+router.post("/updateChallengeMatch/:matchId/:status", validateUser, matchController.updateChallengeMatch);
 
 // to update score board of challenge match
 router.post("/updateChallengeScoreBoard/:matchId", validateUser, matchController.updateChallengeScoreBoard);
 
 router.get("/getChallengeMatchPerformance/:matchId", validateUser, matchController.getChallengeMatchPerformance,);
 
-router.post("/finishChallengeMatch/:matchId", validateUser, matchController.finishChallengeMatch,);
+router.post("/finishChallengeMatch/", validateUser, matchController.finishChallengeMatch);
 
 export default router;
