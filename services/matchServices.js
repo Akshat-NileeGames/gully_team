@@ -1058,14 +1058,11 @@ const matchServices = {
         Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
       ])
 
-      console.log("match update is called");
       match.status = "played"
       match.isMatchDraw = isMatchDraw
       match.winningTeamId = !isMatchDraw ? winningTeamId : null
 
-      await match.save()
 
-      console.log("Football match data updated successfully.")
 
       return {
         success: true,
@@ -3080,16 +3077,54 @@ const matchServices = {
 
   async finishChallengeMatch(data) {
     try {
-      const { matchId, winningTeamId } = data;
-      // const userInfo = global.user;
-      // Find the tournament by ID
+      const { matchId, winningTeamId, isDraw } = data;
       const match = await ChallengeTeam.findById(matchId);
-      if (!match) {
-        // Handle the case where the tournament is not found
-        throw CustomErrorHandler.notFound("Match Not Found");
-      }
-      match.winningTeamId = winningTeamId;
-      // Save the updated user document
+      if (!match) throw CustomErrorHandler.notFound("Match Not Found");
+      if (match.challengeforSport == 'football') {
+        const scoreBoard = match.scoreBoard
+        const homeTeam = scoreBoard.get("homeTeam") || {}
+        const awayTeam = scoreBoard.get("awayTeam") || {}
+        const matchEvents = scoreBoard.get("matchEvents") || []
+        const goals = scoreBoard.get("goals") || []
+        const cards = scoreBoard.get("cards") || []
+        const penaltyShootout = scoreBoard.get("penaltyShootout") || {}
+        const isPenaltyShootout = scoreBoard.get("isPenaltyShootout") || false
+        const isExtraTime = scoreBoard.get("isExtraTime") || false
+        const extraTime = scoreBoard.get("extraTime") || false
+
+        const homeScore = scoreBoard.get("homeScore") || 0
+        const awayScore = scoreBoard.get("awayScore") || 0
+
+        if (!scoreBoard) throw CustomErrorHandler.badRequest("Match scoreboard data not found");
+        let isMatchDraw = false;
+        if (isPenaltyShootout) {
+          const homePenaltyScore = penaltyShootout?.homeTeamScore ?? 0;
+          const awayPenaltyScore = penaltyShootout?.awayTeamScore ?? 0;
+
+          if (homePenaltyScore === awayPenaltyScore) {
+            isMatchDraw = true;
+          }
+
+        } else if (isExtraTime) {
+          const homeExtraScore = (extraTime?.firstHalf?.homeGoals ?? 0) + (extraTime?.secondHalf?.homeGoals ?? 0);
+          const awayExtraScore = (extraTime?.firstHalf?.awayGoals ?? 0) + (extraTime?.secondHalf?.awayGoals ?? 0);
+
+          if (homeExtraScore === awayExtraScore) {
+            isMatchDraw = true;
+          }
+
+        } else {
+          if (homeScore === awayScore) {
+            isMatchDraw = true;
+          }
+        }
+        match.status = "played"
+        match.isMatchDraw = isMatchDraw
+        match.winningTeamId = !isMatchDraw ? winningTeamId : null
+      } else {
+        match.isMatchDraw = isDraw;
+        match.winningTeamId = isDraw ? null : winningTeamId;
+    }
       let matchData = await match.save();
       return matchData;
     } catch (error) {

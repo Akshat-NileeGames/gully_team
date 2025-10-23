@@ -707,9 +707,7 @@ const matchController = {
     if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
     // console.log(req.body.scoreBoard.partnerships);
     try {
-      const result = await matchServices.finishChallengeMatch(
-        req.body
-      );
+      const result = await matchServices.finishChallengeMatch(req.body);
 
       return res.status(200).json({
         sucess: true,
