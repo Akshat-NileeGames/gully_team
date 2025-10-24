@@ -504,33 +504,25 @@ const matchController = {
     }
   },
   async getFootballTopPerformers(req, res, next) {
-    // Validation schema
-    const schema = Joi.object({
-      startDate: Joi.date().iso().required(),
-      category: Joi.string().valid("goals", "assists", "saves", "overall").default("overall"),
-      limit: Joi.number().integer().min(1).max(50).default(10),
-    })
+    // const schema = Joi.object({
+    //   startDate: Joi.date().iso().required(),
+    //   category: Joi.string().valid("goals", "assists", "saves", "overall").default("overall"),
+    //   limit: Joi.number().integer().min(1).max(50).default(10),
+    // })
 
-    const { error, value } = schema.validate(req.body)
-    if (error) {
-      return next(CustomErrorHandler.validationError(error.details[0].message))
-    }
+    // const { error, value } = schema.validate(req.body)
+    // if (error) {
+    //   return next(CustomErrorHandler.validationError(error.details[0].message))
+    // }
 
     try {
-      const topPerformers = await matchServices.getFootballTopPerformers({
-        startDate: value.startDate,
-        category: value.category,
-        limit: value.limit,
-      })
+      const topPerformers = await matchServices.getFootballTopPerformers(req.body)
 
       return res.status(200).json({
         success: true,
         message: "Top performers retrieved successfully",
         data: {
           topPerformers: topPerformers,
-          date: value.startDate,
-          category: value.category,
-          totalPerformers: topPerformers.length,
         },
       })
     } catch (error) {
@@ -721,9 +713,15 @@ const matchController = {
   },
 
   async getChallengeMatchPerformance(req, res, next) {
-    let MatchId = req.params.matchId;
+
+    const perfomance = Joi.object({
+      matchId: Joi.string().required()
+    });
+    const { error } = perfomance.validate(req.params);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
     try {
-      const result = await matchServices.getChallengeMatchPerformance(MatchId);
+      const result = await matchServices.getChallengeMatchPerformance(req.params);
+
 
       return res.status(200).json({
         sucess: true,
@@ -734,8 +732,28 @@ const matchController = {
       console.log(" Error in getChallengeMatchPerformance ");
       return next(err);
     }
-  },
 
+  },
+  async getFootballChallengePerformance(req, res, next) {
+
+    const perfomance = Joi.object({
+      matchId: Joi.string().required()
+    });
+    const { error } = perfomance.validate(req.params);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
+    try {
+      const result = await matchServices.getFootballChallengePerformance(req.params);
+      return res.status(200).json({
+        sucess: true,
+        message: "Challenge Match Performance Retrieved Successfully",
+        data: { performance: result },
+      });
+    } catch (err) {
+      console.log(" Error in getChallengeMatchPerformance ");
+      return next(err);
+    }
+
+  },
   // async getMatches(req, res, next) {
   //   try {
   //     const result = await matchServices.getMatch();

@@ -21,7 +21,7 @@ router.get("/getOpponentOld/:tournamentId/:teamId", validateUser, matchControlle
 router.post("/updateScoreBoard/:matchId", validateUser, matchController.updateScoreBoard);
 
 router.post("/updateTeamMatchsData", validateUser, matchController.updateTeamMatchsData);
-router.post("/updateFootballMatchData/", validateUser, matchController.updateFootballMatchData);
+router.post("/updateFootballMatchData", validateUser, matchController.updateFootballMatchData);
 
 router.get("/teamRanking/:ballType", validateUser, matchController.teamRanking);
 router.get("/footballteamRanking", validateUser, matchController.getFootballTeamRankings);
@@ -40,13 +40,13 @@ router.post("/footballtopPerformers", validateUser, matchController.getFootballT
 // );
 
 //DG
-router.post("/myPerformance/:userId", validateUser, matchController.myPerformance,);
+router.post("/myPerformance/:userId", validateUser, matchController.myPerformance);
 router.get("/getmyFootballPerformance/:userId", validateUser, matchController.getFootballPerformance);
 
 // to create challenge match
 router.post("/createChallengeMatch", validateUser, matchController.createChallengeMatch);
 
-router.get("/getChallengeMatch", validateUser, matchController.getChallengeMatch,);
+router.get("/getChallengeMatch", validateUser, matchController.getChallengeMatch);
 
 //to chnage the status of challenge match eg. pending, Accepted,Denied
 router.post("/updateChallengeMatch/:matchId/:status", validateUser, matchController.updateChallengeMatch);
@@ -54,7 +54,8 @@ router.post("/updateChallengeMatch/:matchId/:status", validateUser, matchControl
 // to update score board of challenge match
 router.post("/updateChallengeScoreBoard/:matchId", validateUser, matchController.updateChallengeScoreBoard);
 
-router.get("/getChallengeMatchPerformance/:matchId", validateUser, matchController.getChallengeMatchPerformance,);
+router.get("/getChallengeMatchPerformance/:matchId", validateUser, matchController.getChallengeMatchPerformance);
+router.get("/getFootballChallengePerformance/:matchId", validateUser, matchController.getFootballChallengePerformance);
 
 router.post("/finishChallengeMatch/", validateUser, matchController.finishChallengeMatch);
 
