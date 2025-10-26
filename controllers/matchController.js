@@ -601,11 +601,6 @@ const matchController = {
     }
   },
 
-
-
-
-  //challange match
-
   async createChallengeMatch(req, res, next) {
     //validation
     const challengeSchema = Joi.object({
@@ -630,6 +625,29 @@ const matchController = {
       return next(err);
     }
   },
+
+  //#region getAvailableAuthority
+  async getAvailableAuthority(req, res, next) {
+    const authority = Joi.object({
+      challengeTeamId: Joi.string().required(),
+      opponentTeamId: Joi.string().required()
+    });
+    const { error } = authority.validate(req.params);
+    if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
+    try {
+      const result = await matchServices.getAvailableAuthority(req.params);
+      return res.status(200).json({
+        sucess: true,
+        message: "Match created successfully",
+        data: {mappeduser:result},
+      });
+    } catch (error) {
+      console.log(`Failed to get Authority:${error}`);
+    }
+  },
+  //#endregion
+
+
 
   async getChallengeMatch(req, res, next) {
     // const status = req.params.status;

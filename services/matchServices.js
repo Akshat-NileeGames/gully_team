@@ -1599,331 +1599,331 @@ const matchServices = {
   },
 
   async getFootballTopPerformers(data) {
-  try {
-    const { latitude, longitude, startDate, filter } = data;
+    try {
+      const { latitude, longitude, startDate, filter } = data;
 
-    const startDateTime = new Date(`${startDate}T00:00:00.000Z`);
-    const endDateTime = new Date(`${startDate}T23:59:59.999Z`);
+      const startDateTime = new Date(`${startDate}T00:00:00.000Z`);
+      const endDateTime = new Date(`${startDate}T23:59:59.999Z`);
 
-    // Maximum distance in meters (15 km)
-    const maxDistance = 15000;
+      // Maximum distance in meters (15 km)
+      const maxDistance = 15000;
 
-    // Determine filter type (default to "goals")
-    const filterType = filter || "goals"; // Options: "goals", "saves"
+      // Determine filter type (default to "goals")
+      const filterType = filter || "goals"; // Options: "goals", "saves"
 
-    // Fetch tournament data for football within 15km radius
-    const tournamentData = await Tournament.aggregate([
-      {
-        $geoNear: {
-          near: {
-            type: "Point",
-            coordinates: [parseFloat(longitude), parseFloat(latitude)],
-          },
-          distanceField: "distance",
-          maxDistance: maxDistance,
-          spherical: true,
-          query: {
-            isDeleted: false,
-            tournamentfor: "football",
-            tournamentStartDateTime: { $lte: endDateTime },
-            tournamentEndDateTime: { $gte: startDateTime },
-          },
-        },
-      },
-      {
-        $lookup: {
-          from: "matches",
-          localField: "_id",
-          foreignField: "tournament",
-          as: "matches",
-          pipeline: [
-            {
-              $match: {
-                dateTime: { $gte: startDateTime, $lte: endDateTime },
-                status: "played",
-                scoreBoard: { $ne: null },
-              },
+      // Fetch tournament data for football within 15km radius
+      const tournamentData = await Tournament.aggregate([
+        {
+          $geoNear: {
+            near: {
+              type: "Point",
+              coordinates: [parseFloat(longitude), parseFloat(latitude)],
             },
-            {
-              $project: {
-                dateTime: 1,
-                scoreBoard: 1,
-                tournament: 1,
-              },
+            distanceField: "distance",
+            maxDistance: maxDistance,
+            spherical: true,
+            query: {
+              isDeleted: false,
+              tournamentfor: "football",
+              tournamentStartDateTime: { $lte: endDateTime },
+              tournamentEndDateTime: { $gte: startDateTime },
             },
-          ],
-        },
-      },
-      {
-        $match: {
-          matches: { $ne: [] }, // Only include tournaments with matches
-        },
-      },
-    ]);
-
-    // Flatten matches from tournament data
-    const matches = tournamentData.flatMap((tournament) => tournament.matches);
-
-    if (matches.length === 0) {
-      return [];
-    }
-
-    // Extract player performance from the scoreboards
-    const allPlayersData = matches.flatMap((match) => {
-      const homeTeamPlayers = match?.scoreBoard?.homeTeam?.players || [];
-      const awayTeamPlayers = match?.scoreBoard?.awayTeam?.players || [];
-      
-      // Also check for team1/team2 format
-      const team1Players = match?.scoreBoard?.team1?.players || [];
-      const team2Players = match?.scoreBoard?.team2?.players || [];
-
-      return [
-        ...homeTeamPlayers,
-        ...awayTeamPlayers,
-        ...team1Players,
-        ...team2Players,
-      ];
-    });
-
-    // Aggregate player performance by phone number
-    const aggregatedPlayers = {};
-
-    allPlayersData.forEach((player) => {
-      const phoneNumber = player.phoneNumber;
-      if (!phoneNumber) return; // Skip if no phone number
-
-      if (!aggregatedPlayers[phoneNumber]) {
-        aggregatedPlayers[phoneNumber] = {
-          _id: player._id,
-          name: player.name,
-          phoneNumber: player.phoneNumber,
-          role: player.role,
-          footballStatistic: {
-            goals: 0,
-            assists: 0,
-            saves: 0,
-            yellowCards: 0,
-            redCards: 0,
-            foulsCommitted: 0,
-            foulsSuffered: 0,
-            penaltySaves: 0,
-            penaltyGoals: 0,
-            matchesPlayed: 0,
           },
-        };
+        },
+        {
+          $lookup: {
+            from: "matches",
+            localField: "_id",
+            foreignField: "tournament",
+            as: "matches",
+            pipeline: [
+              {
+                $match: {
+                  dateTime: { $gte: startDateTime, $lte: endDateTime },
+                  status: "played",
+                  scoreBoard: { $ne: null },
+                },
+              },
+              {
+                $project: {
+                  dateTime: 1,
+                  scoreBoard: 1,
+                  tournament: 1,
+                },
+              },
+            ],
+          },
+        },
+        {
+          $match: {
+            matches: { $ne: [] }, // Only include tournaments with matches
+          },
+        },
+      ]);
+
+      // Flatten matches from tournament data
+      const matches = tournamentData.flatMap((tournament) => tournament.matches);
+
+      if (matches.length === 0) {
+        return [];
       }
 
-      const stats = player.footballStatistic || {};
-      const existingPlayer = aggregatedPlayers[phoneNumber];
+      // Extract player performance from the scoreboards
+      const allPlayersData = matches.flatMap((match) => {
+        const homeTeamPlayers = match?.scoreBoard?.homeTeam?.players || [];
+        const awayTeamPlayers = match?.scoreBoard?.awayTeam?.players || [];
 
-      // Aggregate statistics
-      existingPlayer.footballStatistic.goals += stats.goals || 0;
-      existingPlayer.footballStatistic.assists += stats.assists || 0;
-      existingPlayer.footballStatistic.saves += stats.saves || 0;
-      existingPlayer.footballStatistic.yellowCards += stats.yellowCards || 0;
-      existingPlayer.footballStatistic.redCards += stats.redCards || 0;
-      existingPlayer.footballStatistic.foulsCommitted += stats.foulsCommitted || 0;
-      existingPlayer.footballStatistic.foulsSuffered += stats.foulsSuffered || 0;
-      existingPlayer.footballStatistic.penaltySaves += stats.penaltySaves || 0;
-      existingPlayer.footballStatistic.penaltyGoals += stats.penaltyGoals || 0;
-    });
+        // Also check for team1/team2 format
+        const team1Players = match?.scoreBoard?.team1?.players || [];
+        const team2Players = match?.scoreBoard?.team2?.players || [];
 
-    // Also aggregate from match goals and events
-    matches.forEach((match) => {
-      const goals = match?.scoreBoard?.goals || [];
-      const matchEvents = match?.scoreBoard?.matchEvents || [];
-      const cards = match?.scoreBoard?.cards || [];
-      
-      // Track unique players per match for matchesPlayed count
-      const playersInMatch = new Set();
-
-      // Process goals
-      goals.forEach((goal) => {
-        const scorerPhone = goal.scorerId?.phoneNumber;
-        const assistPhone = goal.assistId?.phoneNumber;
-
-        if (scorerPhone && aggregatedPlayers[scorerPhone]) {
-          aggregatedPlayers[scorerPhone].footballStatistic.goals++;
-          playersInMatch.add(scorerPhone);
-
-          // Check for penalty goals
-          if (goal.goalType === "Penalty" || goal.goalType === "Penalty Goal") {
-            aggregatedPlayers[scorerPhone].footballStatistic.penaltyGoals++;
-          }
-        }
-
-        if (assistPhone && aggregatedPlayers[assistPhone]) {
-          aggregatedPlayers[assistPhone].footballStatistic.assists++;
-          playersInMatch.add(assistPhone);
-        }
+        return [
+          ...homeTeamPlayers,
+          ...awayTeamPlayers,
+          ...team1Players,
+          ...team2Players,
+        ];
       });
 
-      // Process cards
-      cards.forEach((card) => {
-        const playerPhone = card.playerId?.phoneNumber;
-        if (playerPhone && aggregatedPlayers[playerPhone]) {
-          playersInMatch.add(playerPhone);
-          if (card.cardType === "Yellow") {
-            aggregatedPlayers[playerPhone].footballStatistic.yellowCards++;
-          } else if (card.cardType === "Red") {
-            aggregatedPlayers[playerPhone].footballStatistic.redCards++;
-          }
+      // Aggregate player performance by phone number
+      const aggregatedPlayers = {};
+
+      allPlayersData.forEach((player) => {
+        const phoneNumber = player.phoneNumber;
+        if (!phoneNumber) return; // Skip if no phone number
+
+        if (!aggregatedPlayers[phoneNumber]) {
+          aggregatedPlayers[phoneNumber] = {
+            _id: player._id,
+            name: player.name,
+            phoneNumber: player.phoneNumber,
+            role: player.role,
+            footballStatistic: {
+              goals: 0,
+              assists: 0,
+              saves: 0,
+              yellowCards: 0,
+              redCards: 0,
+              foulsCommitted: 0,
+              foulsSuffered: 0,
+              penaltySaves: 0,
+              penaltyGoals: 0,
+              matchesPlayed: 0,
+            },
+          };
         }
+
+        const stats = player.footballStatistic || {};
+        const existingPlayer = aggregatedPlayers[phoneNumber];
+
+        // Aggregate statistics
+        existingPlayer.footballStatistic.goals += stats.goals || 0;
+        existingPlayer.footballStatistic.assists += stats.assists || 0;
+        existingPlayer.footballStatistic.saves += stats.saves || 0;
+        existingPlayer.footballStatistic.yellowCards += stats.yellowCards || 0;
+        existingPlayer.footballStatistic.redCards += stats.redCards || 0;
+        existingPlayer.footballStatistic.foulsCommitted += stats.foulsCommitted || 0;
+        existingPlayer.footballStatistic.foulsSuffered += stats.foulsSuffered || 0;
+        existingPlayer.footballStatistic.penaltySaves += stats.penaltySaves || 0;
+        existingPlayer.footballStatistic.penaltyGoals += stats.penaltyGoals || 0;
       });
 
-      // Process match events
-      matchEvents.forEach((event) => {
-        const playerPhone = event.playerId?.phoneNumber;
-        if (playerPhone && aggregatedPlayers[playerPhone]) {
-          playersInMatch.add(playerPhone);
+      // Also aggregate from match goals and events
+      matches.forEach((match) => {
+        const goals = match?.scoreBoard?.goals || [];
+        const matchEvents = match?.scoreBoard?.matchEvents || [];
+        const cards = match?.scoreBoard?.cards || [];
 
-          // Count saves
-          if (event.eventType === "goal_save") {
-            aggregatedPlayers[playerPhone].footballStatistic.saves++;
+        // Track unique players per match for matchesPlayed count
+        const playersInMatch = new Set();
 
-            // Check for penalty saves
-            if (
-              event.additionalData?.saveType === "penalty_save" ||
-              event.description?.toLowerCase().includes("penalty")
-            ) {
-              aggregatedPlayers[playerPhone].footballStatistic.penaltySaves++;
+        // Process goals
+        goals.forEach((goal) => {
+          const scorerPhone = goal.scorerId?.phoneNumber;
+          const assistPhone = goal.assistId?.phoneNumber;
+
+          if (scorerPhone && aggregatedPlayers[scorerPhone]) {
+            aggregatedPlayers[scorerPhone].footballStatistic.goals++;
+            playersInMatch.add(scorerPhone);
+
+            // Check for penalty goals
+            if (goal.goalType === "Penalty" || goal.goalType === "Penalty Goal") {
+              aggregatedPlayers[scorerPhone].footballStatistic.penaltyGoals++;
             }
           }
 
-          // Count fouls
-          if (event.eventType === "foul") {
-            aggregatedPlayers[playerPhone].footballStatistic.foulsCommitted++;
+          if (assistPhone && aggregatedPlayers[assistPhone]) {
+            aggregatedPlayers[assistPhone].footballStatistic.assists++;
+            playersInMatch.add(assistPhone);
           }
-        }
+        });
 
-        // Count fouls suffered (victim)
-        const victimPhone = event.additionalData?.victimPlayer?.phoneNumber;
-        if (victimPhone && aggregatedPlayers[victimPhone]) {
-          playersInMatch.add(victimPhone);
-          if (event.eventType === "foul") {
-            aggregatedPlayers[victimPhone].footballStatistic.foulsSuffered++;
+        // Process cards
+        cards.forEach((card) => {
+          const playerPhone = card.playerId?.phoneNumber;
+          if (playerPhone && aggregatedPlayers[playerPhone]) {
+            playersInMatch.add(playerPhone);
+            if (card.cardType === "Yellow") {
+              aggregatedPlayers[playerPhone].footballStatistic.yellowCards++;
+            } else if (card.cardType === "Red") {
+              aggregatedPlayers[playerPhone].footballStatistic.redCards++;
+            }
           }
-        }
+        });
+
+        // Process match events
+        matchEvents.forEach((event) => {
+          const playerPhone = event.playerId?.phoneNumber;
+          if (playerPhone && aggregatedPlayers[playerPhone]) {
+            playersInMatch.add(playerPhone);
+
+            // Count saves
+            if (event.eventType === "goal_save") {
+              aggregatedPlayers[playerPhone].footballStatistic.saves++;
+
+              // Check for penalty saves
+              if (
+                event.additionalData?.saveType === "penalty_save" ||
+                event.description?.toLowerCase().includes("penalty")
+              ) {
+                aggregatedPlayers[playerPhone].footballStatistic.penaltySaves++;
+              }
+            }
+
+            // Count fouls
+            if (event.eventType === "foul") {
+              aggregatedPlayers[playerPhone].footballStatistic.foulsCommitted++;
+            }
+          }
+
+          // Count fouls suffered (victim)
+          const victimPhone = event.additionalData?.victimPlayer?.phoneNumber;
+          if (victimPhone && aggregatedPlayers[victimPhone]) {
+            playersInMatch.add(victimPhone);
+            if (event.eventType === "foul") {
+              aggregatedPlayers[victimPhone].footballStatistic.foulsSuffered++;
+            }
+          }
+        });
+
+        // Increment matches played for all players in this match
+        playersInMatch.forEach((phone) => {
+          if (aggregatedPlayers[phone]) {
+            aggregatedPlayers[phone].footballStatistic.matchesPlayed++;
+          }
+        });
       });
 
-      // Increment matches played for all players in this match
-      playersInMatch.forEach((phone) => {
-        if (aggregatedPlayers[phone]) {
-          aggregatedPlayers[phone].footballStatistic.matchesPlayed++;
-        }
-      });
-    });
+      // Convert aggregated players to an array
+      let aggregatedPlayersArray = Object.values(aggregatedPlayers);
 
-    // Convert aggregated players to an array
-    let aggregatedPlayersArray = Object.values(aggregatedPlayers);
-
-    // Filter based on the filter type
-    if (filterType === "goals") {
-      // Filter players with at least 1 goal
-      aggregatedPlayersArray = aggregatedPlayersArray.filter(
-        (player) => player.footballStatistic.goals > 0
-      );
-
-      // Sort by goals (descending), then assists (descending)
-      aggregatedPlayersArray.sort((a, b) => {
-        const goalsDiff = b.footballStatistic.goals - a.footballStatistic.goals;
-        if (goalsDiff !== 0) return goalsDiff;
-
-        // If goals are equal, sort by assists
-        return b.footballStatistic.assists - a.footballStatistic.assists;
-      });
-    } else if (filterType === "saves") {
-      // Filter players with at least 1 save
-      aggregatedPlayersArray = aggregatedPlayersArray.filter(
-        (player) => player.footballStatistic.saves > 0
-      );
-
-      // Sort by saves (descending), then penalty saves (descending)
-      aggregatedPlayersArray.sort((a, b) => {
-        const savesDiff = b.footballStatistic.saves - a.footballStatistic.saves;
-        if (savesDiff !== 0) return savesDiff;
-
-        // If saves are equal, sort by penalty saves
-        return b.footballStatistic.penaltySaves - a.footballStatistic.penaltySaves;
-      });
-    } else {
-      // Default: filter players with any performance
-      aggregatedPlayersArray = aggregatedPlayersArray.filter(
-        (player) =>
-          player.footballStatistic.goals > 0 ||
-          player.footballStatistic.assists > 0 ||
-          player.footballStatistic.saves > 0
-      );
-
-      // Default sort by goals
-      aggregatedPlayersArray.sort((a, b) => {
-        const goalsDiff = b.footballStatistic.goals - a.footballStatistic.goals;
-        if (goalsDiff !== 0) return goalsDiff;
-        return b.footballStatistic.saves - a.footballStatistic.saves;
-      });
-    }
-
-    // Get top 10 players
-    const top10Players = aggregatedPlayersArray.slice(0, 10);
-
-    // Fetch player profiles for profile photos
-    const playerIds = top10Players
-      .map((player) => player._id)
-      .filter((id) => id); // Filter out any undefined IDs
-
-    let profilePhotoMap = new Map();
-
-    if (playerIds.length > 0) {
-      const playerProfiles = await Player.find({ _id: { $in: playerIds } })
-        .populate({ path: "userId", select: "profilePhoto" })
-        .select("_id userId");
-
-      profilePhotoMap = new Map(
-        playerProfiles.map((player) => [
-          player._id.toString(),
-          player.userId?.profilePhoto || "",
-        ])
-      );
-    }
-
-    // Attach profile photos and ranks
-    top10Players.forEach((player, index) => {
-      player.profilePhoto = player._id
-        ? profilePhotoMap.get(player._id.toString()) || ""
-        : "";
-      player.rank = index + 1;
-      
-      // Add performance score based on filter type
+      // Filter based on the filter type
       if (filterType === "goals") {
-        player.performanceScore = 
-          player.footballStatistic.goals * 10 + 
-          player.footballStatistic.assists * 5;
-        player.primaryStat = player.footballStatistic.goals;
-        player.secondaryStat = player.footballStatistic.assists;
-        player.statType = "Goals Scored";
+        // Filter players with at least 1 goal
+        aggregatedPlayersArray = aggregatedPlayersArray.filter(
+          (player) => player.footballStatistic.goals > 0
+        );
+
+        // Sort by goals (descending), then assists (descending)
+        aggregatedPlayersArray.sort((a, b) => {
+          const goalsDiff = b.footballStatistic.goals - a.footballStatistic.goals;
+          if (goalsDiff !== 0) return goalsDiff;
+
+          // If goals are equal, sort by assists
+          return b.footballStatistic.assists - a.footballStatistic.assists;
+        });
       } else if (filterType === "saves") {
-        player.performanceScore = 
-          player.footballStatistic.saves * 10 + 
-          player.footballStatistic.penaltySaves * 15;
-        player.primaryStat = player.footballStatistic.saves;
-        player.secondaryStat = player.footballStatistic.penaltySaves;
-        player.statType = "Saves Made";
+        // Filter players with at least 1 save
+        aggregatedPlayersArray = aggregatedPlayersArray.filter(
+          (player) => player.footballStatistic.saves > 0
+        );
+
+        // Sort by saves (descending), then penalty saves (descending)
+        aggregatedPlayersArray.sort((a, b) => {
+          const savesDiff = b.footballStatistic.saves - a.footballStatistic.saves;
+          if (savesDiff !== 0) return savesDiff;
+
+          // If saves are equal, sort by penalty saves
+          return b.footballStatistic.penaltySaves - a.footballStatistic.penaltySaves;
+        });
       } else {
-        player.performanceScore = 
-          player.footballStatistic.goals * 10 + 
-          player.footballStatistic.assists * 5 + 
-          player.footballStatistic.saves * 3;
-        player.primaryStat = player.footballStatistic.goals;
-        player.secondaryStat = player.footballStatistic.saves;
-        player.statType = "Overall Performance";
+        // Default: filter players with any performance
+        aggregatedPlayersArray = aggregatedPlayersArray.filter(
+          (player) =>
+            player.footballStatistic.goals > 0 ||
+            player.footballStatistic.assists > 0 ||
+            player.footballStatistic.saves > 0
+        );
+
+        // Default sort by goals
+        aggregatedPlayersArray.sort((a, b) => {
+          const goalsDiff = b.footballStatistic.goals - a.footballStatistic.goals;
+          if (goalsDiff !== 0) return goalsDiff;
+          return b.footballStatistic.saves - a.footballStatistic.saves;
+        });
       }
-    });
-    return top10Players;
-  } catch (error) {
-    console.error("Error in getFootballTopPerformers:", error);
-    throw new Error(`Error fetching top performers: ${error.message}`);
-  }
-},
+
+      // Get top 10 players
+      const top10Players = aggregatedPlayersArray.slice(0, 10);
+
+      // Fetch player profiles for profile photos
+      const playerIds = top10Players
+        .map((player) => player._id)
+        .filter((id) => id); // Filter out any undefined IDs
+
+      let profilePhotoMap = new Map();
+
+      if (playerIds.length > 0) {
+        const playerProfiles = await Player.find({ _id: { $in: playerIds } })
+          .populate({ path: "userId", select: "profilePhoto" })
+          .select("_id userId");
+
+        profilePhotoMap = new Map(
+          playerProfiles.map((player) => [
+            player._id.toString(),
+            player.userId?.profilePhoto || "",
+          ])
+        );
+      }
+
+      // Attach profile photos and ranks
+      top10Players.forEach((player, index) => {
+        player.profilePhoto = player._id
+          ? profilePhotoMap.get(player._id.toString()) || ""
+          : "";
+        player.rank = index + 1;
+
+        // Add performance score based on filter type
+        if (filterType === "goals") {
+          player.performanceScore =
+            player.footballStatistic.goals * 10 +
+            player.footballStatistic.assists * 5;
+          player.primaryStat = player.footballStatistic.goals;
+          player.secondaryStat = player.footballStatistic.assists;
+          player.statType = "Goals Scored";
+        } else if (filterType === "saves") {
+          player.performanceScore =
+            player.footballStatistic.saves * 10 +
+            player.footballStatistic.penaltySaves * 15;
+          player.primaryStat = player.footballStatistic.saves;
+          player.secondaryStat = player.footballStatistic.penaltySaves;
+          player.statType = "Saves Made";
+        } else {
+          player.performanceScore =
+            player.footballStatistic.goals * 10 +
+            player.footballStatistic.assists * 5 +
+            player.footballStatistic.saves * 3;
+          player.primaryStat = player.footballStatistic.goals;
+          player.secondaryStat = player.footballStatistic.saves;
+          player.statType = "Overall Performance";
+        }
+      });
+      return top10Players;
+    } catch (error) {
+      console.error("Error in getFootballTopPerformers:", error);
+      throw new Error(`Error fetching top performers: ${error.message}`);
+    }
+  },
   //original code by nikhil
   // async topPerformers(data) {
   //   let { latitude, longitude, startDate, filter } = data;
@@ -3205,6 +3205,33 @@ const matchServices = {
     const matchdata = await newMatch.save();
     return matchdata;
   },
+
+  async getAvailableAuthority(data) {
+    try {
+      const { challengeTeamId, opponentTeamId } = data;
+
+      const [challengeTeam, opponentTeam] = await Promise.all([
+        Team.findById(challengeTeamId).populate('players'),
+        Team.findById(opponentTeamId).populate('players')
+      ]);
+
+      if (!challengeTeam || !opponentTeam) throw new Error('One or both teams not found');
+
+      const allPlayers = [...challengeTeam.players, ...opponentTeam.players];
+      const phoneNumbers = Array.from(new Set(allPlayers.map(p => p.phoneNumber).filter(Boolean)));
+      const users = await User.find({ phoneNumber: { $in: phoneNumbers } });
+      const mappeduser = users.map(u => ({
+        id: u._id,
+        name: u.fullName,
+        phoneNumber: u.phoneNumber
+      }));
+      return mappeduser;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+
 
   async getChallengeMatch() {
     const userInfo = global.user;

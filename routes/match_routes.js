@@ -9,7 +9,7 @@ router.post("/createMatch", validateUser, matchController.createMatch);
 router.get("/getMatches/:tournamentId", matchController.getMatches);
 router.get("/getMatch/:matchId", matchController.getSingleMatch);
 // router.get("/editMatch/:matchId", matchController.editMatch);
-router.put("/editMatch/:matchId", validateUser, matchController.editMatch); 
+router.put("/editMatch/:matchId", validateUser, matchController.editMatch);
 router.delete("/deleteMatch/:matchId", validateUser, matchController.deleteMatch);
 
 router.get("/getOpponentTournamentId", validateUser, matchController.getOpponentTournamentId);
@@ -45,6 +45,7 @@ router.get("/getmyFootballPerformance/:userId", validateUser, matchController.ge
 
 // to create challenge match
 router.post("/createChallengeMatch", validateUser, matchController.createChallengeMatch);
+router.get("/getAvailableAuthority/:challengeTeamId/:opponentTeamId", validateUser, matchController.getAvailableAuthority);
 
 router.get("/getChallengeMatch", validateUser, matchController.getChallengeMatch);
 
