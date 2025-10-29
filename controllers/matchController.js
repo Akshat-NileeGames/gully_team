@@ -132,6 +132,25 @@ const matchController = {
       return next(err);
     }
   },
+  async getChallengeMatch(req, res, next) {
+    try {
+      const matchSchema = Joi.object({
+        matchId: Joi.string().required()
+      });
+      const { error } = matchSchema.validate(req.params);
+      if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
+      const result = await matchServices.getSingleMatch(req.params);
+
+      return res.status(200).json({
+        success: true,
+        message: "Match Retrieved Successfully",
+        data: { match: result },
+      });
+    } catch (err) {
+      console.log(" Error in getMatch ");
+      return next(err);
+    }
+  },
 
   async editMatch(req, res, next) {
     let MatchId = req.params.matchId;
@@ -639,7 +658,7 @@ const matchController = {
       return res.status(200).json({
         sucess: true,
         message: "Match created successfully",
-        data: {mappeduser:result},
+        data: { mappeduser: result },
       });
     } catch (error) {
       console.log(`Failed to get Authority:${error}`);

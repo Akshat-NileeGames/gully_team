@@ -7,7 +7,7 @@ import validateUser from "../middlewares/validateUser.js";
 
 router.post("/createMatch", validateUser, matchController.createMatch);
 router.get("/getMatches/:tournamentId", matchController.getMatches);
-router.get("/getMatch/:matchId", matchController.getSingleMatch);
+router.get("/getChallengeMatch/:matchId", matchController.getChallengeMatch);
 // router.get("/editMatch/:matchId", matchController.editMatch);
 router.put("/editMatch/:matchId", validateUser, matchController.editMatch);
 router.delete("/deleteMatch/:matchId", validateUser, matchController.deleteMatch);

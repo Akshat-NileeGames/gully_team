@@ -4,7 +4,9 @@ import { Sponsor, Tournament } from "../models/index.js";
 import { adminService } from "../services/index.js";
 import ImageUploader from "../helpers/ImageUploader.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
-
+function isBase64Image(str) {
+    return /^data:image\/[a-zA-Z]+;base64,/.test(str);
+}
 const SponsorService = {
     async addSponsor(data) {
         const user = global.user;
@@ -57,13 +59,16 @@ const SponsorService = {
             }
             let mediaPath;
             if (data.sponsorMedia) {
-                mediaPath = await ImageUploader.Upload(
-                    data.sponsorMedia,
-                    "tournament_sponsor",
-                    sponsorImage.sponsorMedia
-                );
-            } else {
-                mediaPath = sponsorImage.sponsorMedia;
+                if (isBase64Image(data.sponsorMedia)) {
+                    mediaPath = await ImageUploader.Upload(
+                        data.sponsorMedia,
+                        "tournament_sponsor",
+                        sponsorImage.sponsorMedia
+                    );
+                    await ImageUploader.Delete(data.banner);
+                } else {
+                    mediaPath = sponsorImage.sponsorMedia;
+                }
             }
 
             const updatedData = {
@@ -98,7 +103,6 @@ const SponsorService = {
         try {
             const sponsor = await Sponsor.findById(sponsorId);
             if (!sponsor) throw CustomErrorHandler.notFound("Sponsor not found");
-
             sponsor.isActive = false;
             await sponsor.save();
             return sponsor;

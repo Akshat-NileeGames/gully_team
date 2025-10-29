@@ -614,7 +614,7 @@ const otherServices = {
       },
       {
         $lookup: {
-          from: "promotionalbanners", // Look up promotional banners
+          from: "promotionalbanners",
           localField: "bannerId",
           foreignField: "_id",
           as: "banner",

@@ -378,6 +378,20 @@ const matchServices = {
       console.log(`Failed to get Single Match :${error}`);
     }
   },
+  async getChallengeMatch(data) {
+    try {
+      const { matchId } = data;
+      const MatchExist = await ChallengeTeam.find({
+        "scoreBoard.matchId": matchId
+      });
+      if (!MatchExist) {
+        throw CustomErrorHandler.notFound("This Match is Not Found.");
+      }
+      return MatchExist;
+    } catch (error) {
+      console.log(`Failed to get Single Match :${error}`);
+    }
+  },
 
 
   //Old

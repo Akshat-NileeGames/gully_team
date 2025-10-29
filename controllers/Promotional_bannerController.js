@@ -5,46 +5,46 @@ import { PromotionalbannerService } from "../services/index.js";
 import Joi from "joi";
 import CustomErrorHandler from '../helpers/CustomErrorHandler.js';
 const PromotionalbannerController = {
-    
-    async createBanner(req,res,next){
 
-        const banner_schema=Joi.object({
-            banner_title:Joi.string().required(),
-            banner_image:Joi.string().required(),
+    async createBanner(req, res, next) {
+
+        const banner_schema = Joi.object({
+            banner_title: Joi.string().required(),
+            banner_image: Joi.string().required(),
             startDate: Joi.date().iso().required(),
             endDate: Joi.date().iso().min(Joi.ref("startDate")).required(),
-            bannerlocationaddress:Joi.string().required(),
+            bannerlocationaddress: Joi.string().required(),
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),
-            packageId:Joi.string().required(),
+            packageId: Joi.string().required(),
         });
-        const{error}=banner_schema.validate(req.body)
-        if(error){
-           return next(err);
+        const { error } = banner_schema.validate(req.body)
+        if (error) {
+            return next(err);
         }
-        try{
-            const result=await PromotionalbannerService.createBanner(req.body);
+        try {
+            const result = await PromotionalbannerService.createBanner(req.body);
             return res.status(200).json({
                 success: true,
                 message: "Banner  Created Successfully",
                 data: result,
-              });
-        }catch(err){
-            console.log("Unable to create Banner:",err)
+            });
+        } catch (err) {
+            console.log("Unable to create Banner:", err)
         }
     },
 
-    async getmybanner(req,res,next){
+    async getmybanner(req, res, next) {
 
-        try{
-            const result=await PromotionalbannerService.getbanner();
+        try {
+            const result = await PromotionalbannerService.getbanner();
             return res.status(200).json({
                 success: true,
                 message: "Banner  Created Successfully",
-                data: {Banners:result},
-              });
-        }catch(err){
-            console.log("Error in getting my banner: ",err)
+                data: { Banners: result },
+            });
+        } catch (err) {
+            console.log("Error in getting my banner: ", err)
         }
     },
 
@@ -85,8 +85,8 @@ const PromotionalbannerController = {
     async editBanner(req, res) {
         const bannerId = req.params.id;
         const bannerSchema = Joi.object({
-            banner_title:Joi.string().required(),
-            banner_image:Joi.string().optional()
+            banner_title: Joi.string().required(),
+            banner_image: Joi.string().optional()
         });
 
         const { error } = bannerSchema.validate(req.body);

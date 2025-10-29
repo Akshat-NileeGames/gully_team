@@ -2,6 +2,9 @@ import { Promotional_Banner_model, Banner, Package, User, OrderHistory } from '.
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
 import nodemailer from "nodemailer";
+function isBase64Image(str) {
+  return /^data:image\/[a-zA-Z]+;base64,/.test(str);
+}
 const PromotionalbannerService = {
   async createBanner(data) {
     const userInfo = global.user;
@@ -308,8 +311,6 @@ const PromotionalbannerService = {
       const today = new Date();
 
       today.setHours(0, 0, 0, 0);
-      let formattedDate = today.toISOString();
-      console.log("Today (local):", formattedDate);
       const promotionalBanners = await Promotional_Banner_model.aggregate([
         {
           $geoNear: {
@@ -343,7 +344,6 @@ const PromotionalbannerService = {
         },
       ]);
 
-      console.log("Promotional Banners:", promotionalBanners);
 
       const regularBannersNeeded = desiredBannerCount - promotionalBanners.length;
 
@@ -375,25 +375,28 @@ const PromotionalbannerService = {
   },
 
   async updateBanner(bannerId, data) {
+    try {
+      const banner = await Promotional_Banner_model.findById(bannerId);
+      let imageUrl = "";
+      if (data.banner_image) {
+        if (isBase64Image(data.banner_image)) {
+          imageUrl = await ImageUploader.Upload(
+            data.banner_image,
+            "Banner_Promotion",
+          );
+          await ImageUploader.Delete(data.banner);
+        } else {
+          imageUrl = banner.banner_image;
+        }
+      }
+      banner.banner_title = data.banner_title;
+      banner.banner_image = imageUrl;
 
-    const banner = await Promotional_Banner_model.findById(bannerId);
-    let imageUrl = "";
-    if (data.banner_image != banner.banner_image) {
-      imageUrl = await ImageUploader.Upload(
-        data.banner_image,
-        "Banner_Promotion",
-      );
-    } else {
-      imageUrl = banner.banner_image;
+      banner.save();
+      return banner;
+    } catch (error) {
+      console.log(`Failed to Update banner:${error}`);
     }
-    console.log("Image URL:", imageUrl);
-
-    console.log("The New Banner Title:", data.banner_title);
-    banner.banner_title = data.banner_title;
-    banner.banner_image = imageUrl;
-
-    banner.save();
-    return banner;
   },
 
 };
