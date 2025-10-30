@@ -341,7 +341,7 @@ const matchController = {
   async updateFootballMatchData(req, res, next) {
     const match = Joi.object({
       matchId: Joi.string().required(),
-      winningTeamId: Joi.string().allow(null).optional()
+      winningTeamId: Joi.string().allow('').optional()
     });
     const { error } = match.validate(req.body);
     if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));

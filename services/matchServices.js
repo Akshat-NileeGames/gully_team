@@ -88,7 +88,6 @@ const matchServices = {
       matchNo: matchNo,
       winningTeamId: winningTeamId,
       matchAuthority: matchAuthority
-
     });
 
     // Save the new match
@@ -729,7 +728,7 @@ const matchServices = {
   //   return matchData;
   // },
 
-  //code by Nikhil
+
   async updateTeamMatchsData(data) {
     try {
       const { matchId, winningTeamId, isDraw } = data;
@@ -790,6 +789,7 @@ const matchServices = {
       match.status = "played";
       match.winningTeamId = isDraw ? null : winningTeamId;
       match.isMatchDraw = isDraw ? true : false;
+      match.isMatchEnded = true;
       await match.save();
 
       const tournamentTeams = await RegisteredTeam.find({
@@ -859,7 +859,7 @@ const matchServices = {
 
     const prefix = `battingStatistic.${balltype}`;
     const bowlPrefix = `bowlingStatistic.${balltype}`;
-
+    console.log(`The player id${player._id} and wicket is:${player.bowling.wickets} `);
     await Player.findByIdAndUpdate(player._id, {
       $inc: {
         [`${prefix}.runs`]: player.batting.runs,
@@ -1074,6 +1074,7 @@ const matchServices = {
       match.status = "played"
       match.isMatchDraw = isMatchDraw
       match.winningTeamId = !isMatchDraw ? winningTeamId : null
+      match.isMatchEnded = true;
       await match.save();
 
 
@@ -1201,118 +1202,127 @@ const matchServices = {
     }
   },
   async playerRanking(ballType, skill) {
-    const sortingField = skill === "batting" ? `runs` : `wickets`;
-    const playerRankingWithImage = await Player.aggregate([
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "_id",
-          as: "userDetails",
+    try {
+      const sortingField = skill === "batting" ? "runs" : "wickets";
+
+      const playerRankingWithImage = await Player.aggregate([
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "userDetails",
+          },
         },
-      },
-      //unwind
-      {
-        $unwind: {
-          path: "$userDetails",
-          preserveNullAndEmptyArrays: true,
+        {
+          $unwind: {
+            path: "$userDetails",
+            preserveNullAndEmptyArrays: true,
+          },
         },
-      },
-      {
-        $project: {
-          playerName: { $ifNull: ["$userDetails.fullName", ""] },
-          profilePhoto: { $ifNull: ["$userDetails.profilePhoto", ""] },
-          runs: { $ifNull: [`$battingStatistic.${ballType}.runs`, 0] },
-          fours: { $ifNull: [`$battingStatistic.${ballType}.fours`, 0] },
-          sixes: { $ifNull: [`$battingStatistic.${ballType}.sixes`, 0] },
-          strikeRate: {
-            $cond: {
-              if: {
-                $and: [
-                  { $ne: [`$battingStatistic.${ballType}.balls`, 0] },
-                  { $ne: [`$battingStatistic.${ballType}.runs`, 0] },
-                ],
+        {
+          $project: {
+            playerName: {
+              $cond: {
+                if: { $ifNull: ["$userDetails.fullName", false] },
+                then: "$userDetails.fullName",
+                else: "$name", // fallback to player's own name
               },
-              then: {
-                $round: [
-                  {
-                    $multiply: [
-                      {
-                        $divide: [
-                          `$battingStatistic.${ballType}.runs`,
-                          `$battingStatistic.${ballType}.balls`,
-                        ],
-                      },
-                      100,
-                    ],
-                  },
-                  2, // Limiting to 0 decimal places
-                ],
+            },
+            profilePhoto: { $ifNull: ["$userDetails.profilePhoto", ""] },
+
+            // Batting statistics
+            runs: { $ifNull: [`$battingStatistic.${ballType}.runs`, 0] },
+            fours: { $ifNull: [`$battingStatistic.${ballType}.fours`, 0] },
+            sixes: { $ifNull: [`$battingStatistic.${ballType}.sixes`, 0] },
+            balls: { $ifNull: [`$battingStatistic.${ballType}.balls`, 0] },
+
+            // Strike Rate
+            strikeRate: {
+              $cond: {
+                if: {
+                  $and: [
+                    { $ne: [`$battingStatistic.${ballType}.balls`, 0] },
+                    { $ne: [`$battingStatistic.${ballType}.runs`, 0] },
+                  ],
+                },
+                then: {
+                  $round: [
+                    {
+                      $multiply: [
+                        {
+                          $divide: [
+                            `$battingStatistic.${ballType}.runs`,
+                            `$battingStatistic.${ballType}.balls`,
+                          ],
+                        },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+                else: 0,
               },
-              else: 0,
+            },
+
+            // Bowling statistics
+            bowlingruns: { $ifNull: [`$bowlingStatistic.${ballType}.runs`, 0] },
+            wickets: { $ifNull: [`$bowlingStatistic.${ballType}.wickets`, 0] },
+            Over: { $ifNull: [`$bowlingStatistic.${ballType}.Over`, 0] },
+            bowlingfours: { $ifNull: [`$bowlingStatistic.${ballType}.fours`, 0] },
+            bowlingsixes: { $ifNull: [`$bowlingStatistic.${ballType}.sixes`, 0] },
+            maidens: { $ifNull: [`$bowlingStatistic.${ballType}.maidens`, 0] },
+            wides: { $ifNull: [`$bowlingStatistic.${ballType}.wides`, 0] },
+            noBalls: { $ifNull: [`$bowlingStatistic.${ballType}.noBalls`, 0] },
+            innings: { $ifNull: [`$bowlingStatistic.${ballType}.innings`, 0] },
+
+            // Economy
+            economy: {
+              $cond: {
+                if: {
+                  $and: [
+                    { $ne: [`$battingStatistic.${ballType}.balls`, 0] },
+                    { $ne: [`$bowlingStatistic.${ballType}.runs`, 0] },
+                  ],
+                },
+                then: {
+                  $round: [
+                    {
+                      $multiply: [
+                        {
+                          $divide: [
+                            `$bowlingStatistic.${ballType}.runs`,
+                            `$battingStatistic.${ballType}.balls`,
+                          ],
+                        },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+                else: 0,
+              },
             },
           },
-
-          balls: { $ifNull: [`$battingStatistic.${ballType}.balls`, 0] },
-          bowlingruns: { $ifNull: [`$bowlingStatistic.${ballType}.runs`, 0] },
-          wickets: { $ifNull: [`$bowlingStatistic.${ballType}.wickets`, 0] },
-          Over: { $ifNull: [`$bowlingStatistic.${ballType}.Over`, 0] },
-          bowlingfours: { $ifNull: [`$bowlingStatistic.${ballType}.fours`, 0] },
-          bowlingsixes: { $ifNull: [`$bowlingStatistic.${ballType}.sixes`, 0] },
-          maidens: { $ifNull: [`$bowlingStatistic.${ballType}.maidens`, 0] },
-          wides: { $ifNull: [`$bowlingStatistic.${ballType}.wides`, 0] },
-          noBalls: { $ifNull: [`$bowlingStatistic.${ballType}.noBalls`, 0] },
-          innings: { $ifNull: [`$bowlingStatistic.${ballType}.innings`, 0] },
-
-          economy: {
-            $cond: {
-              if: {
-                $and: [
-                  { $ne: [`$battingStatistic.${ballType}.balls`, 0] },
-                  { $ne: [`$bowlingStatistic.${ballType}.runs`, 0] },
-                ],
-              },
-              then: {
-                $round: [
-                  {
-                    $multiply: [
-                      {
-                        $divide: [
-                          `$bowlingStatistic.${ballType}.runs`,
-                          `$battingStatistic.${ballType}.balls`,
-                        ],
-                      },
-                      100,
-                    ],
-                  },
-                  2, // Limiting to 0 decimal places
-                ],
-              },
-              else: 0,
-            },
+        },
+        {
+          $sort: {
+            [sortingField]: -1,
           },
-
-          // profilePhoto: {
-          //   $cond: {
-          //     if: { $eq: [{ $size: "$userDetails" }, 0] },
-          //     then: "",
-          //     else: { $arrayElemAt: ["$userDetails.image", 0] },
-          //   },
-          // },
         },
-      },
-
-      {
-        $sort: {
-          [sortingField]: -1,
+        {
+          $limit: 10,
         },
-      },
-      {
-        $limit: 10,
-      },
-    ]);
-    return playerRankingWithImage;
+      ]);
+
+      return playerRankingWithImage;
+    } catch (error) {
+      console.log(` Failed to Get player Ranking: ${error}`);
+    }
   },
+
   /**
    * Get comprehensive player rankings for football
    * @param {string} category - Ranking category (goals, assists, saves, matches_played)
@@ -3569,7 +3579,7 @@ const matchServices = {
           totalGoals++;
 
           // Check if it's a penalty goal
-          if (goal.goalType === "Penalty" || goal.goalType === "Penalty Goal") {
+          if (goal.goalType === "Penalty" || goal.goalType === "penalty_goal") {
             totalPenaltyGoals++;
           }
         }
@@ -3609,7 +3619,7 @@ const matchServices = {
             totalSaves++;
 
             // Check if it's a penalty save
-            if (event.additionalData?.saveType === "Penalty Save" ||
+            if (event.additionalData?.saveType === "penalty_saved" ||
               event.description?.toLowerCase().includes("penalty")) {
               totalPenaltySaves++;
             }

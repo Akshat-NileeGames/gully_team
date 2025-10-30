@@ -234,7 +234,7 @@ const ProviderServices = {
   async updateVenueSubscriptionStatus(data) {
     try {
       const { venueId, packageId } = data;
-
+      console.log(venueId);
       /**
        * Find the venue by ID and throw an error if not found.
        */
@@ -2096,23 +2096,26 @@ const ProviderServices = {
       let serviceImages = [];
       let profileImages = '';
       if (Array.isArray(data.serviceImageUrls) && data.serviceImageUrls.length > 0) {
-        for (const image of data.serviceImageUrls) {
-          try {
-            const uploadedUrl = await ImageUploader.Upload(image, "IndividualServiceImage");
+        try {
+          const uploadPromises = data.serviceImageUrls.map((image) =>
+            ImageUploader.Upload(image, "IndividualServiceImage")
+          );
 
-            if (!uploadedUrl) {
-              throw new Error("Image upload failed or returned empty URL.");
-            }
+          const uploadedUrls = await Promise.all(uploadPromises);
+          const serviceImages = uploadedUrls.filter(Boolean);
 
-            serviceImages.push(uploadedUrl);
-          } catch (uploadError) {
-            console.error(`Image upload failed:${uploadError}`);
-            throw CustomErrorHandler.serverError("Failed to upload one or more venue images.");
+          if (serviceImages.length === 0) {
+            throw new Error("No images uploaded successfully.");
           }
+          console.log(`Uploaded ${serviceImages.length} images successfully`);
+        } catch (error) {
+          console.error("Image upload failed:", error);
+          throw CustomErrorHandler.serverError("Failed to upload one or more images.");
         }
       } else {
-        throw CustomErrorHandler.badRequest("Shop images are required.");
+        throw CustomErrorHandler.badRequest("Service images are required.");
       }
+
       if (data.profileImageUrl && data.profileImageUrl != null) {
         try {
           const uploadedUrl = await ImageUploader.Upload(data.profileImageUrl, "IndividualProfileImage");

@@ -1041,6 +1041,7 @@ const ProviderController = {
       education: Joi.array()
         .items(
           Joi.object({
+            id: Joi.string().optional(),
             degree: Joi.string().required(),
             field: Joi.string().required(),
             institution: Joi.string().required(),
@@ -1054,6 +1055,7 @@ const ProviderController = {
       experience: Joi.array()
         .items(
           Joi.object({
+            id: Joi.string().optional(),
             title: Joi.string().required(),
             organization: Joi.string().required(),
             startDate: Joi.string().required(),
@@ -1067,6 +1069,7 @@ const ProviderController = {
       certificates: Joi.array()
         .items(
           Joi.object({
+            id: Joi.string().optional(),
             name: Joi.string().required(),
             issuedBy: Joi.string().required(),
             issueDate: Joi.string().required(),

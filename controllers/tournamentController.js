@@ -432,8 +432,8 @@ const tournamentController = {
       tournamentPrize: Joi.string().required(),
       selectLocation: Joi.string().required(),
       fees: Joi.number().positive().min(0).max(1000000).required(),
-      ballCharges: Joi.number().min(0).positive().required(),
-      breakfastCharges: Joi.number().min(0).positive().required(),
+      ballCharges: Joi.number().min(0).required(),
+      breakfastCharges: Joi.number().min(0).required(),
       stadiumAddress: Joi.string().required(),
       tournamentLimit: Joi.number().integer().positive().required(),
       gameType: Joi.string().required(),
@@ -445,6 +445,7 @@ const tournamentController = {
       coHost1Name: Joi.string().allow(null).optional(),
       coHost2Phone: Joi.number().allow(null).optional(),
       coHost2Name: Joi.string().allow(null).optional(),
+      tournamentfor: Joi.string().required(),
       // eliminatedTeamIds: Joi.array().items(Joi.string()).optional(), // Added field for eliminatedTeamIds
     });
 

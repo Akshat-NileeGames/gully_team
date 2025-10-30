@@ -115,7 +115,7 @@ const ShopService = {
             },
             shopContact: data.shopContact,
             shopEmail: data.shopEmail,
-            shopLink: data.shoplink || null,
+            shoplink: data.shoplink || null,
             shopTiming: shopTiming,
             LicenseNumber: data.LicenseNumber,
             GstNumber: data.GstNumber,

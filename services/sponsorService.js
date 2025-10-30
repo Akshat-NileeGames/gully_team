@@ -9,6 +9,7 @@ function isBase64Image(str) {
 }
 const SponsorService = {
     async addSponsor(data) {
+        console.log("Called sposor");
         const user = global.user;
         let imageUrl = "";
         if (data.sponsorMedia) {
@@ -53,7 +54,7 @@ const SponsorService = {
     async editSponsor(sponsorId, data) {
 
         try {
-            let sponsorImage = await Sponsor.findOne({ sponsorId });
+            let sponsorImage = await Sponsor.findById(sponsorId);
             if (!sponsorImage) {
                 throw CustomErrorHandler.notFound("Sponsor Details not found.");
             }
@@ -63,9 +64,8 @@ const SponsorService = {
                     mediaPath = await ImageUploader.Upload(
                         data.sponsorMedia,
                         "tournament_sponsor",
-                        sponsorImage.sponsorMedia
                     );
-                    await ImageUploader.Delete(data.banner);
+                    // await ImageUploader.Delete(sponsorImage.sponsorMedia);
                 } else {
                     mediaPath = sponsorImage.sponsorMedia;
                 }

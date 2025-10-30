@@ -384,7 +384,7 @@ const PromotionalbannerService = {
             data.banner_image,
             "Banner_Promotion",
           );
-          await ImageUploader.Delete(data.banner);
+          // await ImageUploader.Delete(data.banner);
         } else {
           imageUrl = banner.banner_image;
         }

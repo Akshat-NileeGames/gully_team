@@ -1114,74 +1114,78 @@ const teamServices = {
   },
 
   async getAllLooking(data) {
-    const { latitude, longitude } = data;
-    const maxDistanceInKm = 30;
+    try {
+      const { latitude, longitude } = data;
+      const maxDistanceInKm = 30;
 
-    const looking = await Lookingfor.aggregate([
-      {
-        $geoNear: {
-          near: {
-            type: "Point",
-            coordinates: [parseFloat(longitude), parseFloat(latitude)],
-          },
-          distanceField: "distance",
-          spherical: true,
-          key: "location", // Specify the index key
-        },
-      },
-      {
-        $addFields: {
-          distanceInKm: {
-            $divide: ["$distance", 1000],
+      const looking = await Lookingfor.aggregate([
+        {
+          $geoNear: {
+            near: {
+              type: "Point",
+              coordinates: [parseFloat(longitude), parseFloat(latitude)],
+            },
+            distanceField: "distance",
+            spherical: true,
+            key: "location", // Specify the index key
           },
         },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId", // Update to the correct field in Lookingfor schema
-          foreignField: "_id",
-          as: "user",
+        {
+          $addFields: {
+            distanceInKm: {
+              $divide: ["$distance", 1000],
+            },
+          },
         },
-      },
-      {
-        $match: {
-          distanceInKm: { $lt: 6 }, // Adjust as needed, 3000 means 3km
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId", // Update to the correct field in Lookingfor schema
+            foreignField: "_id",
+            as: "user",
+          },
         },
-      },
-      {
-        $unwind: "$user",
-      },
-      {
-        $project: {
-          _id: 1,
-          role: 1,
-          latitude: 1,
-          longitude: 1,
-          location: "$location.selectLocation",
-          createdAt: 1,
-          email: "$user.email",
-          phoneNumber: "$user.phoneNumber",
-          fullName: "$user.fullName",
-          distanceInKm: 1,
+        {
+          $match: {
+            distanceInKm: { $lt: 6 }, // Adjust as needed, 3000 means 3km
+          },
         },
-      },
-      {
-        $sort: {
-          createdAt: -1, // Sort by createdAt field in descending order (newest first)
+        {
+          $unwind: "$user",
         },
-      },
-      {
-        $limit: 50, // Limit the number of results to 50
-      },
-    ]);
+        {
+          $project: {
+            _id: 1,
+            role: 1,
+            latitude: 1,
+            longitude: 1,
+            location: "$location.selectLocation",
+            createdAt: 1,
+            email: "$user.email",
+            phoneNumber: "$user.phoneNumber",
+            fullName: "$user.fullName",
+            distanceInKm: 1,
+          },
+        },
+        {
+          $sort: {
+            createdAt: -1, // Sort by createdAt field in descending order (newest first)
+          },
+        },
+        {
+          $limit: 50, // Limit the number of results to 50
+        },
+      ]);
 
-    if (!looking || looking.length === 0) {
-      // Handle the case where no results are found
-      throw CustomErrorHandler.notFound("Team Not Found");
+      // if (!looking || looking.length === 0) {
+      //   // Handle the case where no results are found
+      //   throw CustomErrorHandler.notFound("Team Not Found");
+      // }
+
+      return { data: looking };
+    } catch (error) {
+      console.log(`Failed to get looking :${error}`);
     }
-
-    return { data: looking };
   },
 
   async getLookingByID() {

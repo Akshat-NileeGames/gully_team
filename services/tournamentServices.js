@@ -428,8 +428,9 @@ const tournamentServices = {
     let coHostId1 = tournamentId.coHostId1;
     let coHostId2 = tournamentId.coHostId2;
 
+
     // Handle coHost1 update or creation
-    if (data.coHost1Phone) {
+    if (data.coHost1Phone != null) {
       const existingUser = await User.findOne({ phoneNumber: data.coHost1Phone });
       if (existingUser) {
         coHostId1 = existingUser._id;
@@ -442,10 +443,12 @@ const tournamentServices = {
         const newUserData = await newUser.save();
         coHostId1 = newUserData._id;
       }
+    } else {
+      coHostId1 = null;
     }
 
     // Handle coHost2 update or creation
-    if (data.coHost2Phone) {
+    if (data.coHost2Phone != null) {
       const existingUser = await User.findOne({ phoneNumber: data.coHost2Phone });
       if (existingUser) {
         coHostId2 = existingUser._id;
@@ -458,6 +461,8 @@ const tournamentServices = {
         const newUserData = await newUser.save();
         coHostId2 = newUserData._id;
       }
+    } else {
+      coHostId2 = null;
     }
 
     // Prepare updated data

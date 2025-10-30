@@ -1,6 +1,6 @@
 import Joi from "joi";
 import { SponsorService } from "../services/index.js";
-
+import CustomErrorHandler from "../helpers/CustomErrorHandler.js";
 const SponsorController = {
 
   async addSponsor(req, res, next) {
@@ -15,7 +15,7 @@ const SponsorController = {
 
     const { error } = sponsor_schema.validate(req.body);
     if (error) {
-      return next(error);
+      return CustomErrorHandler.validationError(`Failed to Validate body:${error}`)
     }
     try {
       const result = await SponsorService.addSponsor(req.body);

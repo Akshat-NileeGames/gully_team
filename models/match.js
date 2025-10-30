@@ -152,6 +152,10 @@ const matchSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    isMatchEnded: {
+      type: Boolean,
+      default: false
+    },
     matchAuthority: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
