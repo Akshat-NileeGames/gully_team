@@ -277,7 +277,6 @@ const userServices = {
   },
 
   async verifyOTP(data) {
-    console.log(data);
     const otp = data.OTP;
     const userInfo = global.user;
     const userId = userInfo.userId;
@@ -286,7 +285,6 @@ const userServices = {
     // Retrieve OTP data from MongoDB
     const otpData = await OTP.findOne({ userId });
 
-    console.log(otpData);
     if (!otpData) {
       throw CustomErrorHandler.notFound("Invalid OTP or OTP expired");
     }
@@ -341,7 +339,6 @@ const userServices = {
       // Handle the case where the user is not found
       throw CustomErrorHandler.notFound("User Not Found");
     }
-    console.log(userData);
     return userData;
   },
 

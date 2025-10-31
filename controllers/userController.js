@@ -280,7 +280,6 @@ const userController = {
   async sendOTP(req, res, next) {
     const userId = global.user.userId;
     const phoneNumber = req.body.phoneNumber;
-    console.log(phoneNumber);
     const otpExpiryMinutes = 10; // Adjust this to the desired expiry time in minutes
 
     //validation

@@ -22,7 +22,6 @@ const tournamentServices = {
     const userInfo = global.user;
     let coHostId1;
     let coHostId2;
-    console.log(data.tournamentfor);
     if (data.coHost1Phone) {
       const existingUser = await User.findOne({ phoneNumber: data.coHost1Phone });
 
@@ -130,9 +129,7 @@ const tournamentServices = {
       setTimeout(async () => {
         console.log("Sending email after 10 seconds...");
         const order = await OrderHistory.findOne({ tournamentId: tournamentId });
-        console.log(order);
         const mail = await tournamentServices.sendMail("sponsorship", user, tour, order.orderId, purchasedPackage);
-        console.log(mail);
       }, 10000);
 
       return tour;

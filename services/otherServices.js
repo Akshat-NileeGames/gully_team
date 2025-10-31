@@ -197,7 +197,6 @@ const otherServices = {
     let imagePath;
     const updatedNotification = await Notification.findById(NotificationId);
 
-    console.log("imagr", image);
 
     if (image) {
       imagePath = await ImageUploader.Upload(
@@ -965,7 +964,6 @@ const otherServices = {
     const gstRate = 18 / 100;
     const gstAmount = (result.amount / 100) * gstRate;
     const amountBeforeGST = (result.amount / 100) - gstAmount;
-    console.log("Result ", result);
 
     const orderHistory = new OrderHistory({
       orderId: result.id,
@@ -3908,7 +3906,6 @@ const otherServices = {
 
       const user = individual ? await User.findById(individual.userId) : await User.findById(userInfo.userId);
       if (!user) throw CustomErrorHandler.notFound("User Not Found");
-      console.log(data.PackageId);
       const purchasedPackage = await Package.findById(data.PackageId);
       if (!purchasedPackage) throw CustomErrorHandler.notFound("Package Not Found");
 
@@ -3998,7 +3995,6 @@ const otherServices = {
     try {
       const userInfo = global.user;
       const receipt = crypto.randomBytes(10).toString("hex");
-      console.log(data.venueId);
       const paymentData = {
         amount: Math.round(data.amount * 100),
         currency: "INR",
@@ -5290,7 +5286,6 @@ const otherServices = {
       const purchasedPackage = await Package.findById(data.PackageId)
       if (!purchasedPackage) throw CustomErrorHandler.notFound("Package Not Found")
 
-      console.log(data.ordertype)
 
       const orderHistoryData = {
         orderId: result.id,
@@ -7400,7 +7395,6 @@ const otherServices = {
       endteamLimit: endteamLimit,
       fees: fees,
     });
-    console.log("EntryFees", EntryFees);
     // Save the new entryFees  and wait for the operation to complete
     await newEntryFees.save();
 

@@ -234,7 +234,6 @@ const ProviderServices = {
   async updateVenueSubscriptionStatus(data) {
     try {
       const { venueId, packageId } = data;
-      console.log(venueId);
       /**
        * Find the venue by ID and throw an error if not found.
        */

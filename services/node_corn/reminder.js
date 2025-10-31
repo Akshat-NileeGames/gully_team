@@ -28,7 +28,7 @@ class EmailReminderService {
 
     // Verify package hasn't already expired
     if (daysUntilExpiration < 0) {
-      console.log(`⚠️ Package already expired for ${entityType} ${entity._id}, skipping reminder`)
+      console.log(`Package already expired for ${entityType} ${entity._id}, skipping reminder`)
       return
     }
 
@@ -52,7 +52,7 @@ class EmailReminderService {
     }
 
     await this.transporter.sendMail(mailOptions)
-    console.log(`✅ Reminder email sent to ${entity.userId.email} for ${entityType} ${entity._id}`)
+    console.log(`Reminder email sent to ${entity.userId.email} for ${entityType} ${entity._id}`)
   }
 
   // Send expired package notification using the new template system
@@ -84,7 +84,7 @@ class EmailReminderService {
     }
 
     await this.transporter.sendMail(mailOptions)
-    console.log(`📧 Expired notification sent to ${entity.userId.email} for ${entityType} ${entity._id}`)
+    console.log(`Expired notification sent to ${entity.userId.email} for ${entityType} ${entity._id}`)
   }
 
   // Helper methods
@@ -140,7 +140,7 @@ class EmailReminderService {
       }
     })
 
-    console.log(`📊 Batch results for ${entityType}: ${successCount} sent, ${failureCount} failed`)
+    console.log(`Batch results for ${entityType}: ${successCount} sent, ${failureCount} failed`)
     return { successCount, failureCount }
   }
 }

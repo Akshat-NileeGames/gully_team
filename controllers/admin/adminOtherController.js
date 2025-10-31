@@ -6,7 +6,6 @@ import { User } from "../../models/index.js";
 const contentController = {
   async getContent(req, res, next) {
     const contentName = req.params.contentName;
-    console.log(contentName);
     try {
       const result = await otherServices.getContent(contentName);
 
@@ -109,7 +108,6 @@ const contentController = {
 
     const mail = await adminService.sendMail("helpdesk",user.email,user.fullName,result.response??"We are working ");
 
-    console.log(mail);
       return res.status(200).json({
         sucess: true,
         status: true,

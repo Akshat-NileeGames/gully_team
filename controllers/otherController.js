@@ -54,7 +54,6 @@ const otherController = {
 
   async getContent(req, res, next) {
     const contentName = req.params.contentName;
-    console.log(contentName);
     try {
       const result = await otherServices.getContent(contentName);
 
@@ -156,7 +155,6 @@ const otherController = {
   },
   async createIndividualOrder(req, res, next) {
     try {
-      console.log(req.body);
       const result = await otherServices.createIndividualOrder(req.body);
 
       return res.status(200).json({

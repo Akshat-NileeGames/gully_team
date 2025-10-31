@@ -1195,7 +1195,6 @@ const tournamentController = {
     try {
       const { tournamentId } = req.params;
       const tournamentData = await tournamentServices.getTournamentById(tournamentId);
-      console.log(tournamentData);
       return res.status(200).json({
         success: true,
         data: tournamentData,

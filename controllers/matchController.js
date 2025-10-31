@@ -154,7 +154,6 @@ const matchController = {
 
   async editMatch(req, res, next) {
     let MatchId = req.params.matchId;
-    console.log("these api is called");
     const MatchSchema = Joi.object({
       tournamentId: Joi.string().min(3).max(30).required(),
       team1ID: Joi.string().min(3).max(30).required(),
@@ -220,7 +219,6 @@ const matchController = {
     // let tournamentID = req.params.tournamentID;
     // let teamID = req.params.teamID;
     try {
-      console.log(global.userInfo);
 
       const result = await matchServices.getOpponentTournamentId();
 
@@ -826,12 +824,8 @@ const matchController = {
         User.findById(match.team1.userId),
         User.findById(match.team2.userId)
       ]);
-      console.log("Team1 Organizer:", team1org);
-      console.log("Team2 Organizer:", team2org);
       const [Team1FCM, Team2FCM] = [team1org.fcmToken, team2org.fcmToken];
 
-      console.log("Team1FCM", Team1FCM);
-      console.log("Team2FCM", Team2FCM);
 
       if (Team1FCM && Team2FCM) {
         const notificationDataTeam1 = {

@@ -9,7 +9,6 @@ function isBase64Image(str) {
 }
 const SponsorService = {
     async addSponsor(data) {
-        console.log("Called sposor");
         const user = global.user;
         let imageUrl = "";
         if (data.sponsorMedia) {

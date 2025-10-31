@@ -49,7 +49,6 @@ const PromotionalbannerController = {
 
 
     async getBannersNearby(req, res, next) {
-        console.log(req.body);
         const banner = Joi.object({
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),

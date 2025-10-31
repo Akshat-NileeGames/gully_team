@@ -137,10 +137,7 @@ const ShopService = {
             setTimeout(async () => {
                 console.log("Sending email after 10 seconds... with Shop id", result._id);
                 const user = await User.findById(userInfo.userId);
-                console.log(data.ownerEmail);
                 const mail = await ShopService.sendMail("Shop", user, data.ownerEmail, result);
-
-                console.log(mail);
             }, 2000);
             return result;
         } catch (err) {
@@ -605,7 +602,6 @@ const ShopService = {
         try {
             const { shopId } = data;
             const shop = await Shop.findById(shopId).populate('packageId AdditionalPackages');
-            console.log(shop);
             if (!shop) {
                 throw CustomErrorHandler.notFound("Shop Not Found");
             }
@@ -648,7 +644,6 @@ const ShopService = {
     // },
     async editShop(data) {
         const { shopId, ...fieldsToUpdate } = data;
-        console.log(data.shopLink);
         if (fieldsToUpdate.longitude && fieldsToUpdate.latitude) {
             fieldsToUpdate["locationHistory.point"] = {
                 type: "Point",
@@ -1550,7 +1545,6 @@ const ShopService = {
 
     async getSubCategory(data) {
         const category = data.category;
-        console.log(category);
         const subCategory = await Category.find({
             categoryFor: `${category} sub`
         }, {
@@ -1753,7 +1747,6 @@ const ShopService = {
 
             const shopIds = nearbyShops.map((shop) => shop._id);
             const skip = (page - 1) * limit;
-            console.log(skip);
             const similarProducts = await Product.find({
                 shopId: { $in: shopIds },
                 $or: [
@@ -2429,14 +2422,12 @@ const ShopService = {
     },
 
     async verifyOTP(data) {
-        console.log(data);
         const otp = data.OTP;
         const userInfo = global.user;
         const userId = userInfo.userId;
         const maxAttempts = 5;
         const otpData = await OTP.findOne({ userId });
 
-        console.log(otpData);
         if (!otpData) {
             throw CustomErrorHandler.notFound("Invalid OTP or OTP expired");
         }

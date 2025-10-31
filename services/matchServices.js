@@ -19,7 +19,6 @@ const matchServices = {
 
     const { tournamentId, team1ID, team2ID, round, matchNo, dateTime, winningTeamId, matchAuthority, matchlength } = data;
     const userInfo = global.user;
-    console.log(`The Team 1 id:${team1ID} and Team 2 id:${team2ID}`)
     const TournamentExist = await Tournament.findOne({ _id: tournamentId });
 
     if (!TournamentExist) {
@@ -30,7 +29,6 @@ const matchServices = {
     if (TournamentExist?.authority != userInfo.userId) {
       throw CustomErrorHandler.badRequest("You do not have permission.");
     }
-    console.log("time received", dateTime);
     // Validate that team1 and team2 do not share players
     const team1 = await Team.findById(team1ID);
     const team2 = await Team.findById(team2ID);
@@ -501,7 +499,6 @@ const matchServices = {
 
   async getOpponent(tournamentID, teamID) {
     const userInfo = global.user;
-    console.log(teamID);
     let opponents = await Match.find({
       tournament: tournamentID,
       $or: [{ team1: teamID }, { team2: teamID }],
@@ -512,7 +509,6 @@ const matchServices = {
     if (!opponents) {
       throw CustomErrorHandler.notFound("The Player of this Match not Found.");
     }
-    console.log(opponents);
     const filteredOpponents = opponents
       .map((opponent) => {
         const { team1, team2 } = opponent;
@@ -687,7 +683,6 @@ const matchServices = {
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
-      console.log(matchId);
       const matchData = await Match.findByIdAndUpdate(
         matchId,
         {
