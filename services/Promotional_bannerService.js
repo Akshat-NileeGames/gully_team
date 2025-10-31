@@ -6,45 +6,50 @@ function isBase64Image(str) {
   return /^data:image\/[a-zA-Z]+;base64,/.test(str);
 }
 const PromotionalbannerService = {
-  async createBanner(data) {
-    const userInfo = global.user;
 
-    let imageUrl = "";
-    if (data.banner_image) {
-      imageUrl = await ImageUploader.Upload(
-        data.banner_image,
-        "Banner_Promotion",
-      );
-    }
-    const startDate = DateTime.fromISO(data.startDate, { zone: 'utc' }).startOf('day').toJSDate();
-    const endDate = DateTime.fromISO(data.endDate, { zone: 'utc' }).startOf('day').toJSDate();
-    const purchasedPackage = await Package.findById(data.packageId);
-    const bannerData = new Promotional_Banner_model({
-      banner_title: data.banner_title,
-      banner_image: imageUrl,
-      startDate: startDate,
-      endDate: endDate,
-      bannerlocationaddress: data.bannerlocationaddress,
-      locationHistory: {
-        point: {
-          type: "Point",
-          coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
+  async createBanner(data) {
+    try {
+      const userInfo = global.user;
+
+      let imageUrl = "";
+      if (data.banner_image) {
+        imageUrl = await ImageUploader.Upload(
+          data.banner_image,
+          "Banner_Promotion",
+        );
+      }
+      const startDate = DateTime.fromISO(data.startDate, { zone: 'utc' }).startOf('day').toJSDate();
+      const endDate = DateTime.fromISO(data.endDate, { zone: 'utc' }).startOf('day').toJSDate();
+      const purchasedPackage = await Package.findById(data.packageId);
+      const bannerData = new Promotional_Banner_model({
+        banner_title: data.banner_title,
+        banner_image: imageUrl,
+        startDate: startDate,
+        endDate: endDate,
+        bannerlocationaddress: data.bannerlocationaddress,
+        locationHistory: {
+          point: {
+            type: "Point",
+            coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
+          },
+          selectLocation: data.selectLocation,
         },
-        selectLocation: data.selectLocation,
-      },
-      packageId: data.packageId,
-      userId: userInfo.userId
-    });
-    const banner = await bannerData.save();
-    setTimeout(async () => {
-      console.log("Sending email after 10 seconds... with banner id", banner._id);
-      const order = await OrderHistory.findOne({ bannerId: banner._id });
-      const retrivedBanner = await Promotional_Banner_model.findById(banner._id);
-      const user = await User.findById(userInfo.userId);
-      const mail = await PromotionalbannerService.sendMail("Banner", user, retrivedBanner, order.orderId, purchasedPackage);
-      console.log(mail);
-    }, 10000);
-    return banner;
+        packageId: data.packageId,
+        bannerforsports: data.bannerforsports,
+        userId: userInfo.userId
+      });
+      const banner = await bannerData.save();
+      setTimeout(async () => {
+        console.log("Sending email after 10 seconds... with banner id", banner._id);
+        const order = await OrderHistory.findOne({ bannerId: banner._id });
+        const retrivedBanner = await Promotional_Banner_model.findById(banner._id);
+        const user = await User.findById(userInfo.userId);
+        await PromotionalbannerService.sendMail("Banner", user, retrivedBanner, order.orderId, purchasedPackage);
+      }, 10000);
+      return banner;
+    } catch (error) {
+      console.log(`Failed to create banner:${error}`);
+    }
   },
 
   async sendMail(userFor = "", user, promotionalBanner, orderId, purchasedPackage) {
@@ -303,13 +308,17 @@ const PromotionalbannerService = {
   },
 
 
-  async getBannersWithinRadius(latitude, longitude) {
-    const radiusKm = 15;
-    const desiredBannerCount = 7;
-
+  async getBannersWithinRadius(data) {
     try {
+      const { longitude, latitude, bannerforsports } = data;
+      const radiusKm = 15;
+      const desiredBannerCount = 7;
       const today = new Date();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999)
       today.setHours(0, 0, 0, 0);
       const promotionalBanners = await Promotional_Banner_model.aggregate([
         {
@@ -333,8 +342,9 @@ const PromotionalbannerService = {
         {
           $match: {
             distanceInKm: { $lt: radiusKm },
-            startDate: { $lte: today },
-            endDate: { $gte: today },
+            startDate: { $lte: todayEnd },
+            endDate: { $gte: todayStart },
+            bannerforsports: { $in: [bannerforsports, "others"] },
           },
         },
         {
@@ -364,9 +374,7 @@ const PromotionalbannerService = {
           }))
         );
 
-      return {
-        banners: combinedBanners,
-      };
+      return combinedBanners;
 
     } catch (err) {
       console.log("Error fetching banners within radius:", err);

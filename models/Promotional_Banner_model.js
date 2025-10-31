@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 
 const Promotional_Banner_model = new mongoose.Schema(
   {
-    banner_title:{
-      type:String,
-      required:true
+    banner_title: {
+      type: String,
+      required: true
     },
     banner_image: {
       type: String,
@@ -18,9 +18,15 @@ const Promotional_Banner_model = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    bannerlocationaddress:{
-      type:String,
-      required:true
+    bannerforsports: {
+      type: String,
+      enum: ['cricket', 'football', 'others'],
+      default: 'cricket',
+      required: true,
+    },
+    bannerlocationaddress: {
+      type: String,
+      required: true
     },
     locationHistory: {
       point: {
@@ -42,7 +48,7 @@ const Promotional_Banner_model = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Bannerpayment",
     },
-    
+
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     createdAt: {
       type: Date,

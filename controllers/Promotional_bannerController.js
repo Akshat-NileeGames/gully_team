@@ -17,11 +17,10 @@ const PromotionalbannerController = {
             longitude: Joi.number().required(),
             latitude: Joi.number().required(),
             packageId: Joi.string().required(),
+            bannerforsports: Joi.string().required(),
         });
-        const { error } = banner_schema.validate(req.body)
-        if (error) {
-            return next(err);
-        }
+        const { error } = banner_schema.validate(req.body);
+        if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
         try {
             const result = await PromotionalbannerService.createBanner(req.body);
             return res.status(200).json({
@@ -50,35 +49,25 @@ const PromotionalbannerController = {
 
 
     async getBannersNearby(req, res, next) {
-        const { latitude, longitude, desiredBannerCount } = req.body;
-
-        if (!latitude || !longitude) {
-            return res.status(400).json({
-                success: false,
-                message: "Latitude and longitude are required"
-            });
-        }
-
+        console.log(req.body);
+        const banner = Joi.object({
+            longitude: Joi.number().required(),
+            latitude: Joi.number().required(),
+            bannerforsports: Joi.string().required(),
+        });
+        const { error } = banner.validate(req.body);
+        if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
         try {
-            const result = await PromotionalbannerService.getBannersWithinRadius(
-                latitude,
-                longitude
-            );
-
+            const result = await PromotionalbannerService.getBannersWithinRadius(req.body);
             return res.status(200).json({
                 success: true,
                 message: "Banners fetched successfully",
                 data: {
-                    banners: result.banners
+                    banners: result
                 }
             });
         } catch (err) {
             console.log("Error in fetching nearby banners:", err);
-            return res.status(500).json({
-                success: false,
-                message: "An error occurred while fetching banners",
-                error: err.message
-            });
         }
     },
 

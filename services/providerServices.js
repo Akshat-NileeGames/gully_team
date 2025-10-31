@@ -810,9 +810,9 @@ const ProviderServices = {
         isPaymentConfirm: false,
       })
 
-      if (lockedBooking.length === 0) {
-        throw CustomErrorHandler.badRequest("No locked slots found for confirmation")
-      }
+      // if (lockedBooking.length === 0) {
+      //   throw CustomErrorHandler.badRequest("No locked slots found for confirmation")
+      // }
 
 
       lockedBooking.isPaymentConfirm = true;
