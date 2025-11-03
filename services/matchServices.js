@@ -14,13 +14,32 @@ import { DateTime } from "luxon";
 import firebaseNotification from "../helpers/firebaseNotification.js";
 
 const matchServices = {
-
+  /**
+   * @function createMatch
+   * @description Creates a match for a tournament. Validates tournament existence and user authority,
+   * checks for overlapping players between teams, normalizes the provided datetime to ISO, saves the match,
+   * and sends notifications to both team organizers if FCM tokens exist.
+   *
+   * @param {Object} data - Match creation payload.
+   * @param {string} data.tournamentId - Tournament ID.
+   * @param {string} data.team1ID - Team 1 ID.
+   * @param {string} data.team2ID - Team 2 ID.
+   * @param {string|number} data.round - Round identifier.
+   * @param {string|number} data.matchNo - Match number.
+   * @param {string} data.dateTime - ISO date/time string for the match.
+   * @param {string} [data.winningTeamId] - Optional winning team ID.
+   * @param {string} [data.matchAuthority] - Authority who created/controls the match.
+   * @param {number} [data.matchlength] - Optional match length.
+   * @returns {Promise<Object>} The saved match document.
+   * @throws {CustomErrorHandler} Throws validation/permission/date/overlap errors via CustomErrorHandler.
+   */
   async createMatch(data) {
 
     const { tournamentId, team1ID, team2ID, round, matchNo, dateTime, winningTeamId, matchAuthority, matchlength } = data;
     const userInfo = global.user;
     const TournamentExist = await Tournament.findOne({ _id: tournamentId });
 
+    // Verify tournament exists
     if (!TournamentExist) {
       throw CustomErrorHandler.badRequest("This Tournament is Not Found.");
     }
@@ -36,18 +55,7 @@ const matchServices = {
     const team1Players = team1.players;
     const team2Players = team2.players;
 
-
-    //Previous Code to check Overlap PLayers
-    // Check for player overlap
-    // const isPlayerPresentInTeam2 = team1Players.some(player1 =>
-    //   team2Players.some(player2 => player1.phoneNumber === player2.phoneNumber)
-    // );
-    // if (isPlayerPresentInTeam2) {
-    //   console.log("Player found:",isPlayerPresentInTeam2)
-    //   throw CustomErrorHandler.alreadyExist("Player overlap found in teams.");
-    // }
-
-
+    // Check for overlapping players by phoneNumber
     const overlappingPlayers = team1Players.filter(player1 =>
       team2Players.some(player2 => player1.phoneNumber === player2.phoneNumber)
     );
@@ -59,6 +67,7 @@ const matchServices = {
       throw CustomErrorHandler.badRequest(`There are overlapping players in both teams: ${overlapDetails}`);
     }
 
+    //parse and validate ISO datetime (UTC), return standardized ISO string
     const formatDateTime = (dateTimeString) => {
       const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
       if (!parsedDate.isValid) {
@@ -68,7 +77,7 @@ const matchServices = {
       return parsedDate.toISO();
     };
 
-
+    // Standardize and log datetime before saving
     const standardizedDateTime = formatDateTime(dateTime);
     console.log("Create Match - Original DateTime:", dateTime);
     console.log("Create Match - Stored DateTime:", standardizedDateTime);
@@ -100,7 +109,7 @@ const matchServices = {
 
     console.log("Team1FCM", Team1FCM);
     console.log("Team2FCM", Team2FCM);
-
+    // If both organizers have FCM tokens, prepare and send notifications
     if (Team1FCM && Team2FCM) {
       const notificationDataTeam1 = {
         title: `${team1.teamName} VS ${team2.teamName} ${round} Match`,
@@ -256,11 +265,19 @@ const matchServices = {
   // },
 
 
-  //DG
+  /**
+   * @function getOpponentTournamentId
+   * @description Fetches all tournaments in which the logged-in user has participated, ensuring
+   * no player overlaps between teams. Returns match and tournament details linked to the user.
+   *
+   * @returns {Promise<Object>} Object containing a `data` array with match and tournament details.
+   * @throws {CustomErrorHandler.badRequest} If the user's phone number cannot be found.
+   */
   async getOpponentTournamentId() {
     const userInfo = global.user;
     const userId = userInfo.userId;
 
+    // Fetch user's phone number
     const userPhoneNumber = await User.findOne({ _id: userId }).select("phoneNumber");
 
     if (!userPhoneNumber) {
@@ -269,6 +286,7 @@ const matchServices = {
 
     const phoneNumberToFind = userPhoneNumber.phoneNumber;
 
+    // Fetch matches with scoreboards and populated team/player/tournament data
     const matchData = await Match.find({ scoreBoard: { $ne: null } })
       .select("tournament team1 team2 _id")
       .populate("tournament", "tournamentName tournamentfor")
@@ -288,6 +306,7 @@ const matchServices = {
         },
       });
 
+    // Filter matches containing the user's phone number and no overlapping players
     const tournamentsWithPhoneNumber = matchData.filter((match) => {
       if (!match.team1?.players || !match.team2?.players) {
         return false;
@@ -296,17 +315,20 @@ const matchServices = {
       const team1Players = match.team1.players.map((player) => player.phoneNumber);
       const team2Players = match.team2.players.map((player) => player.phoneNumber);
 
+      // Exclude matches where teams share any player phoneNumber
       const hasOverlap = team1Players.some((phone) => team2Players.includes(phone));
 
       if (hasOverlap) {
         return false;
       }
+      // Include match if user's phone exists in either team
       return (
         team1Players.includes(phoneNumberToFind) ||
         team2Players.includes(phoneNumberToFind)
       );
     });
 
+    // Extract relevant tournament and team details
     const tournamentDetails = tournamentsWithPhoneNumber.map((match) => {
       let teamId = "";
       let tournamentId = null;
@@ -351,21 +373,39 @@ const matchServices = {
     return { data: tournamentDetails };
   },
 
-
+  /**
+   * @function getMatch
+   * @description Retrieves all matches for a given tournament.
+   *
+   * @param {string} tournamentId - The tournament ObjectId.
+   * @returns {Promise<Array>} Array of match documents.
+   * @throws {CustomErrorHandler.notFound} If no matches are found.
+   */
   async getMatch(tournamentId) {
+    // Query matches by tournament
     const MatchExist = await Match.find({
       tournament: tournamentId,
     });
-
+    // If no match document is found, throw notFound error
     if (!MatchExist) {
       throw CustomErrorHandler.notFound("This Match is Not Found.");
     }
     return MatchExist;
   },
 
+  /**
+   * @function getSingleMatch
+   * @description Retrieves a single match by its ID.
+   *
+   * @param {Object} data - Payload containing the matchId.
+   * @param {string} data.matchId - The match ObjectId.
+   * @returns {Promise<Object>} The match document.
+   * @throws {CustomErrorHandler.notFound} If the match is not found.
+   */
   async getSingleMatch(data) {
     try {
       const { matchId } = data;
+      // Find match by ID
       const MatchExist = await Match.findById(matchId);
       if (!MatchExist) {
         throw CustomErrorHandler.notFound("This Match is Not Found.");
@@ -375,9 +415,20 @@ const matchServices = {
       console.log(`Failed to get Single Match :${error}`);
     }
   },
+
+  /**
+ * @function getChallengeMatch
+ * @description Retrieves challenge team entries that include a scoreboard for a given match ID.
+ *
+ * @param {Object} data - Payload containing the matchId.
+ * @param {string} data.matchId - The match ObjectId to search in scoreBoard.matchId.
+ * @returns {Promise<Array>} Array of challenge team documents containing the match scoreboard.
+ * @throws {CustomErrorHandler.notFound} If no matching challenge entries are found.
+ */
   async getChallengeMatch(data) {
     try {
       const { matchId } = data;
+      // Find challenge teams that reference the given matchId in their scoreboard
       const MatchExist = await ChallengeTeam.find({
         "scoreBoard.matchId": matchId
       });
@@ -463,14 +514,26 @@ const matchServices = {
   //   return { data: tournamentDetails };
   // },
 
+  //FIX: Not Used
+  /**
+   * @function getOpponentOld
+   * @description Legacy method to retrieve unique opponent teams for a given team within a specific tournament.
+   * Queries all matches where the specified team participated and extracts their opponents, ensuring no duplicates.
+   *
+   * @param {string} tournamentID - The tournament ObjectId to search within
+   * @param {string} teamID - The team ObjectId to find opponents for
+   * @returns {Promise<Array>} Array of unique opponent objects, each containing {opponent: Team}
+   */
   async getOpponentOld(tournamentID, teamID) {
     const userInfo = global.user;
 
+    // Find all matches in the tournament where the specified team participated (either as team1 or team2)
     const opponents = await Match.find({
       tournament: tournamentID,
       $or: [{ team1: teamID }, { team2: teamID }],
     }).select("team1, team2");
 
+    // Map through matches to extract the opponent (the team that isn't the specified teamID)
     const filteredOpponents = opponents
       .map((opponent) => {
         const { team1, team2 } = opponent;
@@ -482,8 +545,9 @@ const matchServices = {
         }
         return null; // If neither team1 nor team2 matches teamId
       })
-      .filter(Boolean);
+      .filter(Boolean); // Remove null entries
 
+    // Remove duplicate opponents using a Set to track unique opponent IDs
     const uniqueOpponentsSet = new Set();
     const uniqueOpponents = filteredOpponents.reduce((acc, opponent) => {
       if (!uniqueOpponentsSet.has(opponent.opponent._id)) {
@@ -497,8 +561,22 @@ const matchServices = {
     // return filteredOpponents;
   },
 
+  /**
+   * @function getOpponent
+   * @description Retrieves all opponent teams and match details for a specific team within a tournament.
+   * Returns both the unique list of opponent teams and the complete match details for further analysis.
+   *
+   * @param {string} tournamentID - The tournament ObjectId to search within
+   * @param {string} teamID - The team ObjectId to find opponents for
+   * @returns {Promise<Object>} Object containing {team: Array, matchDetails: Array}
+   *   - team: Array of unique opponent objects
+   *   - matchDetails: Array of complete match documents
+   * @throws {CustomErrorHandler.notFound} If no matches found for the team in the tournament
+   */
   async getOpponent(tournamentID, teamID) {
     const userInfo = global.user;
+
+    // Find all matches in the tournament where the specified team participated
     let opponents = await Match.find({
       tournament: tournamentID,
       $or: [{ team1: teamID }, { team2: teamID }],
@@ -506,9 +584,12 @@ const matchServices = {
     // .select("scoreBoard _id ")
     // .lean();
 
+    // Validate that matches were found for this team
     if (!opponents) {
       throw CustomErrorHandler.notFound("The Player of this Match not Found.");
     }
+
+    // Extract opponent teams from each match
     const filteredOpponents = opponents
       .map((opponent) => {
         const { team1, team2 } = opponent;
@@ -519,8 +600,9 @@ const matchServices = {
         }
         return null; // If neither team1 nor team2 matches teamId
       })
-      .filter(Boolean);
+      .filter(Boolean); // Remove null entries
 
+    // Remove duplicate opponents to get unique list
     const uniqueOpponentsSet = new Set();
     const uniqueOpponents = filteredOpponents.reduce((acc, opponent) => {
       if (!uniqueOpponentsSet.has(opponent.opponent._id)) {
@@ -531,14 +613,32 @@ const matchServices = {
     }, []);
     // console.log(uniqueOpponents);
 
-
+    // Return both the filtered opponents and complete match details
     return { team: filteredOpponents, matchDetails: opponents };
   },
 
+  /**
+   * @function editMatch
+   * @description Updates an existing match with new information including teams, date/time, round, and match number.
+   * Validates match existence and normalizes the datetime before saving changes.
+   *
+   * @param {Object} data - Updated match data
+   * @param {string} data.tournamentId - Tournament ID for validation
+   * @param {string} data.team1ID - Updated Team 1 ID
+   * @param {string} data.team2ID - Updated Team 2 ID
+   * @param {string} data.dateTime - Updated ISO date/time string
+   * @param {string|number} data.round - Updated round identifier
+   * @param {string|number} data.matchNo - Updated match number
+   * @param {string} MatchId - The match ObjectId to update
+   * @returns {Promise<Object>} The updated match document
+   * @throws {CustomErrorHandler.notFound} If the match is not found
+   * @throws {CustomErrorHandler.badRequest} If date format is invalid
+   */
   async editMatch(data, MatchId) {
 
     const userInfo = global.user;
 
+    // Verify the match exists in the specified tournament
     const MatchExist = await Match.findOne({
       _id: MatchId,
       tournament: data.tournamentId,
@@ -546,6 +646,7 @@ const matchServices = {
 
     if (!MatchExist) throw CustomErrorHandler.notFound("Match Not Found");
 
+    // Helper function to normalize datetime to UTC ISO format
     const formatDateTime = (dateTimeString) => {
       const parsedDate = DateTime.fromISO(dateTimeString, { zone: "utc" });
       if (!parsedDate.isValid) {
@@ -555,10 +656,12 @@ const matchServices = {
       return parsedDate.toISO();
     };
 
+    // Normalize the provided datetime
     const standardizedDateTime = formatDateTime(data.dateTime);
     // console.log("Edit Match - Original DateTime:", data.dateTime);
     // console.log("Edit Match - Formatted DateTime:", standardizedDateTime);
 
+    // Update match fields with new data
     MatchExist.team1 = data.team1ID;
     MatchExist.team2 = data.team2ID;
     MatchExist.Round = data.round;
@@ -568,13 +671,17 @@ const matchServices = {
       MatchExist.matchlength = data.matchlength;
     }
 
+    // Save the updated match
     const matchData = await MatchExist.save();
 
+    // Fetch team organizers for reschedule notifications
     const [team1org, team2org] = await Promise.all([
       User.findById(MatchExist.team1.userId),
       User.findById(MatchExist.team2.userId)
     ]);
     const [Team1FCM, Team2FCM] = [team1org.fcmToken, team2org.fcmToken];
+
+    // Send reschedule notifications to both team organizers if FCM tokens exist
     if (Team1FCM && Team2FCM) {
       const notificationDataTeam1 = {
         title: `${MatchExist.team1.teamName} VS ${MatchExist.team2.teamName} ${MatchExist.Round} Match`,
@@ -595,6 +702,7 @@ const matchServices = {
         console.log("Notification sent to Team1 organizer successfully:", response1);
         console.log("Notification sent to Team2 organizer successfully:", response2);
       } catch (error) {
+        // Log error but don't fail the match update if notifications fail
         console.error("Error sending notification:", error);
       }
     }
@@ -678,11 +786,26 @@ const matchServices = {
   //   }
   // },
 
+  /**
+   * @function updateScoreBoard
+   * @description Updates the scoreboard data for a match and changes its status to 'current' indicating the match is in progress.
+   * Supports dynamic scoreboard structure for both cricket and football matches stored as a Map.
+   *
+   * @param {Object} data - Payload containing scoreboard data
+   * @param {Object} data.scoreBoard - Scoreboard object with match-specific data (flexible structure)
+   * @param {string} matchId - The match ObjectId to update
+   * @returns {Promise<Object>} The updated match document with new scoreboard
+   * @throws {CustomErrorHandler.badRequest} If scoreBoard data is invalid
+   * @throws {CustomErrorHandler.notFound} If the match is not found
+   */
   async updateScoreBoard(data, matchId) {
     try {
+      // Validate scoreboard data structure
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
+
+      // Update match with new scoreboard and set status to 'current' (match in progress)
       const matchData = await Match.findByIdAndUpdate(
         matchId,
         {
@@ -691,7 +814,7 @@ const matchServices = {
             status: 'current'
           }
         },
-        { new: true, runValidators: true }
+        { new: true, runValidators: true } // Return updated document and run schema validators
       );
 
       if (!matchData) {
@@ -724,6 +847,19 @@ const matchServices = {
   // },
 
 
+  /**
+   * @function updateTeamMatchsData
+   * @description Updates team and player statistics after a cricket match concludes. Processes batting and bowling
+   * statistics for both teams, updates team match data based on the match result, marks the match as played,
+   * and sends notifications to all tournament participants.
+   *
+   * @param {Object} data - Match completion data.
+   * @param {string} data.matchId - The ID of the match to update.
+   * @param {string} [data.winningTeamId] - The ID of the winning team (null if draw).
+   * @param {boolean} data.isDraw - Whether the match ended in a draw.
+   * @returns {Promise<boolean>} Returns true on successful update.
+   * @throws {CustomErrorHandler} Throws error if match is not found.
+   */
   async updateTeamMatchsData(data) {
     try {
       const { matchId, winningTeamId, isDraw } = data;
@@ -842,9 +978,32 @@ const matchServices = {
       console.log(`Failed to Update Data: ${error}`);
     }
   },
+
+  /**
+   * @function updatePlayerStats
+   * @description Updates individual player batting and bowling statistics for cricket matches. Increments
+   * the player's career statistics including runs, balls, wickets, centuries, and half-centuries based on
+   * their performance in the match.
+   *
+   * @param {Object} player - The player object containing match performance data.
+   * @param {Object} player.batting - Batting statistics from the match.
+   * @param {number} player.batting.runs - Runs scored in the match.
+   * @param {number} player.batting.balls - Balls faced in the match.
+   * @param {number} player.batting.fours - Number of fours hit.
+   * @param {number} player.batting.sixes - Number of sixes hit.
+   * @param {string} [player.batting.outType] - How the player was dismissed.
+   * @param {Object} player.bowling - Bowling statistics from the match.
+   * @param {number} player.bowling.runs - Runs conceded while bowling.
+   * @param {number} player.bowling.wickets - Wickets taken.
+   * @param {number} player.bowling.currentOver - Overs bowled.
+   * @param {number} player.bowling.maidens - Maiden overs bowled.
+   * @param {string} balltype - Type of ball used ('leather' or 'tennis').
+   * @returns {Promise<void>} Updates player statistics in the database.
+   */
   async updatePlayerStats(player, balltype) {
     if (!player?.batting || !player?.bowling) return;
 
+    // Determine milestone achievements
     let isHalfCentury = player.batting.runs >= 50 && player.batting.runs < 100 ? 1 : 0;
     let isCentury = 0;
     if (player.batting.runs >= 100 && player.batting.runs < 200) isCentury = 1;
@@ -879,7 +1038,18 @@ const matchServices = {
     }, { new: true });
   },
 
-
+  /**
+   * @function updateFootballMatchData
+   * @description Updates team and player statistics after a football match concludes. Processes all match events
+   * including goals, assists, cards, fouls, and penalty shootouts. Updates individual player statistics and team
+   * match records, then marks the match as played.
+   *
+   * @param {Object} data - Football match completion data.
+   * @param {string} data.matchId - The ID of the match to update.
+   * @param {string} [data.winningTeamId] - The ID of the winning team (null if draw).
+   * @returns {Promise<Object>} Returns match result details including scores, winner, and number of players updated.
+   * @throws {CustomErrorHandler} Throws error if match or scoreboard data is not found.
+   */
   async updateFootballMatchData(data) {
     try {
       const { matchId, winningTeamId } = data;
@@ -1087,11 +1257,16 @@ const matchServices = {
     }
   },
 
-
+  /**
+   * @function teamRanking
+   * @description Retrieves the top 20 cricket teams ranked by number of wins for a specific ball type.
+   * Returns team details including logo, name, and win statistics sorted in descending order.
+   *
+   * @param {string} ballType - The type of ball to filter rankings ('leather' or 'tennis').
+   * @returns {Promise<Array>} Array of top 20 ranked teams with their statistics and details.
+   */
   async teamRanking(ballType) {
     let teamsRanking;
-
-    //teamsRanking = await Team.find().select(' _id teamLogo teamName').limit(20);
 
     teamsRanking = await Team.aggregate([
       {
@@ -1117,8 +1292,16 @@ const matchServices = {
     return teamsRanking;
   },
 
+  /**
+   * @function getFootballTeamRankings
+   * @description Retrieves the top 20 football teams ranked by number of wins. Calculates comprehensive
+   * team statistics including points, goal difference, win percentage, and goals per match. Returns teams
+   * sorted by wins in descending order.
+   *
+   * @returns {Promise<Array>} Array of top 20 ranked football teams with calculated performance metrics.
+   * @throws {Error} Throws error if database query fails.
+   */
   async getFootballTeamRankings() {
-    // const { , sortBy = "points" } = options
     const limit = 20
     try {
       const teamRankings = await Team.aggregate([
@@ -1196,6 +1379,17 @@ const matchServices = {
       throw new Error(`Error fetching team rankings: ${error.message}`)
     }
   },
+
+  /**
+   * @function playerRanking
+   * @description Retrieves the top 10 cricket players ranked by batting or bowling performance for a specific
+   * ball type. Fetches detailed statistics including runs, wickets, strike rate, economy, and player profile photos.
+   * Performs a lookup join with user details to get profile information.
+   *
+   * @param {string} ballType - The type of ball to filter rankings ('leather' or 'tennis').
+   * @param {string} skill - The skill category to rank by ('batting' or 'bowling').
+   * @returns {Promise<Array>} Array of top 10 ranked players with their statistics and profile photos.
+   */
   async playerRanking(ballType, skill) {
     try {
       const sortingField = skill === "batting" ? "runs" : "wickets";
@@ -1319,12 +1513,16 @@ const matchServices = {
   },
 
   /**
-   * Get comprehensive player rankings for football
-   * @param {string} category - Ranking category (goals, assists, saves, matches_played)
-   * @param {Object} options - Additional options
-   * @returns {Array} Ranked players with statistics
+   * @function footballplayerRanking
+   * @description Retrieves the top 30 football players ranked by a specific performance category. Calculates
+   * comprehensive statistics including goals, assists, saves, cards, fouls, and performance metrics like goals
+   * per match and overall rating. Performs lookups with user and team collections to enrich player data.
+   *
+   * @param {Object} data - Ranking criteria.
+   * @param {string} data.category - The category to rank by ('goals', 'assists', 'saves', 'matches_played', 'overall', 'fouls', 'penalty_goals', 'penalty_saves').
+   * @returns {Promise<Array>} Array of top 30 ranked football players with statistics, rank, and team information.
+   * @throws {Error} Throws error if database query fails.
    */
-  // Updated footballplayerRanking service method
   async footballplayerRanking(data) {
     const { category } = data;
     const limit = 30;
@@ -1468,6 +1666,15 @@ const matchServices = {
       throw new Error(`Error fetching player rankings: ${error.message}`)
     }
   },
+
+  /**
+   * @function _getPlayerSortCriteria
+   * @description Helper function that returns the appropriate sort criteria for football player rankings
+   * based on the specified category. Each category has a primary and secondary sort field to break ties.
+   *
+   * @param {string} category - The ranking category ('goals', 'assists', 'saves', 'matches_played', 'overall').
+   * @returns {Object} Sort criteria object with field names and sort order (-1 for descending).
+   */
   async _getPlayerSortCriteria(category) {
     const sortOptions = {
       goals: { goals: -1, assists: -1 },
@@ -1479,7 +1686,21 @@ const matchServices = {
 
     return sortOptions[category] || sortOptions.goals
   },
-  //code by DG
+
+  /**
+   * @function topPerformers
+   * @description Retrieves top cricket performers for a specific date and location. Uses geospatial queries to find
+   * nearby tournaments, aggregates player performance data from match scoreboards, and ranks players by batting
+   * performance. Returns top 100 players with their statistics and profile photos.
+   *
+   * @param {Object} data - Search criteria for top performers.
+   * @param {number} data.latitude - Latitude coordinate for location-based search.
+   * @param {number} data.longitude - Longitude coordinate for location-based search.
+   * @param {string} data.startDate - The date to search for matches (YYYY-MM-DD format).
+   * @param {string} [data.filter='tennis'] - The ball type filter ('leather' or 'tennis').
+   * @returns {Promise<Array>} Array of top 100 players ranked by runs with batting and bowling statistics.
+   * @throws {Error} Throws error if startDate is not provided.
+   */
   async topPerformers(data) {
     const { latitude, longitude, startDate, filter } = data;
 
@@ -1617,6 +1838,20 @@ const matchServices = {
     return top10Players;
   },
 
+  /**
+   * @function getFootballTopPerformers
+   * @description Retrieves top football performers for a specific date and location within a 15km radius.
+   * Uses geospatial queries to find nearby football tournaments, aggregates player statistics from match
+   * scoreboards including goals, assists, saves, cards, and fouls. Filters and ranks players based on the
+   * specified criteria (goals or saves).
+   *
+   * @param {Object} data - Search criteria for top performers.
+   * @param {number} data.latitude - Latitude coordinate for location-based search.
+   * @param {number} data.longitude - Longitude coordinate for location-based search.
+   * @param {string} data.startDate - The date to search for matches (YYYY-MM-DD format).
+   * @param {string} [data.filter='goals'] - The filter type ('goals' or 'saves').
+   * @returns {Promise<Array>} Array of top 100 players with aggregated football statistics and profile photos.
+   */
   async getFootballTopPerformers(data) {
     try {
       const { latitude, longitude, startDate, filter } = data;
@@ -2455,7 +2690,18 @@ const matchServices = {
   //   return aggregatedData;
   // },
 
-  //new
+  /**
+   * @function myPerformance
+   * @description Retrieves comprehensive cricket performance data for a specific user. Fetches all tournaments
+   * where the user participated (as organizer or player), aggregates match-by-match statistics including batting
+   * and bowling performance, and returns detailed match summaries grouped by tournament along with overall
+   * career statistics and recent performance data.
+   *
+   * @param {string} userId - The ID of the user whose performance to retrieve.
+   * @param {string} category - The performance category (currently unused but available for future filtering).
+   * @returns {Promise<Object>} Performance data including match summaries by tournament, aggregated statistics, and latest matches.
+   * @throws {CustomErrorHandler} Throws error if user ID is missing or user not found.
+   */
   async myPerformance(userId, category) {
     if (!userId) {
       throw CustomErrorHandler.badRequest("User ID is required");
@@ -2994,6 +3240,19 @@ const matchServices = {
   //     throw error;
   //   }
   // },
+
+  /**
+   * @function getFootballPerformance
+   * @description Retrieves comprehensive football performance data for a specific user. Fetches all football
+   * tournaments where the user participated, aggregates statistics from the Player collection including goals,
+   * assists, saves, cards, and fouls. Returns detailed performance data for the user's latest 5 matches along
+   * with overall aggregated statistics.
+   *
+   * @param {Object} data - Performance request data.
+   * @param {string} data.userId - The ID of the user whose performance to retrieve.
+   * @returns {Promise<Object>} Performance data including aggregated statistics, matches, latest match details, and tournaments.
+   * @throws {Error} Throws error if user is not found.
+   */
   async getFootballPerformance(data) {
     try {
       const { userId } = data;
@@ -3165,6 +3424,23 @@ const matchServices = {
       throw err;
     }
   },
+
+  /**
+   * @function createChallengeMatch
+   * @description Creates a new challenge match between two teams. Validates that no pending challenge match
+   * exists between the same teams, sets up the match details including captains, sport type, and match authority,
+   * then saves the challenge to the database.
+   *
+   * @param {Object} data - Challenge match creation data.
+   * @param {string} data.team1ID - The ID of the challenging team.
+   * @param {string} data.team2ID - The ID of the challenged team.
+   * @param {string} [data.dateTime] - Optional date and time for the match.
+   * @param {string} data.challengeforSport - The sport type ('cricket' or 'football').
+   * @param {number} data.matchlength - Length of the match in overs/halves.
+   * @param {string} data.matchAuthority - The ID of the user who will be the match authority.
+   * @returns {Promise<Object>} The saved challenge match document.
+   * @throws {CustomErrorHandler} Throws error if a pending challenge already exists between the teams.
+   */
   async createChallengeMatch(data) {
     const { team1ID, team2ID, dateTime, challengeforSport, matchlength, matchAuthority } = data;
 
@@ -3225,6 +3501,18 @@ const matchServices = {
     return matchdata;
   },
 
+  /**
+   * @function getAvailableAuthority
+   * @description Retrieves all available users who can serve as match authorities for a challenge match.
+   * Combines players from both the challenging team and opponent team, extracts unique phone numbers,
+   * and returns the corresponding user information including their full names.
+   *
+   * @param {Object} data - Authority search data.
+   * @param {string} data.challengeTeamId - The ID of the challenging team.
+   * @param {string} data.opponentTeamId - The ID of the opponent team.
+   * @returns {Promise<Array>} Array of users with their ID, name, and phone number who can be match authorities.
+   * @throws {Error} Throws error if one or both teams are not found.
+   */
   async getAvailableAuthority(data) {
     try {
       const { challengeTeamId, opponentTeamId } = data;
@@ -3250,8 +3538,15 @@ const matchServices = {
     }
   },
 
-
-
+  /**
+   * @function getChallengeMatch
+   * @description Retrieves all challenge matches where the current user is a captain of either team.
+   * Returns matches with status of 'Accepted', 'Pending', or 'played', populated with team details
+   * including team names and logos.
+   *
+   * @returns {Promise<Array>} Array of challenge matches where the user is captain, with team details populated.
+   * @throws {CustomErrorHandler} Throws error if no matches are found.
+   */
   async getChallengeMatch() {
     const userInfo = global.user;
 
@@ -3308,6 +3603,15 @@ const matchServices = {
     return MatchExist;
   },
 
+  /**
+   * @function updateChallengeMatch
+   * @description Updates the status of a challenge match. Used to accept, reject, or modify the state
+   * of a challenge match between teams.
+   *
+   * @param {string} matchId - The ID of the challenge match to update.
+   * @param {string} status - The new status for the match ('Accepted', 'Pending', 'Rejected', etc.).
+   * @returns {Promise<Object>} The updated challenge match document.
+   */
   async updateChallengeMatch(matchId, status) {
     const MatchExist = await ChallengeTeam.findById(matchId);
 
@@ -3316,28 +3620,49 @@ const matchServices = {
     return await MatchExist.save();
   },
 
+  /**
+   * @function updateChallengeScoreBoard
+   * @description Updates the scoreboard data for a challenge match. Replaces the existing scoreboard
+   * with new data provided, allowing real-time score tracking during the match.
+   *
+   * @param {Object} data - Score update data.
+   * @param {Object} data.scoreBoard - The complete scoreboard object to save.
+   * @param {string} matchId - The ID of the challenge match to update.
+   * @returns {Promise<Object>} The updated challenge match document with new scoreboard.
+   * @throws {CustomErrorHandler} Throws error if match is not found.
+   */
   async updateChallengeScoreBoard(data, matchId) {
-    // const userInfo = global.user;
-
-    // Find the tournament by ID
     const match = await ChallengeTeam.findById(matchId);
 
     if (!match) {
-      // Handle the case where the tournament is not found
       throw CustomErrorHandler.notFound("Match Not Found");
     }
     match.scoreBoard = data.scoreBoard;
 
-    // Save the updated user document
     let matchData = await match.save();
     return matchData;
   },
 
+  /**
+   * @function finishChallengeMatch
+   * @description Marks a challenge match as completed and determines the winner or draw status. For football
+   * matches, analyzes the scoreboard including regular time, extra time, and penalty shootouts to determine
+   * the final result. For cricket matches, uses the provided isDraw flag and winningTeamId.
+   *
+   * @param {Object} data - Match completion data.
+   * @param {string} data.matchId - The ID of the challenge match to finish.
+   * @param {string} [data.winningTeamId] - The ID of the winning team (null if draw).
+   * @param {boolean} [data.isDraw] - Whether the match ended in a draw (for cricket).
+   * @returns {Promise<Object>} The updated challenge match document with final result.
+   * @throws {CustomErrorHandler} Throws error if match is not found or scoreboard data is missing (for football).
+   */
   async finishChallengeMatch(data) {
     try {
       const { matchId, winningTeamId, isDraw } = data;
       const match = await ChallengeTeam.findById(matchId);
       if (!match) throw CustomErrorHandler.notFound("Match Not Found");
+
+      // Handle football match completion
       if (match.challengeforSport == 'football') {
         const scoreBoard = match.scoreBoard
         const homeTeam = scoreBoard.get("homeTeam") || {}
@@ -3391,6 +3716,17 @@ const matchServices = {
     }
   },
 
+  /**
+   * @function getChallengeMatchPerformance
+   * @description Retrieves cricket performance data for the current user in a specific challenge match.
+   * Searches both teams' player lists for the user's phone number and returns their batting and bowling
+   * statistics from the match scoreboard.
+   *
+   * @param {Object} data - Performance request data.
+   * @param {string} data.matchId - The ID of the challenge match.
+   * @returns {Promise<Object>} Player performance data including batting and bowling statistics from the match.
+   * @throws {CustomErrorHandler} Throws error if match is not found or player is not in either team.
+   */
   async getChallengeMatchPerformance(data) {
     try {
       const { matchId } = data;
@@ -3505,6 +3841,18 @@ const matchServices = {
       console.log(`Failed to Get Performance:${error}`);
     }
   },
+
+  /**
+   * @function getFootballChallengePerformance
+   * @description Retrieves comprehensive football performance data for the current user in a specific challenge match.
+   * Analyzes the match scoreboard to extract detailed statistics including goals, assists, saves, cards, fouls,
+   * penalty actions, and other match events. Calculates aggregated performance metrics for the player.
+   *
+   * @param {Object} data - Performance request data.
+   * @param {string} data.matchId - The ID of the football challenge match.
+   * @returns {Promise<Object>} Aggregated football statistics including goals, assists, saves, cards, fouls, and more.
+   * @throws {CustomErrorHandler} Throws error if user or match is not found, or if player is not in either team.
+   */
   async getFootballChallengePerformance(data) {
     try {
       const { matchId } = data;
@@ -3685,6 +4033,16 @@ const matchServices = {
       throw err;
     }
   },
+
+  /**
+   * @function deleteMatch
+   * @description Deletes a match from the database by its ID. Validates that the match exists before
+   * attempting deletion.
+   *
+   * @param {string} matchId - The ID of the match to delete.
+   * @returns {Promise<void>} Resolves when the match is successfully deleted.
+   * @throws {CustomErrorHandler} Throws error if match is not found.
+   */
   async deleteMatch(matchId) {
     const match = await Match.findById(matchId);
     if (!match) {

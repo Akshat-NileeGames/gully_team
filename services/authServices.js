@@ -3,6 +3,36 @@ import jwtService from "../helpers/jwtService.js";
 import { User } from "../models/index.js";
 
 const authServices = {
+  /**
+ * @function googleLogin
+ * @description Handles user authentication and registration through Google login.
+ * If the user already exists, updates their login status, access token, and location (if provided).
+ * If the user does not exist, creates a new account and generates an access token.
+ * Also checks for user ban status and restores or restricts access accordingly.
+ *
+ * @param {Object} data - The login data provided by the client.
+ * @param {string} data.fullName - The user's full name.
+ * @param {string} [data.email] - The user's email address (optional if phone number is used).
+ * @param {string} [data.phoneNumber] - The user's phone number (used as an alternative to email).
+ * @param {Object} [data.coordinates] - Optional location data.
+ * @param {number} data.coordinates.latitude - The latitude of the user's location.
+ * @param {number} data.coordinates.longitude - The longitude of the user's location.
+ * @param {string} data.coordinates.placeName - The name of the place for the given coordinates.
+ *
+ * @returns {Promise<Object>} Returns the authenticated or newly created user data with access token.
+ *
+ * @throws {CustomErrorHandler.validationError} If the user is banned and the ban period has not expired.
+ * @throws {Error} For unexpected server or database errors during the authentication process.
+ *
+ * @example
+ * const user = await authServices.googleLogin({
+ *   fullName: "John Doe",
+ *   email: "john@example.com",
+ *   coordinates: { latitude: 12.9716, longitude: 77.5946, placeName: "Bangalore" },
+ *   phoneNumber: "9876543210"
+ * });
+ */
+
   async googleLogin(data) {
     const { fullName, email, coordinates, phoneNumber } = data;
 

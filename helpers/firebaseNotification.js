@@ -1,5 +1,9 @@
 import admin from "firebase-admin";
-import serviceAccount from "../firebase.json" assert { type: "json" };
+import fs from 'fs';
+
+const serviceAccount = JSON.parse(
+  fs.readFileSync(new URL('../firebase.json', import.meta.url))
+);
 
 
 admin.initializeApp({
@@ -25,8 +29,8 @@ class firebaseNotification {
       let response="failed";
   try {
     response = await messaging.send(message);
-    // console.log('Successfully sent message:', response);
-    // console.log("send message");
+    console.log('Successfully sent message:', response);
+    console.log("send message");
   } catch (error) {
     console.error('Error sending message:', error);
     return response;

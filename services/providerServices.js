@@ -1,25 +1,3 @@
-
-/**
- * @file providerServices.js
- * @description Service layer for venue and individual service provider operations.
- * Contains all business logic for venue management, booking system, analytics,
- * and individual service provider functionality.
-/**
- * ProviderServices Object
- *
- * Contains all service methods for provider-related operations.
- * Each method handles specific business logic and database interactions.
- *
- * Service Method Categories:
- * 1. Venue Management (create, edit, retrieve)
- * 2. Booking System (slots, reservations, payments)
- * 3. Search & Discovery (location-based, filtered)
- * 4. Analytics & Reporting (dashboard, revenue, sports)
- * 5. Individual Services (coaches, trainers)
- * 6. Subscription Management
- */
-
-
 import { Venue, Booking, User, Package, Individual, Category, Payout } from "../models/index.js"
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { DateTime } from "luxon"

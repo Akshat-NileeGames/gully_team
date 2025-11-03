@@ -1,100 +1,74 @@
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js"
 import { ProviderServices } from "../services/index.js"
 import Joi from "joi"
-
 /**
- * @file providerController.js
- * @description Controller for venue and individual service provider operations.
- * Handles venue registration, booking management, analytics, and individual service provider functionality.
- * This controller acts as the interface between HTTP requests and business logic services.
+ * ============================================================================
+ * Controller Layer — General Structure and Conventions
+ * ============================================================================
  *
- * Key Features:
- * - Venue creation and management (CRUD operations)
- * - Booking system with slot locking/releasing mechanisms
- * - Real-time availability checking and reservation system
- * - Analytics and dashboard data for venue owners
- * - Individual service provider registration and management
- * - Location-based search with filtering capabilities
- * - Payment confirmation and booking lifecycle management
+ * Overview:
+ * ----------
+ * This controller is responsible for handling HTTP requests and responses.
+ * Each handler performs the following core tasks:
+ *   1. Validates incoming request data using Joi or other validators.
+ *   2. Delegates core business logic to the appropriate Service layer.
+ *   3. Returns standardized JSON responses or forwards errors to middleware.
+ *
+ * Standard Response Format:
+ *   • Success → { success: true, message: string, data: any }
+ *   • Errors  → Managed centrally via CustomErrorHandler + Express middleware.
+ *
+ * ============================================================================
+ * Developer Notes (Conventions Used Across Controllers)
+ * ============================================================================
+ *
+ * ➤ Async Handlers:
+ *   - Always declared as `async` (due to I/O operations like DB/service calls).
+ *   - Wrap logic in `try/catch` blocks.
+ *   - On failure, forward errors using `next(CustomErrorHandler.*)` so centralized
+ *     middleware handles logging, formatting, and response codes.
+ *   - Always return a response or call `next()` to properly end the request lifecycle.
+ *   - Keep controllers thin and side-effect free → validate → call service → respond.
+ *
+ * ➤ Joi Validation:
+ *   - Use: `const { error, value } = schema.validate(req.<source>);`
+ *   - For user-friendly messages: 
+ *       `error.details.map(d => d.message).join(', ')`
+ *   - Forward validation errors via:
+ *       `return next(CustomErrorHandler.badRequest(error.details.map(e => e.message).join(', ')))`
+ *   - Avoid sending raw Joi error objects to clients.
+ *
+ * ➤ CustomErrorHandler (Usage Conventions):
+ *   - Common methods: `badRequest(message, err?)`, `validationError(message)`, `serverError(message, err?)`.
+ *   - Prefer forwarding errors using `next(CustomErrorHandler.badRequest(...))` 
+ *     instead of returning raw error objects.
+ *   - Some legacy patterns call `CustomErrorHandler.validationError(...)` directly;
+ *     update these to use `next(...)` for proper middleware flow.
+ *   - Keep messages concise and avoid exposing internal or sensitive data.
+ *
+ * ➤ Retrieving User Context:
+ *   - Preferred: `req.user` (set by authentication middleware).
+ *   - Legacy: `global.user` may still exist in older modules (e.g., slot management).
+ *   - Always validate the presence of `userId` before use.
+ *   - Migrate legacy flows to `req.user` during refactors.
+ *
+ * ➤ Response Shape:
+ *   - Success responses follow:
+ *       { success: true, message: string, data: any }
+ *   - All errors are propagated to centralized middleware via `next(CustomErrorHandler.*)`.
+ *
+ * ============================================================================
+ * Purpose:
+ * ----------
+ * This structure ensures:
+ *   • Consistency across all controller implementations.
+ *   • Predictable and maintainable request handling.
+ *   • Clear separation of concerns between controllers and services.
+ *   • Scalable and debuggable backend architecture.
+ * ============================================================================
  */
 
-/*
-    Developer notes (conventions used across this controller) - EXPANDED:
-
-    - Async handlers:
-        * Declared `async` because they perform I/O (service calls, DB operations).
-        * Always use try/catch. In catch block forward errors to Express via `next(CustomErrorHandler.*)` so centralized error middleware can handle logging/formatting.
-        * Return responses or call `next(...)` so the request lifecycle ends predictably.
-        * Avoid side-effects in controllers — keep them thin: validate -> call service -> format response.
-
-    - Joi validation:
-        * Use `const { error, value } = schema.validate(req.<source>)`.
-        * `error` is a Joi Error object. For user-friendly messages prefer `error.details.map(d => d.message).join(', ')`.
-        * When returning validation errors, forward them via `next(CustomErrorHandler.badRequest(...))` so middleware applies consistent HTTP codes and body shape.
-        * Example: `if (error) return next(CustomErrorHandler.badRequest(error.details.map(e => e.message).join(', ')))`.
-
-    - CustomErrorHandler (usage conventions):
-        * Common methods: `badRequest(message, err?)`, `validationError(message)`, `serverError(message, err?)`.
-        * Prefer `next(CustomErrorHandler.badRequest(...))` for validation/runtime errors inside handlers so the error handling middleware can send the response.
-        * Note: Some handlers in this file call `return CustomErrorHandler.validationError(...)` directly (legacy pattern). This returns an error object — to integrate with Express middleware you should `return next(CustomErrorHandler.validationError(...))`.
-        * Keep error messages concise and include only necessary debug info. Avoid leaking internal details.
-
-    - Retrieving user context:
-        * Preferred: `req.user` (set by auth middleware).
-        * Legacy: `global.user` is still used in some flows (lock/release/reserve slots). Treat global as legacy; migrate to `req.user` when refactoring.
-        * Always validate presence of userId before using it.
-
-    - Response shape:
-        * Standard success response: `{ success: true, message: string, data: any }`.
-        * Standard error handling is delegated to centralized middleware via `next(CustomErrorHandler.*)`.
-*/
-
-/**
- * ProviderController
- *
- * Main controller object containing all venue and individual service provider related endpoints.
- * Each method handles a specific business operation following the pattern:
- * 1. Input validation using Joi schemas
- * 2. Delegate business logic to ProviderServices
- * 3. Return standardized response format
- *
- * Note:
- *  - Each handler follows the pattern: validate -> call ProviderServices -> return standardized response.
- *  - Validation failures must use CustomErrorHandler to keep error responses consistent.
- */
 const ProviderController = {
-  /**
-   * @function createVenue
-   * @description Creates a new sports venue with comprehensive validation and image upload
-   * @route POST /api/provider/createVenue
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object containing venue data
-   * @param {string} req.body.venue_name - Name of the venue
-   * @param {string} req.body.venue_description - Detailed description of the venue
-   * @param {string} req.body.venue_address - Physical address of the venue
-   * @param {string} req.body.venue_contact - 10-digit contact number
-   * @param {string} req.body.venue_type - Type: "Open Venue", "Turf", or "Stadium"
-   * @param {Object} req.body.venue_timeslots - Weekly schedule with open/close times
-   * @param {Array<string>} req.body.venue_sports - List of supported sports
-   * @param {Array<Object>} req.body.sportPricing - Pricing details per sport
-   * @param {string} req.body.upiId - UPI ID for payments
-   * @param {Object} req.body.venuefacilities - Available facilities (parking, washroom, etc.)
-   * @param {Array<string>} req.body.venue_rules - Venue rules and regulations
-   * @param {Array<string>} req.body.venueImages - Base64 encoded images (1-5 images)
-   * @param {string} req.body.selectLocation - Location name
-   * @param {number} req.body.longitude - GPS longitude coordinate
-   * @param {number} req.body.latitude - GPS latitude coordinate
-   * @param {string} req.body.packageRef - Reference to subscription package
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with success status and created venue data
-   * @throws {ValidationError} When required fields are missing or invalid
-   * @throws {ServerError} When venue creation fails
-   */
-  //#region Create Venue
   async createVenue(req, res, next) {
     // This schema ensures all required venue data is present and properly formatted
     const venueValidation = Joi.object({
@@ -202,24 +176,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function editVenue
-   * @description Updates existing venue information with partial data
-   * @route POST /api/provider/editVenue
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of venue to update (required)
-   * @param {...} req.body - Any venue fields to update (all optional except venueId)
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with updated venue data
-   * @throws {ValidationError} When venueId is missing or data is invalid
-   * @throws {NotFoundError} When venue doesn't exist
-   */
-  //#endregion
+
 
   //#region Edit Venue
   async editVenue(req, res, next) {
@@ -324,22 +281,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function updateVenueSubscriptionStatus
-   * @description Updates the subscription status for a venue
-   * @route POST /api/provider/subscription/updateVenueSubscription
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue to update
-   * @param {string} req.body.packageId - ID of the new subscription package
-   *
-   * @param {Object} res - Express response object
-   *
-   * @returns {Object} JSON response with updated subscription data
-   * @throws {ValidationError} When required fields are missing
-   */
-  //#endregion
+
 
   async updateVenueSubscriptionStatus(req, res) {
     // Note: Current implementation returns CustomErrorHandler.validationError(...) directly on validation failure.
@@ -367,20 +309,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function updateIndividualSubscriptionStatus
-   * @description Updates the subscription status for an individual service provider
-   * @route POST /api/provider/subscription/updateIndividualSubscription
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.individualId - ID of the individual to update
-   * @param {string} req.body.packageId - ID of the new subscription package
-   *
-   * @param {Object} res - Express response object
-   *
-   * @returns {Object} JSON response with updated subscription data
-   */
+
   async updateIndividualSubscriptionStatus(req, res) {
     // Note: Same as updateVenueSubscriptionStatus — this handler returns CustomErrorHandler.validationError(...) directly.
     // To maintain consistency with other handlers, consider forwarding via `next(...)`. The current code retains existing behavior.
@@ -406,22 +335,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getVenueById
-   * @description Retrieves detailed information about a specific venue
-   * @route GET /api/provider/getVenueById/:id
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.id - Venue ID to retrieve
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with venue details
-   * @throws {ValidationError} When venue ID is invalid
-   * @throws {NotFoundError} When venue doesn't exist
-   */
+
   //#region getVenueById
   async getVenueById(req, res, next) {
     const validation = Joi.object({
@@ -447,19 +361,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getUserGroundRegisteredGround
-   * @description Retrieves all venues registered by the current authenticated user
-   * @route GET /api/provider/getUserVenueRegisteredGround
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with user's registered venues
-   * @throws {ServerError} When retrieval fails
-   */
+
   //#region getUserGroundRegisteredGround
   async getUserGroundRegisteredGround(req, res, next) {
     try {
@@ -476,25 +378,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getAvailableSlots
-   * @description Retrieves available time slots for a specific venue, sport, and date
-   * @route POST /api/provider/availableSlots
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} req.body.sport - Sport type to check availability for
-   * @param {Date} req.body.date - Date to check availability
-   * @param {number} req.body.playableArea - Required playable area size
-   * @param {string} [req.user.id] - Optional user ID from auth middleware
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with available time slots
-   * @throws {ValidationError} When required parameters are missing
-   */
+
   //#region Get Available Slots
   async getAvailableSlots(req, res, next) {
     const validation = Joi.object({
@@ -529,26 +413,6 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function combinedSearch
-   * @description Performs a combined search across venues and individuals based on location and query
-   * @route POST /api/provider/combinedSearch
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.query - Search query string
-   * @param {number} req.body.latitude - User's latitude (-90 to 90)
-   * @param {number} req.body.longitude - User's longitude (-180 to 180)
-   * @param {number} [req.body.page=1] - Page number for pagination
-   * @param {number} [req.body.limit=10] - Results per page (max 50)
-   * @param {number} [req.body.radius=15] - Search radius in kilometers (max 50)
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with combined search results
-   * @throws {ValidationError} When location coordinates are invalid
-   */
   //#region combinedSearch
   async combinedSearch(req, res, next) {
     const validation = Joi.object({
@@ -584,22 +448,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getIndividualProfile
-   * @description Retrieves detailed profile information for an individual service provider
-   * @route GET /api/provider/individual/:id
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.id - Individual service provider ID
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with individual profile data
-   * @throws {ValidationError} When ID parameter is missing
-   * @throws {NotFoundError} When individual doesn't exist
-   */
+
   //#region getIndividualProfile
   async getIndividualProfile(req, res, next) {
     const validation = Joi.object({
@@ -650,28 +499,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getGroundBookings
-   * @description Retrieves bookings for a specific venue with filtering and pagination
-   * @route POST /api/provider/groundBookings
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue to get bookings for
-   * @param {Date} [req.body.startDate] - Filter bookings from this date
-   * @param {Date} [req.body.endDate] - Filter bookings until this date
-   * @param {string} [req.body.sport] - Filter by specific sport
-   * @param {string} [req.body.status] - Filter by booking status (pending/confirmed/cancelled/completed)
-   * @param {string} [req.body.paymentStatus] - Filter by payment status (pending/successful/failed/refunded)
-   * @param {number} [req.body.page=1] - Page number for pagination
-   * @param {number} [req.body.limit=10] - Results per page (max 50)
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with filtered booking data
-   * @throws {ValidationError} When venueId is missing or filters are invalid
-   */
+
   //#region getGroundBookings
   async getGroundBookings(req, res, next) {
     const validation = Joi.object({
@@ -703,22 +531,7 @@ const ProviderController = {
     }
   },
   //#endregion
-  /**
-   * @function getTodayBookings
-   * @description Retrieves all bookings scheduled for today for a specific venue
-   * @route POST /api/provider/bookings/today
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} [req.body.sport] - Optional sport filter
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with today's bookings
-   * @throws {ValidationError} When venueId is missing
-   */
+
   //#region Get Today's Bookings
   async getTodayBookings(req, res, next) {
     const validation = Joi.object({
@@ -745,22 +558,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getUpcomingBookings
-   * @description Retrieves future bookings for a venue with pagination
-   * @route POST /api/provider/bookings/upcoming
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} [req.body.sport] - Optional sport filter
-   * @param {number} [req.body.page=1] - Page number for pagination
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with upcoming bookings
-   */
+
   //#region Get Upcoming Bookings
   async getUpcomingBookings(req, res, next) {
     const validation = Joi.object({
@@ -788,22 +586,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getPastBooking
-   * @description Retrieves completed/past bookings for a venue with pagination
-   * @route POST /api/provider/bookings/past
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} [req.body.sport] - Optional sport filter
-   * @param {number} [req.body.page=1] - Page number for pagination
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with past bookings
-   */
+
   //#region Get Past Bookings
   async getPastBooking(req, res, next) {
     const validation = Joi.object({
@@ -831,25 +614,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getDashboardAnalytics
-   * @description Retrieves comprehensive analytics data for venue dashboard
-   * @route GET /api/provider/analytics/dashboard/:venueId
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.venueId - ID of the venue
-   * @param {string} [req.query.sport] - Optional sport filter
-   * @param {string} [req.query.period=month] - Time period (week/month/quarter/year)
-   * @param {Date} [req.query.startDate] - Custom start date
-   * @param {Date} [req.query.endDate] - Custom end date
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with analytics data (bookings, revenue, trends)
-   * @throws {ValidationError} When venueId is missing or period is invalid
-   */
+
   //#region getDashBoardAnalytics
   async getDashboardAnalytics(req, res, next) {
     const validation = Joi.object({
@@ -886,23 +651,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getRevenueAnalytics
-   * @description Retrieves detailed revenue analytics with comparison options
-   * @route GET /api/provider/analytics/revenue/:venueId
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.venueId - ID of the venue
-   * @param {string} [req.query.period=year] - Time period for analysis
-   * @param {string} [req.query.sport] - Optional sport filter
-   * @param {boolean} [req.query.comparison=false] - Include period-over-period comparison
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with revenue analytics and trends
-   */
+
   async getRevenueAnalytics(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
@@ -935,21 +684,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getSportsAnalytics
-   * @description Retrieves analytics data broken down by sports
-   * @route GET /api/provider/analytics/sports/:venueId
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.venueId - ID of the venue
-   * @param {string} [req.query.period=month] - Time period for analysis
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with sports-specific analytics
-   */
+
   async getSportsAnalytics(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
@@ -978,40 +713,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function createIndividual
-   * @description Creates a new individual service provider profile with comprehensive validation
-   * @route POST /api/provider/createIndividualService
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object containing individual service provider data
-   * @param {string} req.body.profileImageUrl - Base64 encoded profile image
-   * @param {string} req.body.fullName - Full name of the service provider
-   * @param {string} req.body.bio - Professional biography/description
-   * @param {string} req.body.phoneNumber - 10-digit contact number
-   * @param {string} req.body.email - Email address
-   * @param {string} req.body.panNumber - PAN card number (format: AAAAA9999A)
-   * @param {number} req.body.yearOfExperience - Years of professional experience
-   * @param {Array<string>} req.body.sportsCategories - List of sports expertise
-   * @param {Array<string>} req.body.selectedServiceTypes - Types of services offered
-   * @param {Array<string>} req.body.serviceImageUrls - Base64 encoded service images
-   * @param {Object} req.body.serviceOptions - Service delivery options (one-on-one, team, online)
-   * @param {Array<string>} req.body.availableDays - Days of the week available
-   * @param {Array<string>} req.body.supportedAgeGroups - Age groups served
-   * @param {Array<Object>} [req.body.education] - Educational background
-   * @param {Array<Object>} [req.body.experience] - Professional experience details
-   * @param {Array<Object>} [req.body.certificates] - Professional certifications
-   * @param {string} req.body.selectLocation - Location name
-   * @param {number} req.body.longitude - GPS longitude
-   * @param {number} req.body.latitude - GPS latitude
-   * @param {string} req.body.packageRef - Subscription package reference
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with created individual service provider data
-   * @throws {ValidationError} When required fields are missing or invalid
-   */
+
   //#region CreateIndividual
   async createIndividual(req, res, next) {
     const individualValidation = Joi.object({
@@ -1103,21 +805,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function editIndividualService
-   * @description Updates existing individual service provider information
-   * @route POST /api/provider/editIndividualService
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.serviceId - ID of service to update (required)
-   * @param {...} req.body - Any individual service fields to update (all optional except serviceId)
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with updated individual service data
-   */
+
   //#region editIndividualService
   async editIndividualService(req, res, next) {
     const individualValidation = Joi.object({
@@ -1202,20 +890,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getIndividualById
-   * @description Retrieves detailed information about a specific individual service provider
-   * @route GET /api/provider/getIndividualById/:id
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.id - Individual service provider ID
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with individual service provider details
-   */
+
   //#region getIndividualById
   async getIndividualById(req, res, next) {
     const validation = Joi.object({
@@ -1241,18 +916,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function getUserIndividualRegisteredGround
-   * @description Retrieves all individual services registered by the current authenticated user
-   * @route GET /api/provider/getUserIndividualRegisteredService
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with user's registered individual services
-   */
+
   //#region getUserIndividualRegisterGround
   async getUserIndividualRegisteredGround(req, res, next) {
     try {
@@ -1269,32 +933,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function lockSlots
-   * @description Temporarily locks time slots for a user during the booking process
-   * @route POST /api/provider/lockSlots
-   * @access Private (requires authentication)
-   *
-   * This function implements a slot locking mechanism to prevent double bookings
-   * during the payment process. Slots are locked for 10 minutes to allow users
-   * to complete their payment without losing their selected time slots.
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} req.body.sport - Sport type for the booking
-   * @param {string} req.body.date - Date in YYYY-MM-DD format
-   * @param {string} req.body.startTime - Start time of the slot
-   * @param {string} req.body.endTime - End time of the slot
-   * @param {number} req.body.playableArea - Required playable area size
-   * @param {string} req.body.sessionId - Unique session identifier for the booking
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with lock status and details
-   * @throws {ValidationError} When required parameters are missing or invalid
-   * @throws {ConflictError} When slots are already booked or locked by another user
-   */
+
   //#region Lock Slots
   async lockSlots(req, res, next) {
     const validation = Joi.object({
@@ -1333,31 +972,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function releaseLockedSlots
-   * @description Releases previously locked time slots, making them available again
-   * @route POST /api/provider/releaseLockedSlots
-   * @access Private (requires authentication)
-   *
-   * This function allows users to release slots they have locked but decided not to book.
-   * It's typically called when a user cancels their booking process or when the lock expires.
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} req.body.sport - Sport type
-   * @param {string} req.body.date - Date in YYYY-MM-DD format
-   * @param {string} req.body.startTime - Start time of the slot to release
-   * @param {string} req.body.endTime - End time of the slot to release
-   * @param {number} req.body.playableArea - Playable area size
-   * @param {string} req.body.sessionId - Session identifier used during locking
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response confirming slot release
-   * @throws {ValidationError} When parameters don't match locked slot
-   * @throws {NotFoundError} When no locked slots found for the session
-   */
+
   //#region ReleaseLockedSlots
   async releaseLockedSlots(req, res, next) {
     const validation = Joi.object({
@@ -1395,25 +1010,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function releaseMultipleSlots
-   * @description Releases all locked slots for a specific session and venue
-   * @route POST /api/provider/releaseMultipleSlots
-   * @access Private (requires authentication)
-   *
-   * This is a bulk operation to release all slots locked under a specific session.
-   * Useful when a user wants to cancel their entire booking session at once.
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} req.body.sport - Sport type
-   * @param {string} req.body.sessionId - Session identifier to release all slots for
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response confirming bulk slot release
-   */
+
   //#region releaseMultipleSlots
   async releaseMultipleSlots(req, res, next) {
     const validation = Joi.object({
@@ -1444,28 +1041,6 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function reserveMultipleSlots
-   * @description Reserves multiple time slots across different dates for a venue
-   * @route POST /api/provider/reserveMultipleSlots
-   * @access Private (requires authentication)
-   *
-   * This function allows users to reserve the same time slot across multiple dates,
-   * useful for recurring bookings or bulk reservations.
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.venueId - ID of the venue
-   * @param {string} req.body.sport - Sport type
-   * @param {Array<string>} req.body.date - Array of dates in YYYY-MM-DD format
-   * @param {number} req.body.playableArea - Required playable area size
-   * @param {string} req.body.sessionId - Session identifier for tracking
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with reservation details
-   * @throws {ValidationError} When date array is empty or invalid
-   */
   async reserveMultipleSlots(req, res, next) {
     const validation = Joi.object({
       venueId: Joi.string().required(),
@@ -1541,20 +1116,7 @@ const ProviderController = {
     }
   },
   //#endregion
-  /**
-   * @function getUserBookings
-   * @description Retrieves all bookings made by the current authenticated user
-   * @route GET /api/provider/getUserBookings/:page
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {number} [req.params.page=1] - Page number for pagination
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with user's booking history
-   */
+
   //#region getUserBookings
   async getUserBookings(req, res, next) {
     const validation = Joi.object({
@@ -1577,24 +1139,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function cancelBooking
-   * @description Cancels an existing booking with a reason
-   * @route PUT /api/provider/cancelBooking/:bookingId
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.params.bookingId - ID of booking to cancel
-   * @param {string} req.body.cancellationReason - Reason for cancellation
-   * @param {string} req.user.id - User ID from auth middleware
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response confirming cancellation
-   * @throws {ValidationError} When bookingId or reason is missing
-   * @throws {NotFoundError} When booking doesn't exist or doesn't belong to user
-   */
+
   //#region cancelBooking
   async cancelBooking(req, res, next) {
     const validation = Joi.object({
@@ -1629,18 +1174,7 @@ const ProviderController = {
   },
   //#endregion
 
-  /**
-   * @function GetServiceType
-   * @description Retrieves all available service types for individual providers
-   * @route GET /api/provider/serviceTypes (implied)
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with available service types
-   */
+
   //#region GetServicetype
   async GetServiceType(req, res, next) {
     try {
@@ -1656,28 +1190,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getNearbyVenues
-   * @description Retrieves venues near a specific location with filtering options
-   * @route POST /api/provider/getNearbyVenues
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {number} req.body.latitude - User's latitude coordinate
-   * @param {number} req.body.longitude - User's longitude coordinate
-   * @param {number} [req.body.page=1] - Page number for pagination
-   * @param {number} [req.body.radius=25] - Search radius in kilometers (max 100)
-   * @param {string} [req.body.sport=all] - Filter by specific sport
-   * @param {string} [req.body.venueType=all] - Filter by venue type
-   * @param {Array<string>} [req.body.surfaceTypes=[]] - Filter by surface types
-   * @param {Object} [req.body.priceRange={}] - Filter by price range
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with nearby venues matching filters
-   * @throws {ValidationError} When coordinates are invalid or out of range
-   */
+
   //#region getNearbyVenue
   async getNearbyVenues(req, res, next) {
     const validation = Joi.object({
@@ -1727,27 +1240,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getNearbyIndividuals
-   * @description Retrieves individual service providers near a specific location
-   * @route POST /api/provider/getNearbyindividuals
-   * @access Private (requires authentication)
-   *
-   * @param {Object} req - Express request object
-   * @param {number} req.body.latitude - User's latitude coordinate
-   * @param {number} req.body.longitude - User's longitude coordinate
-   * @param {number} [req.body.page=1] - Page number for pagination
-   * @param {number} [req.body.radius=25] - Search radius in kilometers
-   * @param {Array<string>} [req.body.sports=[]] - Filter by sports expertise
-   * @param {string} [req.body.serviceType=all] - Filter by service delivery type
-   * @param {string} [req.body.ageGroup=all] - Filter by supported age groups
-   * @param {Object} [req.body.experienceRange={}] - Filter by years of experience
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with nearby individual service providers
-   */
+
   //#region getNearbyIndividuals
   async getNearbyIndividuals(req, res, next) {
     const validation = Joi.object({
@@ -1783,29 +1276,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function searchVenuesWithFilters
-   * @description Searches venues by query string with location and filter options
-   * @route POST /api/provider/searchVenues
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.query - Search query string (venue name, location, etc.)
-   * @param {number} req.body.latitude - User's latitude for distance calculation
-   * @param {number} req.body.longitude - User's longitude for distance calculation
-   * @param {number} [req.body.page=1] - Page number for pagination
-   * @param {number} [req.body.radius=25] - Search radius in kilometers
-   * @param {string} [req.body.sport=all] - Sport filter
-   * @param {string} [req.body.venueType=all] - Venue type filter
-   * @param {Array<string>} [req.body.surfaceTypes=[]] - Surface type filters
-   * @param {Object} [req.body.facilities={}] - Facility availability filters
-   * @param {Object} [req.body.priceRange={}] - Price range filters
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with search results
-   */
+
   //#region searchVenuesWithFilters
   async searchVenuesWithFilters(req, res, next) {
     const validation = Joi.object({
@@ -1866,28 +1337,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function searchIndividualsWithFilters
-   * @description Searches individual service providers by query with filters
-   * @route POST /api/provider/searchIndividuals
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.query - Search query (name, expertise, etc.)
-   * @param {number} req.body.latitude - User's latitude
-   * @param {number} req.body.longitude - User's longitude
-   * @param {number} [req.body.page=1] - Page number
-   * @param {number} [req.body.radius=25] - Search radius
-   * @param {Array<string>} [req.body.sports=[]] - Sports filter
-   * @param {string} [req.body.serviceType=all] - Service type filter
-   * @param {string} [req.body.ageGroup=all] - Age group filter
-   * @param {Object} [req.body.experienceRange={}] - Experience range filter
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with individual search results
-   */
+
   //#region searchIndividualsWithFilters
   async searchIndividualsWithFilters(req, res, next) {
     const validation = Joi.object({
@@ -1923,24 +1373,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function combinedSearchWithFilters
-   * @description Performs combined search across both venues and individuals
-   * @route POST /api/provider/combinedSearchWithFilters (implied)
-   * @access Public
-   *
-   * @param {Object} req - Express request object
-   * @param {string} req.body.query - Search query string
-   * @param {number} req.body.latitude - User's latitude
-   * @param {number} req.body.longitude - User's longitude
-   * @param {number} [req.body.page=1] - Page number
-   * @param {number} [req.body.radius=25] - Search radius
-   *
-   * @param {Object} res - Express response object
-   * @param {Function} next - Express next middleware function
-   *
-   * @returns {Object} JSON response with combined search results
-   */
+
   //#region combinedSearchWithFilters
   async combinedSearchWithFilters(req, res, next) {
     const validation = Joi.object({
@@ -1970,15 +1403,7 @@ const ProviderController = {
   },
   //#endregion
 
-  // ==================== BACKWARD COMPATIBILITY METHODS ====================
-  // The following methods provide backward compatibility for legacy API endpoints
-  // They transform legacy request formats to new standardized formats
 
-  /**
-   * @function getNearbyVenue (Legacy)
-   * @description Legacy endpoint for nearby venue search - transforms to new format
-   * @deprecated Use getNearbyVenues instead
-   */
   async getNearbyVenue(req, res, next) {
     try {
       const enhancedRequest = {
@@ -2006,11 +1431,6 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function getNearbyindividuals (Legacy)
-   * @description Legacy endpoint for nearby individuals - transforms to new format
-   * @deprecated Use getNearbyIndividuals instead
-   */
   async getNearbyindividuals(req, res, next) {
     try {
       const enhancedRequest = {
@@ -2036,11 +1456,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function venues (Legacy)
-   * @description Legacy venue search endpoint - transforms to new format
-   * @deprecated Use searchVenuesWithFilters instead
-   */
+
   async venues(req, res, next) {
     try {
       const enhancedRequest = {
@@ -2068,11 +1484,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function individuals (Legacy)
-   * @description Legacy individual search endpoint - transforms to new format
-   * @deprecated Use searchIndividualsWithFilters instead
-   */
+
   async individuals(req, res, next) {
     try {
       const enhancedRequest = {
@@ -2099,11 +1511,7 @@ const ProviderController = {
     }
   },
 
-  /**
-   * @function combined (Legacy)
-   * @description Legacy combined search endpoint
-   * @deprecated Use combinedSearchWithFilters instead
-   */
+
   async combined(req, res, next) {
     try {
       // Use new combined search service directly
