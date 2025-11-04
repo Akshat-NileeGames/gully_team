@@ -35,6 +35,19 @@ import RazorpayHandler from "../helpers/RazorPayHandler.js";
 import path from "path";
 
 const otherServices = {
+  /**
+ * @function addHelpDesk
+ * @description Creates and saves a new Helpdesk ticket in the database using the provided data.
+ *              Waits for the save operation to complete before returning the created ticket.
+ *
+ * @param {Object} data - The data used to create a new Helpdesk ticket.
+ * @param {string} data.title - The title of the helpdesk ticket.
+ * @param {string} data.description - A detailed description of the issue or request.
+ * @param {string} [data.priority] - The priority level of the ticket (e.g., 'low', 'medium', 'high').
+ * @param {string} [data.status] - The current status of the ticket (e.g., 'open', 'in-progress', 'closed').
+ * @returns {Promise<HelpDesk>} Resolves with the newly created Helpdesk ticket document.
+ * @throws {Error} Throws an error if saving the ticket to the database fails.
+ */
   async addhelpDesk(data) {
     // Create a new instance of the HelpdeskTicket model
     const newHelpdeskTicket = new HelpDesk(data);
@@ -44,7 +57,15 @@ const otherServices = {
 
     return newHelpdeskTicket;
   },
-
+  /**
+   * @function getContent
+   * @description Retrieves a specific content entry from the database based on its type.
+   *              Throws a not-found error if the requested content does not exist.
+   *
+   * @param {string} contentName - The type or identifier of the content to retrieve.
+   * @returns {Promise<Content>} Resolves with the retrieved content document.
+   * @throws {CustomErrorHandler} Throws an error if the content is not found in the database.
+   */
   async getContent(contentName) {
     //Find the Banner
     let Contentdata = await Content.findOne({ type: contentName });
@@ -55,7 +76,18 @@ const otherServices = {
     }
     return Contentdata;
   },
-
+  /**
+   * @function updateContent
+   * @description Updates an existing content entry in the database by its type.
+   *              Allows updating of the content text and status fields.
+   *
+   * @param {string} contentName - The type or identifier of the content to update.
+   * @param {Object} data - The new content data to apply.
+   * @param {string} data.content - The updated content text.
+   * @param {string} [data.status] - The updated content status (e.g., 'active', 'inactive').
+   * @returns {Promise<Content>} Resolves with the updated content document.
+   * @throws {Error} Throws an error if the database update operation fails.
+   */
   async updateContent(contentName, data) {
     let { content, status } = data;
     //Find the content
@@ -69,7 +101,16 @@ const otherServices = {
   },
 
   //*************************************    HelpDesk   ************************************** */
-
+  /**
+   * @function getHelpdesk
+   * @description Retrieves a paginated list of helpdesk tickets from the database.
+   *              Populates user information and formats the returned data for client use.
+   *
+   * @param {number} pageSize - The maximum number of helpdesk tickets to retrieve.
+   * @param {number} skip - The number of tickets to skip (used for pagination).
+   * @returns {Promise<Object[]>} Resolves with an array of formatted helpdesk ticket objects.
+   * @throws {Error} Throws an error if the database query fails.
+   */
   async getHelpdesk(pageSize, skip) {
     //Find the Banner
     let helpDeskdata = await HelpDesk.find()
@@ -93,7 +134,15 @@ const otherServices = {
 
     return formattedData;
   },
-
+  /**
+   * @function getHelpdeskById
+   * @description Retrieves detailed information about a specific helpdesk ticket by its ID.
+   *              Populates user information and formats the timestamps for readability.
+   *
+   * @param {string} helpdeskId - The unique identifier of the helpdesk ticket.
+   * @returns {Promise<Object>} Resolves with a formatted helpdesk ticket object.
+   * @throws {CustomErrorHandler} Throws an error if the helpdesk ticket is not found.
+   */
   async getHelpdeskById(helpdeskId) {
     //Find the Banner
     let helpDeskdata = await HelpDesk.findById(helpdeskId).populate({
@@ -115,6 +164,18 @@ const otherServices = {
     return formattedData;
   },
 
+  /**
+   * @function updateHelpdesk
+   * @description Updates the response and status fields of an existing helpdesk ticket.
+   *              Returns the updated helpdesk document after modification.
+   *
+   * @param {string} helpdeskId - The unique identifier of the helpdesk ticket to update.
+   * @param {Object} data - The fields to update in the helpdesk ticket.
+   * @param {string} [data.response] - The response message to associate with the ticket.
+   * @param {string} [data.status] - The updated status of the ticket (e.g., 'open', 'resolved', 'closed').
+   * @returns {Promise<HelpDesk>} Resolves with the updated helpdesk document.
+   * @throws {Error} Throws an error if the update operation fails.
+   */
   async updateHelpdesk(helpdeskId, data) {
     let { response, status } = data;
     //Find the content
@@ -129,7 +190,16 @@ const otherServices = {
   },
 
   //*************************************    Notification   ************************************** */
-
+  /**
+   * @function getNotification
+   * @description Retrieves a paginated list of notifications from the database.
+   *              Supports pagination using `pageSize` and `skip` parameters.
+   *
+   * @param {number} pageSize - The maximum number of notifications to retrieve.
+   * @param {number} skip - The number of notifications to skip (used for pagination).
+   * @returns {Promise<Notification[]>} Resolves with an array of notification documents.
+   * @throws {Error} Throws an error if the database query fails.
+   */
   async getNotification(pageSize, skip) {
     //Find the Banner
     let notificationData = await Notification.find()
@@ -138,13 +208,32 @@ const otherServices = {
 
     return notificationData;
   },
-
+  /**
+   * @function getNotificationById
+   * @description Retrieves a single notification from the database using its unique ID.
+   *
+   * @param {string} Id - The unique identifier of the notification.
+   * @returns {Promise<Notification>} Resolves with the notification document.
+   * @throws {CustomErrorHandler} Throws an error if the notification is not found.
+   */
   async getNotificationById(Id) {
     //Find the Banner
     let notificationData = await Notification.findById(Id);
     return notificationData;
   },
-
+  /**
+   * @function addNotification
+   * @description Creates and saves a new notification in the database.
+   *              Uploads the notification image if provided and sends push notifications
+   *              to all active, verified users with a registered FCM token.
+   *
+   * @param {Object} data - The data for the new notification.
+   * @param {string} data.title - The title of the notification.
+   * @param {string} data.message - The body text of the notification.
+   * @param {string} [data.image] - The image file or path for the notification.
+   * @returns {Promise<Notification>} Resolves with the newly created notification document.
+   * @throws {Error} Throws an error if saving or sending notifications fails.
+   */
   async addNotification(data) {
     let { title, message, image } = data;
 
@@ -190,7 +279,20 @@ const otherServices = {
 
     return newNotification;
   },
-
+  /**
+   * @function updateNotification
+   * @description Updates an existing notification with new title, message, or image.
+   *              If an image is provided, uploads the new one and replaces the old image.
+   *              Sends updated notifications to all active, verified users.
+   *
+   * @param {string} NotificationId - The unique identifier of the notification to update.
+   * @param {Object} data - The updated notification fields.
+   * @param {string} [data.title] - The updated notification title.
+   * @param {string} [data.message] - The updated notification message.
+   * @param {string} [data.image] - The updated image file or path for the notification.
+   * @returns {Promise<Notification>} Resolves with the updated notification document.
+   * @throws {Error} Throws an error if the update or notification sending process fails.
+   */
   async updateNotification(NotificationId, data) {
     let { title, message, image } = data;
     //Find the content
@@ -244,7 +346,18 @@ const otherServices = {
   },
 
   //*************************************    Banner   ************************************** */
-
+  /**
+   * @function addBanner
+   * @description Creates and saves a new banner in the database. 
+   *              Uploads the banner image before saving and stores its URL.
+   *
+   * @param {Object} data - The data for creating a new banner.
+   * @param {string} data.title - The title of the banner.
+   * @param {string} [data.link] - The optional link or redirect URL associated with the banner.
+   * @param {string} data.image - The image file or path to upload for the banner.
+   * @returns {Promise<Banner>} Resolves with the newly created banner document.
+   * @throws {Error} Throws an error if image upload or database save operation fails.
+   */
   async addBanner(data) {
     let { title, link, image } = data;
 
@@ -263,7 +376,14 @@ const otherServices = {
 
     return newBanner;
   },
-
+  /**
+   * @function getBanner
+   * @description Retrieves all banner records from the database.
+   *              Throws a not-found error if no banners are available.
+   *
+   * @returns {Promise<Banner[]>} Resolves with an array of banner documents.
+   * @throws {CustomErrorHandler} Throws an error if no banners are found.
+   */
   async getBanner() {
     //Find the Banner
     let banner = await Banner.find();
@@ -274,14 +394,35 @@ const otherServices = {
     }
     return banner;
   },
-
+  /**
+   * @function getBannerById
+   * @description Retrieves a single banner from the database using its unique ID.
+   *
+   * @param {string} Id - The unique identifier of the banner to retrieve.
+   * @returns {Promise<Banner>} Resolves with the banner document.
+   * @throws {CustomErrorHandler} Throws an error if the banner is not found.
+   */
   async getBannerById(Id) {
     console.log("Got Banner");
     //Find the Banner
     let BannerData = await Banner.findById(Id);
     return BannerData;
   },
-
+  /**
+   * @function updateBanner
+   * @description Updates an existing banner in the database.
+   *              Allows modification of the title, link, image, and active status.
+   *              If a new image is provided, uploads it and replaces the old one.
+   *
+   * @param {string} BannerId - The unique identifier of the banner to update.
+   * @param {Object} data - The updated banner data.
+   * @param {string} [data.title] - The updated banner title.
+   * @param {string} [data.link] - The updated link or redirect URL.
+   * @param {string} [data.image] - The new image file or path to replace the existing one.
+   * @param {boolean} [data.isActive] - Indicates whether the banner is active.
+   * @returns {Promise<Banner>} Resolves with the updated banner document.
+   * @throws {Error} Throws an error if the image upload or database update fails.
+   */
   async updateBanner(BannerId, data) {
     let { title, link, image, isActive } = data;
 
@@ -307,7 +448,18 @@ const otherServices = {
 
   //*************************************    Package   ************************************** */
 
-
+  /**
+   * @function createPackage
+   * @description Creates and saves a new package in the database using the provided package data.
+   *
+   * @param {Object} packageData - The data for the new package.
+   * @param {string} packageData.name - The name of the package.
+   * @param {string} packageData.packageFor - The type or category the package is intended for.
+   * @param {number} packageData.price - The price of the package.
+   * @param {string} [packageData.description] - An optional description of the package.
+   * @returns {Promise<Package>} Resolves with the newly created package document.
+   * @throws {Error} Throws an error if the creation process fails.
+   */
   async createPackage(packageData) {
     try {
       const newPackage = new Package(packageData);
@@ -317,6 +469,13 @@ const otherServices = {
       throw new Error('Error creating package: ' + error.message);
     }
   },
+  /**
+ * @function getPackages
+ * @description Retrieves all packages from the database.
+ *
+ * @returns {Promise<Package[]>} Resolves with an array of package documents.
+ * @throws {Error} Throws an error if the retrieval process fails.
+ */
   async getPackages() {
     try {
       const packages = await Package.find();
@@ -325,6 +484,14 @@ const otherServices = {
       throw new Error('Error fetching packages: ' + error.message);
     }
   },
+  /**
+ * @function getPackageById
+ * @description Retrieves a specific package by its unique ID.
+ *
+ * @param {string} id - The unique identifier of the package.
+ * @returns {Promise<Package>} Resolves with the package document if found.
+ * @throws {Error} Throws an error if the retrieval process fails.
+ */
   async getPackageById(id) {
     try {
       const packageData = await Package.findById(id);
@@ -333,7 +500,14 @@ const otherServices = {
       throw new Error('Error fetching package: ' + error.message);
     }
   },
-
+  /**
+   * @function getPackagesByType
+   * @description Retrieves all packages matching a specific type or category.
+   *
+   * @param {string} packageFor - The package type or category to filter by.
+   * @returns {Promise<Package[]>} Resolves with an array of matching package documents.
+   * @throws {Error} Throws an error if no packages are found or if the query fails.
+   */
   async getPackagesByType(packageFor) {
     try {
       // Query packages by packageFor field
@@ -348,6 +522,14 @@ const otherServices = {
       throw new Error('Error retrieving packages: ' + error.message);
     }
   },
+  /**
+ * @function getAdditionalPackages
+ * @description Retrieves all additional shop packages (packageFor: 'shopAdditional').
+ *
+ * @param {string} packageFor - The package category to retrieve. (Currently fixed to 'shopAdditional')
+ * @returns {Promise<Package[]>} Resolves with an array of additional shop packages.
+ * @throws {Error} Throws an error if no packages are found or the query fails.
+ */
   async getAdditionalPackages(packageFor) {
     try {
 
@@ -363,7 +545,18 @@ const otherServices = {
     }
   },
 
-
+  /**
+   * @function updatePackage
+   * @description Updates a package in the database by its ID with new data.
+   *
+   * @param {string} id - The unique identifier of the package to update.
+   * @param {Object} updatedData - The data fields to update in the package.
+   * @param {string} [updatedData.name] - The updated package name.
+   * @param {number} [updatedData.price] - The updated package price.
+   * @param {string} [updatedData.description] - The updated description.
+   * @returns {Promise<Package>} Resolves with the updated package document.
+   * @throws {Error} Throws an error if the update process fails.
+   */
   async updatePackage(id, updatedData) {
     try {
       const updatedPackage = await Package.findByIdAndUpdate(id, updatedData, { new: true });
@@ -372,6 +565,14 @@ const otherServices = {
       throw new Error('Error updating package: ' + error.message);
     }
   },
+  /**
+ * @function deletePackage
+ * @description Deletes a package from the database by its unique ID.
+ *
+ * @param {string} id - The unique identifier of the package to delete.
+ * @returns {Promise<Package>} Resolves with the deleted package document.
+ * @throws {Error} Throws an error if the deletion process fails.
+ */
   async deletePackage(id) {
     try {
       const deletedPackage = await Package.findByIdAndDelete(id);
@@ -540,7 +741,16 @@ const otherServices = {
 
   //   return entryFees?.[0]?.fees;
   // },
-
+  /**
+   * @function tournamentFees
+   * @description Retrieves the tournament entry fee based on a given team limit.
+   *              Searches for a fee structure where the team limit falls within the defined range.
+   *
+   * @param {number} teamLimit - The number of teams to determine the applicable entry fee.
+   * @returns {Promise<number | Object>} Resolves with the matching entry fee amount if found.
+   * Returns an object with a `success` flag and message if no matching fee is found.
+   * @throws {Error} Throws an error if the database query fails.
+   */
   async tournamentFees(teamLimit) {
     const entryFees = await EntryFees.find({
       initialteamLimit: { $lte: teamLimit },
@@ -588,8 +798,18 @@ const otherServices = {
   //     throw error;
   //   }
   // },
-
-  // Working code for transaction (DG :11/11/24)
+  /**
+ * @function transactionBannerHistory
+ * @description Retrieves a paginated list of banner-related transaction history for a specific user.
+ *              Includes associated user, banner, and payment details using MongoDB aggregation.
+ *
+ * @param {string} userId - The unique identifier of the user whose banner transactions are being fetched.
+ * @param {number} pageSize - The number of transaction records to retrieve per page.
+ * @param {number} skip - The number of records to skip (for pagination).
+ * @returns {Promise<{history: Object[], totalCount: number}>} 
+ * Resolves with an object containing an array of transaction history and the total count of records.
+ * @throws {Error} Throws an error if database operations fail.
+ */
   async transactionBannerHistory(userId, pageSize, skip) {
     const totalCount = await OrderHistory.countDocuments({ userId, ordertype: "banner" }); // Filter for banner orders
 
@@ -664,7 +884,18 @@ const otherServices = {
 
     return { history, totalCount };
   },
-
+  /**
+   * @function transactionHistory
+   * @description Retrieves a paginated list of all transaction history (including tournaments and banners)
+   *              for a specific user. Includes related user, tournament, and payment details.
+   *
+   * @param {string} userId - The unique identifier of the user whose transaction history is being fetched.
+   * @param {number} pageSize - The number of transaction records to retrieve per page.
+   * @param {number} skip - The number of records to skip (for pagination).
+   * @returns {Promise<{history: Object[], totalCount: number}>} 
+   * Resolves with an object containing an array of transaction history and the total count of records.
+   * @throws {Error} Throws an error if database operations fail.
+   */
   async transactionHistory(userId, pageSize, skip) {
     const totalCount = await OrderHistory.countDocuments({ userId });
 
@@ -742,6 +973,25 @@ const otherServices = {
 
     return { history, totalCount };
   },
+  /**
+ * @function getTrans
+ * @description Retrieves a detailed transaction history for a given user, 
+ *              including populated references to related entities such as 
+ *              packages, venues, bookings, shops, and banners.
+ *
+ * @param {string} userId - The unique identifier of the user whose transaction history is to be fetched.
+ * @returns {Promise<{history: Object[], totalCount: number}>} 
+ * Resolves with an object containing:
+ *  - `history`: Array of populated transaction documents for the user.
+ *  - `totalCount`: Total number of transactions found for the user.
+ *
+ * @throws {Error} Throws an error if the query or population fails.
+ *
+ * @example
+ * const result = await getTrans("671b1d3f8b9e6c23f42e");
+ * console.log(result.history); // List of populated transaction records
+ * console.log(result.totalCount); // Total number of transactions
+ */
   async getTrans(userId) {
     const totalCount = await OrderHistory.countDocuments({ userId });
     const history = await OrderHistory.find({ userId: userId })
@@ -789,6 +1039,22 @@ const otherServices = {
     return { history, totalCount };
   },
 
+  /**
+   * @function transactionHistoryById
+   * @description Retrieves a single transaction record for a specific tournament ID 
+   *              and transforms it into a simplified response object.
+   *
+   * @param {string} Id - The unique identifier of the tournament whose transaction history is being fetched.
+   * @returns {Promise<Object>} 
+   * Resolves with a transformed transaction object containing essential fields such as 
+   * order details, user information, tournament data, and payment details.
+   *
+   * @throws {Error} Throws an error if the transaction record is not found or the query fails.
+   *
+   * @example
+   * const transaction = await transactionHistoryById("671b3a4c8e93a92bf2c4");
+   * console.log(transaction.tournamentName); // e.g. "Summer League 2025"
+   */
   async transactionHistoryById(Id) {
     const history = await OrderHistory.findOne({ tournamentId: Id });
 
@@ -814,8 +1080,19 @@ const otherServices = {
 
     return transformedData;
   },
-
-  //DG
+  /**
+   * @function deleteTransaction
+   * @description Deletes all transaction records associated with a specific user.
+   *              Validates the user ID before attempting deletion.
+   *
+   * @param {string} userId - The unique identifier of the user whose transactions are to be deleted.
+   * @returns {Promise<void>} Resolves when all transactions for the user are successfully deleted.
+   * @throws {Error} Throws an error if `userId` is missing or the deletion operation fails.
+   *
+   * @example
+   * await deleteTransaction("671b4a1f9c8e2d1ab234");
+   * console.log("All transactions for user deleted successfully.");
+   */
   async deleteTransaction(userId) {
     if (!userId) {
       throw new Error("User ID is required.");
@@ -823,8 +1100,19 @@ const otherServices = {
 
     await OrderHistory.deleteMany({ userId }); // Delete all transactions associated with the user
   },
-
-  // DG
+  /**
+   * @function deleteTransactionById
+   * @description Deletes a single transaction record by its unique transaction ID.
+   *              Ensures the transaction exists before deletion.
+   *
+   * @param {string} transactionId - The unique identifier of the transaction to delete.
+   * @returns {Promise<void>} Resolves when the transaction is successfully deleted.
+   * @throws {Error} Throws an error if `transactionId` is missing or if no matching transaction is found.
+   *
+   * @example
+   * await deleteTransactionById("673c1a5e91f8b7a1cdef");
+   * console.log("Transaction deleted successfully.");
+   */
   async deleteTransactionById(transactionId) {
     if (!transactionId) {
       throw new Error("Transaction ID is required.");
@@ -896,7 +1184,22 @@ const otherServices = {
   //   return result;
   // },
 
-  //DG
+  /**
+  * @function createOrder
+  * @description Creates a new payment order using Razorpay and records the initial order and payment details 
+  *              in the database. The order is initialized with a "Pending" payment status until payment capture.
+  *
+  * @param {Object} data - The data required to create a new order.
+  * @param {number} data.amount - The total order amount in INR.
+  * @param {string} data.tournamentId - The ID of the associated tournament.
+  * @param {string} [data.razorpay_paymentId] - The Razorpay payment ID if available.
+  * @param {number} [data.amountWithoutCoupon=0] - The original amount before applying any coupon.
+  * @param {string} [data.coupon=""] - The applied coupon code, if any.
+  * @param {string} [data.paymentMode="Card"] - The mode of payment used.
+  * @returns {Promise<Object>} Resolves with the created Razorpay order details and a confirmation message.
+  *
+  * @throws {Error} Throws an error if Razorpay order creation or database save operations fail.
+  */
 
   async createOrder(data) {
     const userInfo = global.user;
@@ -947,10 +1250,33 @@ const otherServices = {
     };
   },
 
+
+
+
+
+  /**
+   * @function createBannerOrder
+   * @description Creates a new Razorpay order for a banner purchase and records the corresponding
+   *              order and payment details in the database. Calculates GST and stores it along with
+   *              the total amount and base amount before GST.
+   *
+   * @param {Object} data - The data required to create a banner order.
+   * @param {number} data.amount - The total banner cost in INR.
+   * @param {string} [data.bannerId] - The ID of the banner being purchased.
+   * @param {string} [data.razorpay_paymentId] - The Razorpay payment ID, if available.
+   * @param {number} [data.amountWithoutCoupon=0] - The amount before applying any coupon.
+   * @param {string} [data.coupon=""] - The coupon code used, if any.
+   * @param {string} [data.status="Pending"] - The initial status of the order (default is "Pending").
+   * @param {string} [data.paymentMode="Card"] - The payment method used.
+   * @returns {Promise<Object>} Resolves with the created Razorpay order details and a confirmation message.
+   *
+   * @throws {Error} Throws an error if the Razorpay order creation or database operations fail.
+   */
   async createBannerOrder(data) {
     const userInfo = global.user;
-
+    // Generate a unique receipt identifier
     const receipt = crypto.randomBytes(10).toString("hex");
+    // Prepare payment data for Razorpay
 
     const paymentData = {
       amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
@@ -958,24 +1284,21 @@ const otherServices = {
       receipt: `order_receipt_${receipt}`,
       payment_capture: 1, // Auto capture payment
     };
+    // Create order with Razorpay
 
     const result = await RazorpayHandler.createOrder(paymentData);
     const bannerId = mongoose.Types.ObjectId.isValid(data.bannerId) ? data.bannerId : null;
-    const gstRate = 18 / 100;
-    const gstAmount = (result.amount / 100) * gstRate;
-    const amountBeforeGST = (result.amount / 100) - gstAmount;
 
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
-      bannerId: bannerId,
       razorpay_paymentId: data.razorpay_paymentId,
-      amount: result.amount / 100,
-      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
-      coupon: data.coupon ?? "",
-      totalAmountWithGST: result.amount / 100,
-      gstAmount: gstAmount,
-      amountbeforegst: amountBeforeGST,
+      bannerId: bannerId,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
@@ -989,10 +1312,15 @@ const otherServices = {
       userId: userInfo.userId,
       razorpay_paymentId: data.razorpay_paymentId,
       bannerId: bannerId,
-      amountPaid: 0,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
+      paymentfor: "banner",
     });
 
     await payment.save();
@@ -1002,12 +1330,35 @@ const otherServices = {
       message: "Banner Order created successfully. Payment is pending.",
     };
   },
-
+  /**
+   * @function createshopOrder
+   * @description Creates a Razorpay order for a shop package purchase, stores the order and payment
+   *              details in the database, and triggers a confirmation email after a delay.
+   *
+   * @param {Object} data - The required input data for creating the shop order.
+   * @param {string} data.shopId - The ID of the shop for which the order is being created.
+   * @param {string} data.PackageId - The ID of the package being purchased.
+   * @param {number} data.amount - The total amount (in INR) for the order.
+   * @param {number} data.baseAmount - The base amount before fees and taxes.
+   * @param {number} data.processingFee - The processing fee applied to the order.
+   * @param {number} data.convenienceFee - The convenience fee applied to the order.
+   * @param {number} data.gstamount - The GST amount applied to the order.
+   * @param {number} data.totalAmount - The final total including GST and fees.
+   * @param {string} [data.razorpay_paymentId] - The Razorpay payment ID, if available.
+   * @param {string} [data.status="Pending"] - The payment status (default: "Pending").
+   * @param {string} [data.paymentMode="Card"] - The payment mode (e.g., "Card", "UPI", "NetBanking").
+   *
+   * @returns {Promise<Object>} Returns the created Razorpay order details and a confirmation message.
+   *
+   * @throws {Error} Throws an error if the shop, user, or package is not found, or if Razorpay/order creation fails.
+   */
   async createshopOrder(data) {
     const userInfo = global.user;
 
+    // Generate a unique receipt identifier
     const receipt = crypto.randomBytes(10).toString("hex");
 
+    // Prepare payment data for Razorpay
     const paymentData = {
       amount: data.amount * 100, // Amount in paise (100 paise = 1 INR)
       currency: "INR",
@@ -1015,6 +1366,7 @@ const otherServices = {
       payment_capture: 1, // Auto capture payment
     };
 
+    // Create a new order with Razorpay
     const result = await RazorpayHandler.createOrder(paymentData);
     // const shopId = mongoose.Types.ObjectId.isValid(data.shopId) ? data.shopId : null;
     const shop = await Shop.findById(data.shopId);
@@ -1093,7 +1445,7 @@ const otherServices = {
     };
   },
 
-
+  //Send mail
   async sendpaymentMail(userFor = "", user, shop, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS, paymentDetails = {}) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -1904,11 +2256,38 @@ const otherServices = {
       }
     });
   },
-
+  /**
+   * @function createBookingOrder
+   * @description
+   * Creates a new Razorpay order for a venue booking, records the order and payment details
+   * in the database, and sends a booking confirmation email after successful creation.
+   *
+   * @param {Object} data - The input payload for booking order creation.
+   * @param {string} data.venueId - The ID of the venue being booked.
+   * @param {string} data.sport - The sport associated with the booking.
+   * @param {string} data.sessionId - The session ID of the booking slot.
+   * @param {number} data.amount - The total payable amount (in INR).
+   * @param {number} data.baseAmount - The base amount before any taxes or fees.
+   * @param {number} data.processingFee - The processing fee applied to the booking.
+   * @param {number} data.convenienceFee - The convenience fee applied to the booking.
+   * @param {number} data.gstamount - The GST amount applied to the booking.
+   * @param {number} data.totalAmount - The final total amount including GST and fees.
+   * @param {string} [data.razorpay_paymentId] - The Razorpay payment ID (optional).
+   * @param {string} [data.status="Pending"] - The payment status, defaults to `"Pending"`.
+   * @param {string} [data.paymentMode="Card"] - The payment mode used (e.g., `"Card"`, `"UPI"`, `"NetBanking"`).
+   *
+   * @returns {Promise<Object>} Returns a success response containing the created Razorpay order and a message.
+   *
+   * @throws {Error} Throws a descriptive error if:
+   * - The venue, venue owner, or booking cannot be found.
+   * - Razorpay order creation fails.
+   */
   async createBookingOrder(data) {
     const userInfo = global.user
+    // Generate a unique receipt identifier for Razorpay
     const receipt = crypto.randomBytes(10).toString("hex")
-    console.log("These api is called");
+
+    // Prepare Razorpay payment data
     const paymentData = {
       amount: data.amount * 100,
       currency: "INR",
@@ -1916,9 +2295,8 @@ const otherServices = {
       payment_capture: 1,
     }
 
+    // Create Razorpay order
     const result = await RazorpayHandler.createOrder(paymentData)
-
-
     const venue = await Venue.findById(data.venueId)
     if (!venue) throw CustomErrorHandler.notFound("Venue Not Found")
 
@@ -2868,6 +3246,32 @@ const otherServices = {
       }
     })
   },
+
+  /**
+ * @function createVenueOrder
+ * @description
+ * Handles the complete process of creating a Razorpay order for a venue subscription.
+ * - Generates a new Razorpay order using the specified amount.
+ * - Validates user, venue, and package information.
+ * - Saves order details in `OrderHistory` and `Payment` collections.
+ * - Initiates email notifications (delayed by 10s) based on payment status.
+ * 
+ * @param {Object} data - Incoming payment & venue details.
+ * @param {String} data.venueId - The ID of the venue being subscribed (optional).
+ * @param {String} data.PackageId - The ID of the purchased package.
+ * @param {Number} data.amount - Total amount to be paid (in INR).
+ * @param {Number} data.baseAmount - Base package price before taxes.
+ * @param {Number} data.processingFee - Platform processing fee.
+ * @param {Number} data.convenienceFee - Additional handling fee.
+ * @param {Number} data.gstamount - GST (18%) applied to the order.
+ * @param {Number} data.totalAmount - Final total (base + GST + fees).
+ * @param {String} [data.status="Pending"] - Payment status (Pending/Failed/Success).
+ * @param {String} [data.paymentMode="Card"] - Payment method used.
+ * @param {String} data.razorpay_paymentId - Razorpay payment ID (if available).
+ * @param {Object} [data.venueData] - Venue data (used when venue record isn’t in DB).
+ * 
+ * @returns {Promise<Object>} Returns a Razorpay order object and a success message.
+ */
   async createVenueOrder(data) {
     const userInfo = global.user;
     const receipt = crypto.randomBytes(10).toString("hex");
@@ -3884,6 +4288,42 @@ const otherServices = {
       throw new Error("Could not create contact on Razorpay");
     }
   },
+
+  /**
+ * @function createIndividualSubscriptionOrder
+ * @description
+ * Handles the creation of an order for an individual’s subscription or renewal.  
+ * This method integrates with Razorpay to generate a payment order, records it in
+ * the `OrderHistory` and `Payment` collections, and triggers a confirmation email
+ * (sent asynchronously after 10 seconds).
+ *
+ * The function supports both direct user-based subscriptions and
+ * subscriptions tied to a specific `Individual` record.
+ *
+ * @param {Object} data - The payload containing subscription and payment details.
+ * @param {String} [data.individualId] - (Optional) The ID of the Individual associated with this subscription.
+ * @param {String} data.PackageId - The ID of the package being purchased.
+ * @param {Number} data.amount - Total payable amount (in INR).
+ * @param {Number} data.baseAmount - Base subscription amount before taxes and fees.
+ * @param {Number} data.processingFee - Processing fee applied to the transaction.
+ * @param {Number} data.convenienceFee - Convenience or service fee.
+ * @param {Number} data.gstamount - GST applied (typically 18% of the total).
+ * @param {Number} data.totalAmount - Total amount payable after all additions.
+ * @param {String} [data.status="Pending"] - Initial payment status (e.g., "Pending", "Success", "Failed").
+ * @param {String} [data.paymentMode="Card"] - Payment mode (e.g., "Card", "UPI", "NetBanking").
+ * @param {String} [data.razorpay_paymentId] - Razorpay payment ID if available.
+ *
+ * @returns {Promise<Object>} Returns the Razorpay order object and a success message.
+ * @throws {Error} Throws an error if:
+ * - The Individual, User, or Package record cannot be found.
+ * - Razorpay order creation fails.
+ * - Database operations fail (OrderHistory or Payment not saved).
+ *
+ * @notes
+ * - Uses `global.user` to identify the currently authenticated user.
+ * - Delays the email sending by 10 seconds using `setTimeout()` to prevent blocking the response.
+ * - Email is sent via `sendIndividualSubscriptionMail()` with detailed payment summary.
+ */
   async createIndividualSubscriptionOrder(data) {
     try {
       const userInfo = global.user;
@@ -3988,9 +4428,40 @@ const otherServices = {
   },
 
   /**
-   * Creates venue subscription order and sends confirmation email
-   * @param {Object} data - Order data from Flutter app
-   */
+  * @function createVenueSubscriptionOrder
+  * @description
+  * Creates a Razorpay order for renewing or subscribing to a venue package.  
+  * This function generates a payment order via Razorpay, stores order details in both
+  * `OrderHistory` and `Payment` collections, and schedules a confirmation email 
+  * to be sent asynchronously after 10 seconds.
+  *
+  * @param {Object} data - The payload containing venue subscription and payment details.
+  * @param {String} data.venueId - The ID of the venue for which the subscription is being renewed.
+  * @param {String} data.PackageId - The ID of the package being purchased for the venue.
+  * @param {Number} data.amount - Total payable amount (in INR).
+  * @param {Number} data.baseAmount - Base subscription amount before taxes and additional charges.
+  * @param {Number} data.processingFee - Processing fee for handling the transaction.
+  * @param {Number} data.convenienceFee - Additional service or convenience fee.
+  * @param {Number} data.gstamount - GST amount applied (typically a percentage of the total).
+  * @param {Number} data.totalAmount - Total payable amount after adding GST and fees.
+  * @param {String} [data.status="Pending"] - Initial payment status (e.g., "Pending", "Success", "Failed").
+  * @param {String} [data.paymentMode="Card"] - Mode of payment used (e.g., "Card", "UPI", "NetBanking").
+  * @param {String} [data.razorpay_paymentId] - Razorpay payment ID, if available.
+  *
+  * @returns {Promise<Object>} Returns the Razorpay order object and a success message.
+  *
+  * @throws {Error} Throws an error if:
+  * - The Venue, User, or Package cannot be found.
+  * - Razorpay order creation fails.
+  * - Database operations (saving OrderHistory or Payment) fail.
+  *
+  * @notes
+  * - Uses `global.user` to identify the currently authenticated user.
+  * - Automatically sends a subscription confirmation email via `sendVenueSubscriptionMail()` 
+  *   after a short delay to avoid blocking the main execution thread.
+  * - Payment and order details are logged in both `OrderHistory` and `Payment` collections 
+  *   for traceability and reconciliation.
+  */
   async createVenueSubscriptionOrder(data) {
     try {
       const userInfo = global.user;
@@ -4081,9 +4552,6 @@ const otherServices = {
     }
   },
 
-  /**
-   * Sends individual subscription confirmation email
-   */
   async sendIndividualSubscriptionMail(user, individual, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS, paymentDetails = {}) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -4650,9 +5118,6 @@ const otherServices = {
     });
   },
 
-  /**
-   * Sends venue subscription confirmation email
-   */
   async sendVenueSubscriptionMail(user, venue, purchasedPackage, TRANSACTION_ID, RECEIPT_NUMBER, PAYMENT_STATUS, paymentDetails = {}) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -5262,6 +5727,44 @@ const otherServices = {
       }
     });
   },
+
+  /**
+ * @function createIndividualOrder
+ * @description
+ * Creates a Razorpay order for an individual service provider subscription or package purchase.  
+ * This function handles payment initiation, order and payment record creation, and triggers a 
+ * confirmation or failure email asynchronously after order creation.
+ *
+ * @param {Object} data - The payload containing payment and individual subscription details.
+ * @param {String} [data.individualId] - The ID of the individual linked to this order (optional).
+ * @param {String} data.PackageId - The ID of the package being purchased by the individual.
+ * @param {Number} data.amount - Total payable amount (in INR).
+ * @param {Number} data.baseAmount - Base package amount before fees and taxes.
+ * @param {Number} data.processingFee - Transaction or platform processing fee.
+ * @param {Number} data.convenienceFee - Additional convenience charge.
+ * @param {Number} data.gstamount - GST amount applied to the transaction.
+ * @param {Number} data.totalAmount - Final total payable amount after all charges.
+ * @param {String} [data.status="Pending"] - Payment status at the time of order creation.
+ * @param {String} [data.paymentMode="Card"] - Payment mode used (e.g., "Card", "UPI", "NetBanking").
+ * @param {String} [data.razorpay_paymentId] - Razorpay payment identifier, if available.
+ * @param {Object} [data.individualData] - Temporary individual data from frontend (used if payment fails).
+ *
+ * @returns {Promise<Object>} Returns an object containing the Razorpay order and a success message.
+ *
+ * @throws {Error} Throws if:
+ * - The associated Individual, User, or Package cannot be found.
+ * - Razorpay order creation fails.
+ * - Order or payment records cannot be saved.
+ *
+ * @notes
+ * - Uses `global.user` for identifying the currently authenticated user.
+ * - Records all order details in `OrderHistory` and `Payment` collections for traceability.
+ * - Sends an email notification asynchronously via `sendIndividualpaymentMail()`:
+ *   - If `individualId` is provided, sends a subscription success email.
+ *   - If payment fails and `individualData` exists, sends a failed payment email.
+ * - Adds a 10-second delay before sending the email to avoid blocking the main request cycle.
+ */
+
   async createIndividualOrder(data) {
     try {
       const userInfo = global.user
@@ -6228,7 +6731,6 @@ const otherServices = {
   },
 
 
-  //#region Reminder Mail for venue
   async sendVenueExpirationReminder(venue, user, packageDetails, expirationDate, daysUntilExpiration) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -7193,28 +7695,23 @@ const otherServices = {
     };
 
     const result = await RazorpayHandler.createOrder(paymentData);
-    const gstRate = 18 / 100;
-    const gstAmount = (result.amount / 100) * gstRate;
-    const amountBeforeGST = (result.amount / 100) - gstAmount;
+
 
     const orderHistory = new OrderHistory({
       orderId: result.id,
       userId: userInfo.userId,
+      razorpay_paymentId: data.razorpay_paymentId,
       PackageId: data.PackageId,
-      amount: result.amount / 100,
-      amountWithoutCoupon: data.amountWithoutCoupon ?? 0,
-      coupon: data.coupon ?? "",
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       tournamentId: data.tournamentId,
-      amountPaid: 0,
-      amountDue: result.amount / 100,
       currency: result.currency,
       receipt: result.receipt,
       status: data.status || "Pending",
-      ordertype: "sponser",
-      gstAmount: gstAmount,
-      razorpay_paymentId: data.razorpay_paymentId,
-      amountbeforegst: amountBeforeGST,
-      totalAmountWithGST: result.amount / 100,
+      ordertype: "sponsor"
     });
 
     await orderHistory.save();
@@ -7222,14 +7719,18 @@ const otherServices = {
     const payment = new Payment({
       orderId: result.id,
       userId: userInfo.userId,
-      PackageId: data.PackageId,
-      amountPaid: 0,
-      paymentfor: "sponser",
       razorpay_paymentId: data.razorpay_paymentId,
+      PackageId: data.PackageId,
       tournamentId: data.tournamentId,
+      baseAmount: data.baseAmount,
+      processingFee: data.processingFee,
+      convenienceFee: data.convenienceFee,
+      gstamount: data.gstamount,
+      totalAmount: data.totalAmount,
       paymentStatus: data.status || "Pending",
       paymentMode: data.paymentMode || "Card",
       transactionId: result.id,
+      paymentfor: "sponsor",
     });
 
     await payment.save();

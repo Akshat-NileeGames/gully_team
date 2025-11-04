@@ -40,7 +40,7 @@ const paymentSchema = new mongoose.Schema(
     paymentfor: {
       type: String,
       required: false,
-      enum: ['tournament', 'banner', 'sponser', 'individual', 'venue', 'booking', 'Shop', 'individual-subscription-Renew', 'venue-subscription-Renew']
+      enum: ['tournament', 'banner', 'sponsor', 'individual', 'venue', 'booking', 'Shop', 'individual-subscription-Renew', 'venue-subscription-Renew']
     },
     razorpay_paymentId: {
       type: String,

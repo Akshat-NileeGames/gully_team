@@ -1053,9 +1053,7 @@ const matchServices = {
   async updateFootballMatchData(data) {
     try {
       const { matchId, winningTeamId } = data;
-      const match = await Match.findOne({
-        _id: matchId,
-      }).populate(["team1", "team2"])
+      const match = await Match.findById(matchId).populate(["team1", "team2"])
       if (!match) throw CustomErrorHandler.notFound("Match not found or already played");
 
       const scoreBoard = match.scoreBoard
@@ -1082,6 +1080,7 @@ const matchServices = {
           playerStats.set(player._id.toString(), {
             matchesPlayed: 1,
             goals: 0,
+            saves: 0,
             assists: 0,
             penaltyGoals: 0,
             yellowCards: 0,
@@ -1209,8 +1208,6 @@ const matchServices = {
           isMatchDraw = true;
         }
       }
-
-
       const team1UpdateData = {
         $inc: {
           "teamMatchsData.football.goals": homeScore,
@@ -1235,14 +1232,19 @@ const matchServices = {
         Team.findByIdAndUpdate(match.team1._id, team1UpdateData),
         Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
       ])
-
-      match.status = "played"
-      match.isMatchDraw = isMatchDraw
-      match.winningTeamId = !isMatchDraw ? winningTeamId : null
-      match.isMatchEnded = true;
+      await Match.findByIdAndUpdate(
+        matchId,
+        {
+          $set: {
+            status: "played",
+            isMatchDraw: isMatchDraw,
+            winningTeamId: !isMatchDraw ? winningTeamId : null,
+            isMatchEnded: true
+          },
+        },
+        { new: true, runValidators: true }
+      );
       await match.save();
-
-
       return {
         success: true,
         matchId: match._id,

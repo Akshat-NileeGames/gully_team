@@ -2,11 +2,32 @@ import { Promotional_Banner_model, Banner, Package, User, OrderHistory } from '.
 import ImageUploader from '../helpers/ImageUploader.js';
 import { DateTime } from "luxon";
 import nodemailer from "nodemailer";
+
+// Utility function to check if input is a base64 encoded image
 function isBase64Image(str) {
   return /^data:image\/[a-zA-Z]+;base64,/.test(str);
 }
 const PromotionalbannerService = {
 
+  /**
+   * @function createBanner
+   * @description Creates a new promotional banner entry for a user, uploads its image, 
+   *              and schedules an invoice email to be sent after a short delay.
+   *
+   * @param {Object} data - Data for creating a new banner.
+   * @param {string} data.banner_title - The title of the banner.
+   * @param {string} data.banner_image - The base64 or URL of the banner image.
+   * @param {string} data.startDate - ISO string of the banner start date.
+   * @param {string} data.endDate - ISO string of the banner end date.
+   * @param {string} data.bannerlocationaddress - The banner’s display location address.
+   * @param {string} data.selectLocation - The name or label of the location.
+   * @param {number} data.longitude - Longitude of the banner’s location.
+   * @param {number} data.latitude - Latitude of the banner’s location.
+   * @param {string} data.packageId - ID of the purchased promotional package.
+   * @param {string} data.bannerforsports - Type of sport or category the banner targets.
+   * @returns {Promise<Promotional_Banner_model>} Resolves with the saved banner document.
+   * @throws {Error} Logs and throws an error if banner creation or image upload fails.
+   */
   async createBanner(data) {
     try {
       const userInfo = global.user;
@@ -296,7 +317,14 @@ const PromotionalbannerService = {
       }
     });
   },
-
+  /**
+    * @function getbanner
+    * @description Retrieves all banners created by the Specific user.
+    *
+    * @returns {Promise<Array<Promotional_Banner_model>>} Resolves with a list of banners 
+    *          belonging to the current user, including populated package details.
+    * @throws {Error} Logs and throws an error if database query fails.
+    */
   async getbanner() {
     const userinfo = global.user;
     const myBanner = await Promotional_Banner_model.find({
@@ -307,7 +335,18 @@ const PromotionalbannerService = {
     return myBanner;
   },
 
-
+  /**
+     * @function getBannersWithinRadius
+     * @description Fetches promotional and fallback regular banners within a specified radius 
+     *              from a given location, filtered by active dates and sport category.
+     *
+     * @param {Object} data - Query parameters for banner search.
+     * @param {number} data.longitude - User’s current longitude.
+     * @param {number} data.latitude - User’s current latitude.
+     * @param {string} data.bannerforsports - Sport type to match (or include 'others').
+     * @returns {Promise<Array<Object>>} Resolves with an array of promotional and regular banners.
+     * @throws {Error} Throws if aggregation or DB query fails.
+     */
   async getBannersWithinRadius(data) {
     try {
       const { longitude, latitude, bannerforsports } = data;
@@ -381,7 +420,19 @@ const PromotionalbannerService = {
       throw err;
     }
   },
-
+  
+  /**
+   * @function updateBanner
+   * @description Updates banner details such as title and image. 
+   *              If a new image is base64, it is uploaded; otherwise, the old one is retained.
+   *
+   * @param {string} bannerId - The ID of the banner to update.
+   * @param {Object} data - The data containing updates for the banner.
+   * @param {string} [data.banner_title] - The updated banner title.
+   * @param {string} [data.banner_image] - The new banner image (base64 or existing URL).
+   * @returns {Promise<Promotional_Banner_model>} Resolves with the updated banner document.
+   * @throws {Error} Logs and throws if update operation fails.
+   */
   async updateBanner(bannerId, data) {
     try {
       const banner = await Promotional_Banner_model.findById(bannerId);

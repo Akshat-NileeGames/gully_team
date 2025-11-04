@@ -396,8 +396,8 @@ const tournamentServices = {
 
     // Find the existing tournament by ID
     // const tournament = await Tournament.findById(tournamentId);
-    let tournamentImage = await Tournament.findOne({ tournamentId });
-    if (!tournamentId) {
+    let tournamentImage = await Tournament.findById(tournamentId);
+    if (!tournamentImage) {
       throw CustomErrorHandler.notFound("Tournament not found.");
     }
 
@@ -493,13 +493,12 @@ const tournamentServices = {
       user: userInfo.userId,
       coHostId1: coHostId1,
       coHostId2: coHostId2,
-      isSponsorshippurchase: false
+      isSponsorshippurchase: tournamentImage.isSponsorshippurchase,
+      SponsorshipPackageId: tournamentImage.SponsorshipPackageId,
+      TotalEditDone: tournamentImage.TotalEditDone,
     };
-
     // Update tournament data in the database
-    const updatedTournament = await Tournament.findByIdAndUpdate(tournamentId, updatedData, {
-      new: true,
-    });
+    const updatedTournament = await Tournament.findByIdAndUpdate(tournamentId, updatedData);
 
     if (!updatedTournament) {
       throw CustomErrorHandler.notFound("Tournament not found.");

@@ -136,7 +136,7 @@ class EmailReminderService {
         successCount++
       } else {
         failureCount++
-        console.error(`❌ Failed to send reminder for ${entityType} ${entities[index]._id}:`, result.reason)
+        console.error(`Failed to send reminder for ${entityType} ${entities[index]._id}:`, result.reason)
       }
     })
 
