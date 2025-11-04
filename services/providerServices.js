@@ -2078,8 +2078,8 @@ const ProviderServices = {
             ImageUploader.Upload(image, "IndividualServiceImage")
           );
 
-          const uploadedUrls = await Promise.all(uploadPromises);
-          const serviceImages = uploadedUrls.filter(Boolean);
+           serviceImages = await Promise.all(uploadPromises);
+          // const serviceImages = uploadedUrls.filter(Boolean);
 
           if (serviceImages.length === 0) {
             throw new Error("No images uploaded successfully.");
