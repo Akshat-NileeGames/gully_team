@@ -1058,7 +1058,6 @@ const matchServices = {
 
       const scoreBoard = match.scoreBoard
       if (!scoreBoard) throw CustomErrorHandler.badRequest("Match scoreboard data not found");
-
       const homeTeam = scoreBoard.get("homeTeam") || {}
       const awayTeam = scoreBoard.get("awayTeam") || {}
       const matchEvents = scoreBoard.get("matchEvents") || []
@@ -1069,8 +1068,24 @@ const matchServices = {
       const isExtraTime = scoreBoard.get("isExtraTime") || false
       const extraTime = scoreBoard.get("extraTime") || false
 
-      const homeScore = scoreBoard.get("homeScore") || 0
-      const awayScore = scoreBoard.get("awayScore") || 0
+      let homeScore = scoreBoard.get("homeScore") || 0
+      let awayScore = scoreBoard.get("awayScore") || 0
+
+      // Add extra time goals to the final score if extra time was played
+      if (isExtraTime && extraTime) {
+        // Check for total goals in extraTime object first, then fall back to calculating from halves
+        let homeExtraGoals = extraTime.homeGoals ?? 0;
+        let awayExtraGoals = extraTime.awayGoals ?? 0;
+
+        // If not found at top level, calculate from first and second half
+        if (homeExtraGoals === 0 && awayExtraGoals === 0) {
+          homeExtraGoals = (extraTime.firstHalf?.homeGoals ?? 0) + (extraTime.secondHalf?.homeGoals ?? 0);
+          awayExtraGoals = (extraTime.firstHalf?.awayGoals ?? 0) + (extraTime.secondHalf?.awayGoals ?? 0);
+        }
+
+        homeScore += homeExtraGoals;
+        awayScore += awayExtraGoals;
+      }
 
       const playerStats = new Map()
       const allPlayers = [...(homeTeam.players || []), ...(awayTeam.players || [])]
@@ -1185,36 +1200,28 @@ const matchServices = {
 
       await Promise.all(playerUpdatePromises)
 
+      // Determine if match is a draw based on final scores (already includes extra time)
+      // If there's a penalty shootout, only count as draw if penalty shootout scores are equal
       let isMatchDraw = false;
 
-      if (isPenaltyShootout) {
-        const homePenaltyScore = penaltyShootout?.homeTeamScore ?? 0;
-        const awayPenaltyScore = penaltyShootout?.awayTeamScore ?? 0;
-
-        if (homePenaltyScore === awayPenaltyScore) {
-          isMatchDraw = true;
-        }
-
-      } else if (isExtraTime) {
-        const homeExtraScore = (extraTime?.firstHalf?.homeGoals ?? 0) + (extraTime?.secondHalf?.homeGoals ?? 0);
-        const awayExtraScore = (extraTime?.firstHalf?.awayGoals ?? 0) + (extraTime?.secondHalf?.awayGoals ?? 0);
-
-        if (homeExtraScore === awayExtraScore) {
-          isMatchDraw = true;
-        }
-
+      if (isPenaltyShootout && penaltyShootout) {
+        const homePenaltyScore = penaltyShootout.homeTeamScore ?? 0;
+        const awayPenaltyScore = penaltyShootout.awayTeamScore ?? 0;
+        isMatchDraw = homePenaltyScore === awayPenaltyScore;
       } else {
-        if (homeScore === awayScore) {
-          isMatchDraw = true;
-        }
+        // For regular time or extra time, check if final scores are equal
+        isMatchDraw = homeScore === awayScore;
       }
+
+      console.log(`The Home score:${homeScore} and away score:${awayScore}`);
+      console.log(`WinningTeamId: ${winningTeamId}, isMatchDraw: ${isMatchDraw}`);
       const team1UpdateData = {
         $inc: {
           "teamMatchsData.football.goals": homeScore,
           "teamMatchsData.football.matchesPlayed": 1,
-          "teamMatchsData.football.wins": !isMatchDraw && match.team1._id.equals(winningTeamId) ? 1 : 0,
-          "teamMatchsData.football.draws": isMatchDraw ? 1 : 0,
-          "teamMatchsData.football.losses": !isMatchDraw && !match.team1._id.equals(winningTeamId) ? 1 : 0,
+          "teamMatchsData.football.wins": winningTeamId && match.team1._id.equals(winningTeamId) ? 1 : 0,
+          "teamMatchsData.football.draws": !winningTeamId ? 1 : 0,
+          "teamMatchsData.football.losses": winningTeamId && !match.team1._id.equals(winningTeamId) ? 1 : 0,
         },
       }
 
@@ -1222,9 +1229,9 @@ const matchServices = {
         $inc: {
           "teamMatchsData.football.goals": awayScore,
           "teamMatchsData.football.matchesPlayed": 1,
-          "teamMatchsData.football.wins": !isMatchDraw && match.team2._id.equals(winningTeamId) ? 1 : 0,
-          "teamMatchsData.football.draws": isMatchDraw ? 1 : 0,
-          "teamMatchsData.football.losses": !isMatchDraw && !match.team2._id.equals(winningTeamId) ? 1 : 0,
+          "teamMatchsData.football.wins": winningTeamId && match.team2._id.equals(winningTeamId) ? 1 : 0,
+          "teamMatchsData.football.draws": !winningTeamId ? 1 : 0,
+          "teamMatchsData.football.losses": winningTeamId && !match.team2._id.equals(winningTeamId) ? 1 : 0,
         },
       }
 
@@ -1232,19 +1239,57 @@ const matchServices = {
         Team.findByIdAndUpdate(match.team1._id, team1UpdateData),
         Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
       ])
-      await Match.findByIdAndUpdate(
-        matchId,
-        {
-          $set: {
-            status: "played",
-            isMatchDraw: isMatchDraw,
-            winningTeamId: !isMatchDraw ? winningTeamId : null,
-            isMatchEnded: true
-          },
-        },
-        { new: true, runValidators: true }
-      );
+      match.status = "played";
+      match.isMatchDraw = winningTeamId ? false : true;
+      match.winningTeamId = winningTeamId ?? null;
+      match.isMatchEnded = true;
       await match.save();
+
+      // Send notifications to all tournament participants
+      const tournament = await Tournament.findById(match.tournament);
+      if (tournament) {
+        const tournamentTeams = await RegisteredTeam.find({
+          tournament: tournament._id,
+          status: "Accepted"
+        }).populate('team user');
+
+        const teamFcmTokens = tournamentTeams
+          .map(t => t.user?.fcmToken)
+          .filter(Boolean);
+
+        let notification;
+
+        if (!winningTeamId) {
+          notification = {
+            title: "Football Match Result",
+            body: `The match between ${match.team1.teamName} and ${match.team2.teamName} ended in a draw (${homeScore}-${awayScore}).`
+          };
+        } else {
+          const winnerTeam = await Team.findById(winningTeamId).select('teamName');
+          const loserTeamName = match.team1._id.equals(winningTeamId)
+            ? match.team2.teamName
+            : match.team1.teamName;
+
+          notification = {
+            title: "Hey Participants!",
+            body: `${winnerTeam?.teamName} has won the football match against ${loserTeamName} (${homeScore}-${awayScore})`
+          };
+        }
+
+        if (teamFcmTokens.length > 0 && notification) {
+          try {
+            await Promise.all(
+              teamFcmTokens.map(token =>
+                firebaseNotification.sendNotification(token, notification)
+              )
+            );
+            console.log("Football match result notifications sent successfully!");
+          } catch (error) {
+            console.error("Error sending football match notifications:", error);
+          }
+        }
+      }
+
       return {
         success: true,
         matchId: match._id,
