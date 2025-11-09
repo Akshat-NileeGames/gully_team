@@ -230,6 +230,7 @@ const matchController = {
       matchNo: Joi.number().integer().required(),
       dateTime: Joi.date().iso().required(),
       winningTeamId: Joi.string().optional(),
+      matchAuthority: Joi.string().required(),
       matchlength: Joi.number().integer().allow(0).optional(),
     });
 

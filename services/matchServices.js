@@ -287,8 +287,10 @@ const matchServices = {
     const phoneNumberToFind = userPhoneNumber.phoneNumber;
 
     // Fetch matches with scoreboards and populated team/player/tournament data
+    // Sort by dateTime descending to get latest matches first
     const matchData = await Match.find({ scoreBoard: { $ne: null } })
-      .select("tournament team1 team2 _id")
+      .select("tournament team1 team2 _id dateTime")
+      .sort({ dateTime: -1 }) // Latest matches first
       .populate("tournament", "tournamentName tournamentfor")
 
       .populate({
@@ -370,7 +372,23 @@ const matchServices = {
       return null;
     }).filter(Boolean);
 
-    return { data: tournamentDetails };
+    // Get unique tournaments (keep only the latest match per tournament)
+    const uniqueTournaments = {};
+    tournamentDetails.forEach((detail) => {
+      const tournamentKey = detail.tournamentId.toString();
+
+      // If tournament not seen yet, or this match is more recent, keep it
+      if (!uniqueTournaments[tournamentKey]) {
+        uniqueTournaments[tournamentKey] = detail;
+      }
+      // Since matches are already sorted by default (latest first in MongoDB),
+      // we only keep the first occurrence of each tournament
+    });
+
+    // Convert back to array
+    const uniqueTournamentList = Object.values(uniqueTournaments);
+
+    return { data: uniqueTournamentList };
   },
 
   /**
@@ -667,6 +685,7 @@ const matchServices = {
     MatchExist.Round = data.round;
     MatchExist.matchNo = data.matchNo;
     MatchExist.dateTime = standardizedDateTime;
+    MatchExist.matchAuthority = data.matchAuthority;
     if (data.matchlength) {
       MatchExist.matchlength = data.matchlength;
     }
@@ -804,6 +823,7 @@ const matchServices = {
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
+      console.log(matchId);
 
       // Update match with new scoreboard and set status to 'current' (match in progress)
       const matchData = await Match.findByIdAndUpdate(
@@ -2785,34 +2805,6 @@ const matchServices = {
       payments: 0,
 
     });
-
-    // const userPlayedTournament = await Tournament.find({
-    //   $or: [
-    //     { user: userId },
-    //     { organizer: userId },
-    //     { coHostId1: userId },
-    //     { coHostId2: userId }
-    //   ],
-    //   isDeleted: false,
-    // }, {
-    //   _id: 1, 
-    //   tournamentStartDateTime: 1, 
-    //   tournamentEndDateTime: 1,  
-    //   tournamentName: 1,
-    //   fees: 1,
-    //   coverPhoto:1,   
-    //   rules: 1, 
-    // });
-    // {
-    //   _id: 1, 
-    //   tournamentStartDateTime: 1, 
-    //   tournamentEndDateTime: 1,  
-    //   tournamentName: 1,
-    //   ballType: 1,
-    //   tournamentPrize: 1, 
-    //   fees: 1,   
-    //   rules: 1, 
-    // });
     const tournamentIds = userTournaments.map((tournament) => tournament._id);
     const matches = await Match.find({
       tournament: { $in: tournamentIds },
@@ -2834,79 +2826,6 @@ const matchServices = {
       playedTournamentIds.has(tournament._id.toString())
     );
 
-    // Use filteredTournaments for further processing in matchsummary and other computations.
-    const matchsummary = filteredTournaments.map(tournament => {
-      const tournamentMatches = matches.filter(match =>
-        match.tournament._id.toString() === tournament._id.toString()
-      );
-
-      const matchStats = tournamentMatches.map(match => {
-        const team1Players = match.scoreBoard.team1.players;
-        const team2Players = match.scoreBoard.team2.players;
-        const playerStats = team1Players.concat(team2Players).find(player =>
-          player.phoneNumber === userPhoneNumber
-        );
-
-        if (!playerStats) return null;
-
-        // Calculate total overs bowled by the player
-        const oversData = playerStats?.bowling?.overs || {};
-        let totalBalls = Object.keys(oversData).reduce((sum, key) => {
-          const over = oversData[key];
-          // Only count deliveries with valid "over" and "ball" values
-          return sum + (over.over !== undefined && over.ball !== undefined ? 1 : 0);
-        }, 0);
-
-        // Subtract one ball if there are any valid deliveries
-        if (totalBalls > 0) {
-          totalBalls -= 1;
-        }
-
-        const totalOversBowled =
-          Math.floor(totalBalls / 6) + (totalBalls % 6) / 10;
-
-        // To Calculate strike rate
-        const strikeRate = playerStats.batting.balls > 0
-          ? ((playerStats.batting.runs / playerStats.batting.balls) * 100).toFixed(2)
-          : "0.00";
-
-        // to Calculate economy
-        // const economy = playerStats.bowling.overs > 0
-        //   ? (playerStats.bowling.runs / playerStats.bowling.overs).toFixed(2)
-        //   : "0.00";
-        const economy =
-          totalBalls > 0
-            ? (playerStats.bowling.runs / (totalBalls / 6)).toFixed(2)
-            : "0.00";
-
-        return {
-          matchId: match._id,
-          matchDate: match.dateTime,
-          against: match.team1._id === playerStats.team ? match.team2.teamName : match.team1.teamName,
-          batting: {
-            runs: playerStats.batting.runs || 0,
-            balls: playerStats.batting.balls || 0,
-            fours: playerStats.batting.fours || 0,
-            sixes: playerStats.batting.sixes || 0,
-            strikeRate: strikeRate
-          },
-          bowling: {
-            // overs: playerStats.bowling.Over || 0,
-            overs: totalBalls === 0 ? "0.0" : totalOversBowled.toFixed(1),
-            runs: playerStats.bowling.runs || 0,
-            maidens: playerStats.bowling.maidens || 0,
-            wickets: playerStats.bowling.wickets || 0,
-            economy: economy
-          }
-        };
-      }).filter(Boolean);
-
-      return {
-        tournamentId: tournament._id,
-        tournamentName: tournament.tournamentName,
-        matches: matchStats
-      };
-    });
 
     // Fetch all performances and latest 5 performances
     const allPerformances = await Player.find({ userId }).lean();
@@ -2977,12 +2896,11 @@ const matchServices = {
       return {
         _id: match._id,
         dateTime: match.dateTime,
-        team1: match.team1.teamName,
-        team2: match.team2.teamName,
+        team1: match.scoreBoard?.team1?.teamName || match.team1?.teamName || "Unknown",
+        team2: match.scoreBoard?.team2?.teamName || match.team2?.teamName || "Unknown",
         playerData,
       };
     });
-
 
 
     // if (!allPerformances || allPerformances.length === 0) {
@@ -3070,8 +2988,10 @@ const matchServices = {
 
     // Find the best performance against a team
     const bestBattingPerformance = matches.reduce((best, match) => {
-      const team1Players = match.scoreBoard.team1.players;
-      const team2Players = match.scoreBoard.team2.players;
+      const team1 = match.scoreBoard.get("team1");
+      const team2 = match.scoreBoard.get("team2");
+      const team1Players = team1.players;
+      const team2Players = team2.players;
 
       const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
       if (userPerformance && userPerformance.batting.runs > (best.runs || 0)) {
@@ -3085,8 +3005,10 @@ const matchServices = {
     }, {});
 
     const bestBowlingPerformance = matches.reduce((best, match) => {
-      const team1Players = match.scoreBoard.team1.players;
-      const team2Players = match.scoreBoard.team2.players;
+      const team1 = match.scoreBoard.get("team1");
+      const team2 = match.scoreBoard.get("team2");
+      const team1Players = team1.players;
+      const team2Players = team2.players;
 
       const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
       if (userPerformance && userPerformance.bowling.wickets > (best.wickets || 0)) {
@@ -3098,31 +3020,6 @@ const matchServices = {
       }
       return best;
     }, {});
-
-
-    const currentYear = new Date().getFullYear();
-    const overallMatchRuns = matches.reduce((total, match) => {
-      const team1Players = match.scoreBoard.team1.players;
-      const team2Players = match.scoreBoard.team2.players;
-
-      const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
-      if (userPerformance && new Date(match.matchDate).getFullYear() === currentYear) {
-        return total + (userPerformance.batting.runs || 0);
-      }
-      return total;
-    }, 0);
-
-    // Calculate overall bowling performance for the year
-    const overallBowlingPerformance = matches.reduce((total, match) => {
-      const team1Players = match.scoreBoard.team1.players;
-      const team2Players = match.scoreBoard.team2.players;
-
-      const userPerformance = team1Players.concat(team2Players).find(player => player.phoneNumber === userPhoneNumber);
-      if (userPerformance && new Date(match.matchDate).getFullYear() === currentYear) {
-        return total + (userPerformance.bowling.wickets || 0);
-      }
-      return total;
-    }, 0);
 
     return { aggregatedData, matches, bestBattingPerformance, bestBowlingPerformance, latestMatchesData, userPlayedTournament };
 
@@ -3679,15 +3576,25 @@ const matchServices = {
    * @throws {CustomErrorHandler} Throws error if match is not found.
    */
   async updateChallengeScoreBoard(data, matchId) {
-    const match = await ChallengeTeam.findById(matchId);
+    const isMatchExists = await ChallengeTeam.findById(matchId);
 
+    if (!isMatchExists) {
+      throw CustomErrorHandler.notFound("Match Not Found");
+    }
+    const match = await ChallengeTeam.findByIdAndUpdate(
+      matchId,
+      {
+        $set: {
+          scoreBoard: data.scoreBoard
+        }
+      },
+      { new: true, runValidators: true } // Return updated document and run schema validators
+    );
     if (!match) {
       throw CustomErrorHandler.notFound("Match Not Found");
     }
-    match.scoreBoard = data.scoreBoard;
 
-    let matchData = await match.save();
-    return matchData;
+    return match;
   },
 
   /**
