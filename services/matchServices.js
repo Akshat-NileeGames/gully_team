@@ -823,7 +823,6 @@ const matchServices = {
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
-      console.log(matchId);
 
       // Update match with new scoreboard and set status to 'current' (match in progress)
       const matchData = await Match.findByIdAndUpdate(
@@ -884,7 +883,6 @@ const matchServices = {
     try {
       const { matchId, winningTeamId, isDraw } = data;
       const match = await Match.findOne({ _id: matchId });
-
       if (!match) throw CustomErrorHandler.notFound("Match Not Found");
 
       const tournament = await Tournament.findById(match.tournament).select("ballType");
@@ -916,7 +914,6 @@ const matchServices = {
       }
 
       const teamStatsPath = balltype === 'leather' ? 'teamMatchsData.leather' : 'teamMatchsData.tennis';
-
       await Team.findByIdAndUpdate(firstInnings?.battingTeam?._id, {
         $inc: {
           [`${teamStatsPath}.runs`]: firstInnings?.totalScore || 0,
@@ -1033,7 +1030,6 @@ const matchServices = {
 
     const prefix = `battingStatistic.${balltype}`;
     const bowlPrefix = `bowlingStatistic.${balltype}`;
-    console.log(`The player id${player._id} and wicket is:${player.bowling.wickets} `);
     await Player.findByIdAndUpdate(player._id, {
       $inc: {
         [`${prefix}.runs`]: player.batting.runs,

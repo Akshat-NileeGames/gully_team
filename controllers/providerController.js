@@ -656,13 +656,13 @@ const ProviderController = {
     const validation = Joi.object({
       venueId: Joi.string().required(),
       period: Joi.string().valid("week", "month", "quarter", "year").default("year"),
-      sport: Joi.string().optional(),
+      sport: Joi.string().allow('').optional(),
       comparison: Joi.boolean().default(false), // Enable/disable comparison data
     })
 
     const { error } = validation.validate({ ...req.params, ...req.query })
     if (error) {
-      return next(CustomErrorHandler.badRequest("Failed to validate request:", error))
+      return next(CustomErrorHandler.badRequest(`Failed to validate request:${error}`,))
     }
 
     try {

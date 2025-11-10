@@ -412,7 +412,6 @@ const PromotionalbannerService = {
             bannerType: 'regular',
           }))
         );
-
       return combinedBanners;
 
     } catch (err) {
@@ -420,7 +419,7 @@ const PromotionalbannerService = {
       throw err;
     }
   },
-  
+
   /**
    * @function updateBanner
    * @description Updates banner details such as title and image. 
