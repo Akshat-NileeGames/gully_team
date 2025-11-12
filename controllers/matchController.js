@@ -200,15 +200,14 @@ const matchController = {
       return next(err);
     }
   },
-  async getChallengeMatch(req, res, next) {
+  async getSingleChallengeMatch(req, res, next) {
     try {
       const matchSchema = Joi.object({
         matchId: Joi.string().required()
       });
       const { error } = matchSchema.validate(req.params);
-      if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:error`));
-      const result = await matchServices.getSingleMatch(req.params);
-
+      if (error) return next(CustomErrorHandler.validationError(`Provide Proper request body:${error}`));
+      const result = await matchServices.getSingleChallengeMatch(req.params);
       return res.status(200).json({
         success: true,
         message: "Match Retrieved Successfully",

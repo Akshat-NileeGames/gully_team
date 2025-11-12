@@ -443,7 +443,7 @@ const matchServices = {
  * @returns {Promise<Array>} Array of challenge team documents containing the match scoreboard.
  * @throws {CustomErrorHandler.notFound} If no matching challenge entries are found.
  */
-  async getChallengeMatch(data) {
+  async getSingleChallengeMatch(data) {
     try {
       const { matchId } = data;
       // Find challenge teams that reference the given matchId in their scoreboard
