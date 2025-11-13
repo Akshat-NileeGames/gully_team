@@ -16,11 +16,29 @@ import ImageUploader from "../helpers/ImageUploader.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
 
 import moment from "moment";
+
+/**
+ * @function isBase64Media
+ * @description Checks if a string is a valid base64-encoded media (image or video) string.
+ * @param {string} str - String to check
+ * @returns {boolean} True if string is base64 media, false otherwise
+ */
 function isBase64Media(str) {
   return /^data:(image|video)\/[a-zA-Z0-9.+-]+;base64,/.test(str);
 }
+
 const tournamentServices = {
 
+  /**
+   * @function createTournament
+   * @description Creates a new tournament with all necessary details including co-hosts, cover photo, and location.
+   * Sets the user as an organizer and sends notification.
+   * @param {Object} data - Tournament creation data
+   * @param {Date} userStartDate - Tournament start date and time
+   * @param {Date} userEndDate - Tournament end date and time
+   * @returns {Promise<Object>} Newly created tournament and FCM token
+   * @throws {Error} Throws if tournament creation fails
+   */
   async createTournament(data, userStartDate, userEndDate) {
     const userInfo = global.user;
     let coHostId1;
@@ -110,6 +128,15 @@ const tournamentServices = {
     return { newTournament, fcmToken };
   },
 
+  /**
+   * @function setSponsor
+   * @description Sets sponsorship package for a tournament and sends confirmation email after 10 seconds.
+   * @param {Object} data - Sponsorship data
+   * @param {string} data.tournamentId - Tournament ID
+   * @param {string} data.PackageId - Package ID for sponsorship
+   * @returns {Promise<Object>} Updated tournament with sponsorship details
+   * @throws {Error} Throws if tournament is not found or update fails
+   */
   async setSponsor(data) {
     const userInfo = global.user;
     const { tournamentId, PackageId } = data;
@@ -142,6 +169,16 @@ const tournamentServices = {
     }
   },
 
+  /**
+   * @function sendMail
+   * @description Sends sponsorship invoice email to user with detailed invoice information including GST breakdown.
+   * @param {string} userFor - Type of user (default: "")
+   * @param {Object} user - User object containing email and contact details
+   * @param {Object} tour - Tournament object with tournament details
+   * @param {string} orderId - Order/Transaction ID for the sponsorship
+   * @param {Object} purchasedPackage - Package details including name and price
+   * @returns {Promise<boolean>} Returns true if email sent successfully
+   */
   async sendMail(userFor = "", user, tour, orderId, purchasedPackage) {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -392,8 +429,17 @@ const tournamentServices = {
     });
   },
 
-
-
+  /**
+   * @function editTournament
+   * @description Edits an existing tournament with updated details including co-hosts, cover photo, and location.
+   * Sends notifications to all accepted registered teams about the update.
+   * @param {Object} data - Updated tournament data
+   * @param {Date} userStartDate - Updated tournament start date and time
+   * @param {Date} userEndDate - Updated tournament end date and time
+   * @param {string} tournamentId - Tournament ID to edit
+   * @returns {Promise<Object>} Updated tournament object
+   * @throws {Error} Throws if tournament is not found or update fails
+   */
   async editTournament(data, userStartDate, userEndDate, tournamentId) {
     try {
       const userInfo = global.user;
@@ -533,6 +579,18 @@ const tournamentServices = {
     }
   },
 
+  /**
+   * @function getTournament
+   * @description Retrieves tournaments based on location, date filters, and sport type using geospatial queries.
+   * Returns tournaments within 10km radius along with registered team counts and match details.
+   * @param {Object} data - Filter criteria
+   * @param {number} data.latitude - User's latitude
+   * @param {number} data.longitude - User's longitude
+   * @param {string} data.startDate - Start date for filtering
+   * @param {string} data.filter - Filter type ('past', 'upcoming', 'current')
+   * @param {string} data.sport - Sport type for filtering
+   * @returns {Promise<Object>} Tournament data with matches
+   */
   async getTournament(data) {
     const { latitude, longitude, startDate, filter, sport } = data;
     let startDateTime, endDateTime;
@@ -823,6 +881,13 @@ const tournamentServices = {
     return { tournament_data, matches: matches.flat(1) };
   },
 
+  /**
+   * @function getTournamentByName
+   * @description Searches for active tournaments by name using text search.
+   * Returns tournaments with registered team counts and organizer details.
+   * @param {string} query - Search query string for tournament name
+   * @returns {Promise<Array>} Array of matching tournament objects
+   */
   async getTournamentByName(query) {
     let tournament_data = await Tournament.aggregate([
       {
@@ -929,7 +994,13 @@ const tournamentServices = {
 
     return tournament_data;
   },
-  //to get current Tournament Created by organizer
+
+  /**
+   * @function getCurrentTournamentByOrganizer
+   * @description Retrieves all current (active and not completed) tournaments created by or co-hosted by the logged-in user.
+   * @returns {Promise<Array>} Array of current tournament objects with team counts
+   * @throws {Error} Throws if no tournaments are found
+   */
   async getCurrentTournamentByOrganizer() {
     let userInfo = global.user;
     const currentDate = new Date();
@@ -1056,7 +1127,13 @@ const tournamentServices = {
     }
     return TournamentData;
   },
-  //to get all Tournament Created by organizer
+
+  /**
+   * @function getAllTournamentByOrganizer
+   * @description Retrieves all tournaments (including completed and inactive) created by or co-hosted by the logged-in user.
+   * @returns {Promise<Array>} Array of all tournament objects with team counts and co-host details
+   * @throws {Error} Throws if no tournaments are found
+   */
   async getAllTournamentByOrganizer() {
     let userInfo = global.user;
 
@@ -1196,6 +1273,13 @@ const tournamentServices = {
     return TournamentData;
   },
 
+  /**
+   * @function deleteTournament
+   * @description Soft deletes a tournament by setting its isDeleted flag to true.
+   * @param {string} TournamentId - Tournament ID to delete
+   * @returns {Promise<Object>} Updated tournament object
+   * @throws {Error} Throws if tournament is not found
+   */
   async deleteTournament(TournamentId) {
     // Find the tournament by ID
     const tournament = await Tournament.findById(TournamentId);
@@ -1212,7 +1296,15 @@ const tournamentServices = {
     return tournamentdata;
   },
 
-
+  /**
+   * @function createEntryForm
+   * @description Creates an entry form for a team to join a tournament. Validates team has minimum 11 players.
+   * Sends notification to tournament organizer about the join request.
+   * @param {string} teamID - Team ID requesting to join
+   * @param {string} tournamentID - Tournament ID to join
+   * @returns {Promise<Object>} Created entry form object
+   * @throws {Error} Throws if team has insufficient members or already exists
+   */
   async createEntryForm(teamID, tournamentID) {
     const userInfo = global.user;
 
@@ -1285,6 +1377,13 @@ const tournamentServices = {
     return entryForm;
   },
 
+  /**
+   * @function teamRequest
+   * @description Retrieves all team registration requests for a tournament filtered by status.
+   * @param {string} tournamentID - Tournament ID
+   * @param {string} status - Registration status ('Pending', 'Accepted', 'Denied')
+   * @returns {Promise<Object>} Object containing array of tournament registration data
+   */
   async teamRequest(tournamentID, status) {
     const userInfo = global.user;
 
@@ -1297,6 +1396,16 @@ const tournamentServices = {
     return { tournament_data };
   },
 
+  /**
+   * @function updateTeamRequest
+   * @description Updates the status of a team registration request (Accept/Deny). Sends notification to team captain.
+   * Validates user has authority to update and checks tournament capacity.
+   * @param {string} teamID - Team ID to update
+   * @param {string} tournamentID - Tournament ID
+   * @param {string} action - Action to take ('Accepted' or 'Denied')
+   * @returns {Promise<Object>} Updated registered team object
+   * @throws {Error} Throws if user lacks permission, tournament not found, or tournament is full
+   */
   async updateTeamRequest(teamID, tournamentID, action) {
     const userInfo = global.user;
 
@@ -1354,6 +1463,11 @@ const tournamentServices = {
     return registeredTeam;
   },
 
+  /**
+   * @function getCount
+   * @description Gets aggregate counts of pending, accepted, and total registered teams for all current tournaments of the user.
+   * @returns {Promise<Object>} Object with totalPendingTeams, totalAcceptedTeams, and currentTournamentCount
+   */
   async getCount() {
     const userInfo = global.user;
 
@@ -1386,6 +1500,12 @@ const tournamentServices = {
     return data;
   },
 
+  /**
+   * @function getTournamentByUser
+   * @description Gets aggregate counts for tournaments created by or co-hosted by the logged-in user.
+   * Includes pending, accepted teams count and total current tournament count.
+   * @returns {Promise<Object>} Object with totalPendingTeams, totalAcceptedTeams, and currentTournamentCount
+   */
   async getTournamentByUser() {
     const userInfo = global.user;
 
@@ -1422,6 +1542,14 @@ const tournamentServices = {
     return data;
   },
 
+  /**
+   * @function updateAutority
+   * @description Updates the authority (admin rights) for a tournament. Only the original organizer can transfer authority.
+   * @param {string} tournamentID - Tournament ID
+   * @param {string} UserId - New authority user ID
+   * @returns {Promise<string>} New authority user ID
+   * @throws {Error} Throws if tournament not found or user is not the original organizer
+   */
   async updateAutority(tournamentID, UserId) {
     const tournament = await Tournament.findById(tournamentID).select("user");
 
@@ -1445,6 +1573,14 @@ const tournamentServices = {
 
   // ***********************    admin releated services     ****************************
 
+  /**
+   * @function getAllTournament
+   * @description Admin function to retrieve all active tournaments with pagination and search functionality.
+   * @param {number} pageSize - Number of tournaments per page
+   * @param {number} skip - Number of tournaments to skip
+   * @param {string} search - Search query for tournament name
+   * @returns {Promise<Object>} Object with tournament data array and total count
+   */
   async getAllTournament(pageSize, skip, search) {
     // Query to count the total number of subadmins
     const totalTournament = await Tournament.countDocuments({ isActive: true });
@@ -1512,6 +1648,13 @@ const tournamentServices = {
     };
   },
 
+  /**
+   * @function getAllTournamentLive
+   * @description Admin function to retrieve all live tournaments (currently running today) with pagination.
+   * @param {number} pageSize - Number of tournaments per page
+   * @param {number} skip - Number of tournaments to skip
+   * @returns {Promise<Object>} Object with tournament data array and total count
+   */
   async getAllTournamentLive(pageSize, skip) {
     const currentDate = new Date();
     let startDateTime, endDateTime;
@@ -1587,6 +1730,12 @@ const tournamentServices = {
     };
   },
 
+  /**
+   * @function getTournamentById
+   * @description Admin function to retrieve a specific tournament by ID with user details populated.
+   * @param {string} tournamentId - Tournament ID
+   * @returns {Promise<Object>} Tournament object with populated user information
+   */
   async getTournamentById(tournamentId) {
     // Query to retrieve subadmins for the current page
     let tournament = await Tournament.findOne({ _id: tournamentId }).populate({
@@ -1597,7 +1746,12 @@ const tournamentServices = {
     return tournament;
   },
 
-  //
+  /**
+   * @function getMatchesByTournamentId
+   * @description Retrieves all matches for a specific tournament.
+   * @param {string} TournamentId - Tournament ID
+   * @returns {Promise<Array>} Array of match objects with basic details
+   */
   async getMatchesByTournamentId(TournamentId) {
     // let startDate = "2024-02-13";
     // let endDate = "2024-02-17";
@@ -1620,6 +1774,14 @@ const tournamentServices = {
     return Matches;
   },
 
+  /**
+   * @function updateTournamentById
+   * @description Admin function to update tournament details by ID.
+   * @param {string} TournamentId - Tournament ID to update
+   * @param {Object} data - Updated tournament data
+   * @returns {Promise<Object>} Updated tournament object
+   * @throws {Error} Throws if tournament is not found
+   */
   async updateTournamentById(TournamentId, data) {
     const userInfo = global.user;
     // Update data
@@ -1664,6 +1826,12 @@ const tournamentServices = {
     return updatedTournament;
   },
 
+  /**
+   * @function getMatchesHistoryByTournamentId
+   * @description Retrieves match history for a specific tournament.
+   * @param {string} TournamentId - Tournament ID
+   * @returns {Promise<Array>} Array of match objects with basic details
+   */
   async getMatchesHistoryByTournamentId(TournamentId) {
 
     const Match = await Match.find({
@@ -1675,7 +1843,15 @@ const tournamentServices = {
     return Match;
   },
 
-  //Team which haven't played any match still can be eliminated (updated:17 Jan 25)
+  /**
+   * @function eliminateTeams
+   * @description Toggles elimination status for specified teams in a tournament. Teams can be eliminated even if they haven't played matches.
+   * Returns remaining non-eliminated teams.
+   * @param {string} tournamentId - Tournament ID
+   * @param {Array<string>} eliminatedTeamIds - Array of team IDs to eliminate/restore
+   * @returns {Promise<Object>} Object containing array of remaining teams with details
+   * @throws {Error} Throws if tournament or team is not found
+   */
   async eliminateTeams(tournamentId, eliminatedTeamIds) {
     // Fetch the tournament to ensure it exists
     const tournament = await Tournament.findById(tournamentId);
@@ -1720,8 +1896,13 @@ const tournamentServices = {
     };
   },
 
-
-  //getEliminatedTeams api DG
+  /**
+   * @function getEliminatedTeams
+   * @description Retrieves all eliminated teams for a specific tournament with details about elimination round.
+   * @param {string} tournamentId - Tournament ID
+   * @returns {Promise<Array>} Array of eliminated team objects with team details and elimination information
+   * @throws {Error} Throws if no eliminated teams are found
+   */
   async getEliminatedTeams(tournamentId) {
     const eliminatedTeams = await EliminatedTeam.find({ tournamentId })
       .populate({ path: "teamId", select: "teamName" })

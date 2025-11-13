@@ -646,6 +646,20 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function releaseMultipleSlots
+   * @description Releases all locked slots for a specific booking session.
+   * Deletes the entire booking document if the session is found.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.sport - Sport type
+   * @param {string} params.userId - User ID who owns the lock
+   * @param {string} params.sessionId - Booking session identifier
+   *
+   * @returns {Promise<boolean>} Returns true if deletion is successful
+   * @throws {Error} Throws error if no matching booking session is found
+   */
   async releaseMultipleSlots({ venueId, sport, userId, sessionId }) {
     try {
 
@@ -669,6 +683,23 @@ const ProviderServices = {
       throw error
     }
   },
+  /**
+   * @function reserveMultipleSlots
+   * @description Reserves all available slots for multiple dates at once.
+   * Checks venue timings, filters out already booked slots, and creates a reservation booking
+   * that locks all available slots for the specified dates.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.sport - Sport type
+   * @param {Array<string>} params.date - Array of date strings (YYYY-MM-DD format)
+   * @param {string} params.playableArea - Playable area or court name
+   * @param {string} params.userId - User ID making the reservation
+   * @param {string} params.sessionId - Unique session identifier
+   *
+   * @returns {Promise<Object>} Reservation details including booking ID, reserved slots, and expiry time
+   * @throws {Error} Throws error if venue not found, sport not supported, or no available slots
+   */
   async reserveMultipleSlots({ venueId, sport, date, playableArea, userId, sessionId }) {
     try {
       const venue = await Venue.findById(venueId)
@@ -776,6 +807,27 @@ const ProviderServices = {
       throw error
     }
   },
+  /**
+   * @function confirmPayment
+   * @description Confirms payment for a locked booking session.
+   * Updates booking status to confirmed, marks payment as successful, and increments venue booking statistics.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.sport - Sport type
+   * @param {string} params.sessionId - Booking session ID
+   * @param {string} params.razorpayPaymentId - Razorpay payment transaction ID
+   * @param {string} params.userId - User ID
+   * @param {number} params.durationInHours - Total duration in hours
+   * @param {number} params.totalAmount - Total amount paid
+   * @param {number} params.convenienceFee - Convenience fee charged
+   * @param {number} params.processingFee - Processing fee charged
+   * @param {number} params.gstamount - GST amount
+   * @param {number} params.baseAmount - Base amount before fees
+   *
+   * @returns {Promise<Object>} Updated booking document with confirmed status
+   * @throws {Error} Throws error if locked booking not found or update fails
+   */
   async confirmPayment({ venueId, sport, sessionId, razorpayPaymentId, userId, durationInHours, totalAmount, convenienceFee, processingFee, gstamount, baseAmount }) {
     try {
       const lockedBooking = await Booking.findOne({
@@ -821,6 +873,16 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function levenshteinDistance
+   * @description Calculates the Levenshtein distance between two strings.
+   * Used for fuzzy string matching to determine how similar two strings are.
+   *
+   * @param {string} str1 - First string to compare
+   * @param {string} str2 - Second string to compare
+   *
+   * @returns {number} The minimum number of single-character edits required to change one string into the other
+   */
   levenshteinDistance(str1, str2) {
     const matrix = []
     const len1 = str1.length
@@ -852,6 +914,17 @@ const ProviderServices = {
     return matrix[len1][len2]
   },
 
+  /**
+   * @function fuzzySearch
+   * @description Performs fuzzy string search using Levenshtein distance.
+   * Checks if query matches text either exactly or within the specified edit distance threshold.
+   *
+   * @param {string} query - Search query string
+   * @param {string} text - Text to search within
+   * @param {number} threshold - Maximum edit distance allowed for a match (default: 3)
+   *
+   * @returns {boolean} True if query matches text within the threshold, false otherwise
+   */
   fuzzySearch(query, text, threshold = 3) {
     const queryLower = query.toLowerCase()
     const textLower = text.toLowerCase()
@@ -870,6 +943,19 @@ const ProviderServices = {
     return false
   },
 
+  /**
+   * @function getNearbyVenues
+   * @description Retrieves venues near a specified location within a maximum distance.
+   * Handles expired subscriptions and returns venues sorted by distance.
+   *
+   * @param {Object} filters - Filter criteria
+   * @param {number} filters.latitude - User's latitude coordinate
+   * @param {number} filters.longitude - User's longitude coordinate
+   * @param {number} filters.page - Page number for pagination
+   *
+   * @returns {Promise<Array>} Array of nearby venues with distance information and package details
+   * @throws {Error} Throws error if query fails
+   */
   async getNearbyVenues(filters) {
     try {
       const { latitude, longitude, page } = filters
@@ -945,6 +1031,19 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getNearbyIndividuals
+   * @description Retrieves individual service providers near a specified location.
+   * Handles expired subscriptions and returns individuals sorted by distance.
+   *
+   * @param {Object} filters - Filter criteria
+   * @param {number} filters.latitude - User's latitude coordinate
+   * @param {number} filters.longitude - User's longitude coordinate
+   * @param {number} filters.page - Page number for pagination
+   *
+   * @returns {Promise<Array>} Array of nearby individuals with distance information and package details
+   * @throws {Error} Throws error if query fails
+   */
   async getNearbyIndividuals(filters) {
     try {
       const { latitude, longitude, page } = filters
@@ -1018,6 +1117,17 @@ const ProviderServices = {
       throw error
     }
   },
+
+  /**
+   * @function levenshteinDistance
+   * @description Calculates the Levenshtein distance between two strings.
+   * Used for fuzzy string matching to determine how similar two strings are.
+   *
+   * @param {string} str1 - First string to compare
+   * @param {string} str2 - Second string to compare
+   *
+   * @returns {number} The minimum number of single-character edits required to change one string into the other
+   */
   levenshteinDistance(str1, str2) {
     const matrix = []
     const len1 = str1.length
@@ -1048,6 +1158,18 @@ const ProviderServices = {
 
     return matrix[len1][len2]
   },
+
+  /**
+   * @function fuzzySearch
+   * @description Performs fuzzy string search using Levenshtein distance.
+   * Checks if query matches text either exactly or within the specified edit distance threshold.
+   *
+   * @param {string} query - Search query string
+   * @param {string} text - Text to search within
+   * @param {number} threshold - Maximum edit distance allowed for a match (default: 3)
+   *
+   * @returns {boolean} True if query matches text within the threshold, false otherwise
+   */
   fuzzySearch(query, text, threshold = 3) {
     const queryLower = query.toLowerCase()
     const textLower = text.toLowerCase()
@@ -1066,7 +1188,18 @@ const ProviderServices = {
     return false
   },
 
-
+  /**
+   * @function getTodayBookings
+   * @description Retrieves all bookings for the current day at a specified venue.
+   * Returns bookings with statistics including revenue, status breakdown, and sport breakdown.
+   *
+   * @param {Object} data - Query parameters
+   * @param {string} data.venueId - Venue ID to fetch bookings for
+   * @param {string} data.sport - Sport filter (use "all" for all sports, default: "all")
+   *
+   * @returns {Promise<Object>} Today's bookings with statistics and filters applied
+   * @throws {Error} Throws error if venue not found or query fails
+   */
   async getTodayBookings(data) {
     try {
       const { venueId, sport = "all" } = data;
@@ -1131,6 +1264,20 @@ const ProviderServices = {
       throw error;
     }
   },
+
+  /**
+   * @function getUpcomingBookings
+   * @description Retrieves future bookings for a venue with pagination and optional sport filtering.
+   * Only includes confirmed and pending bookings scheduled after the current date.
+   *
+   * @param {Object} data - Query parameters
+   * @param {string} data.venueId - Venue ID to fetch bookings for
+   * @param {string} data.sport - Sport filter (use "all" for all sports, default: "all")
+   * @param {number} data.page - Page number for pagination (default: 1)
+   *
+   * @returns {Promise<Object>} Upcoming bookings with statistics and pagination info
+   * @throws {Error} Throws error if venue not found or query fails
+   */
   async getUpcomingBookings(data) {
     try {
       const { venueId, sport = 'all', page = 1 } = data;
@@ -1211,6 +1358,20 @@ const ProviderServices = {
       throw error
     }
   },
+
+  /**
+   * @function getPastBooking
+   * @description Retrieves historical bookings for a venue that occurred before today.
+   * Includes detailed statistics with monthly breakdown and sport breakdown.
+   *
+   * @param {Object} data - Query parameters
+   * @param {string} data.venueId - Venue ID to fetch bookings for
+   * @param {string} data.sport - Sport filter (use "all" for all sports, default: "all")
+   * @param {number} data.page - Page number for pagination (default: 1)
+   *
+   * @returns {Promise<Object>} Past bookings with comprehensive statistics and pagination
+   * @throws {Error} Throws error if venue not found or query fails
+   */
   async getPastBooking(data) {
     try {
       const { venueId, sport = "all", page = 1 } = data;
@@ -1334,6 +1495,21 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function combinedSearch
+   * @description Performs a combined search across both venues and individual service providers.
+   * Returns results from both categories sorted by search score and distance.
+   *
+   * @param {Object} filters - Search filters
+   * @param {string} filters.query - Search query string
+   * @param {number} filters.latitude - User's latitude coordinate
+   * @param {number} filters.longitude - User's longitude coordinate
+   * @param {number} filters.limit - Maximum number of results per category
+   * @param {number} filters.radius - Search radius in kilometers
+   *
+   * @returns {Promise<Object>} Combined search results with venues and individuals
+   * @throws {Error} Throws error if search fails
+   */
   async combinedSearch(filters) {
     try {
       const { query, latitude, longitude, limit, radius } = filters
@@ -1379,6 +1555,16 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getIndividualProfile
+   * @description Retrieves detailed profile information for an individual service provider by ID.
+   * Populates user and package reference details.
+   *
+   * @param {string} individualId - Individual service provider's ID
+   *
+   * @returns {Promise<Object>} Individual profile with populated references
+   * @throws {Error} Throws error if ID format is invalid or individual not found
+   */
   async getIndividualProfile(individualId) {
     try {
       if (!individualId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -1398,6 +1584,17 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function calculateDistance
+   * @description Calculates the distance between two geographical coordinates using the Haversine formula.
+   *
+   * @param {number} lat1 - Latitude of the first point
+   * @param {number} lon1 - Longitude of the first point
+   * @param {number} lat2 - Latitude of the second point
+   * @param {number} lon2 - Longitude of the second point
+   *
+   * @returns {number} Distance in kilometers between the two points
+   */
   calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371 // Radius of the Earth in kilometers
     const dLat = this.deg2rad(lat2 - lat1)
@@ -1410,9 +1607,31 @@ const ProviderServices = {
     return distance
   },
 
+  /**
+   * @function deg2rad
+   * @description Converts degrees to radians.
+   *
+   * @param {number} deg - Angle in degrees
+   *
+   * @returns {number} Angle in radians
+   */
   deg2rad(deg) {
     return deg * (Math.PI / 180)
   },
+
+  /**
+   * @function GetNearByVenue
+   * @description Retrieves venues near a specified location within 15km radius.
+   * Handles expired subscriptions and filters out venues without active subscriptions.
+   *
+   * @param {Object} data - Location and pagination data
+   * @param {number} data.latitude - User's latitude coordinate
+   * @param {number} data.longitude - User's longitude coordinate
+   * @param {number} data.page - Page number for pagination
+   *
+   * @returns {Promise<Array>} Array of nearby venues with package details
+   * @throws {Error} Throws error if query fails
+   */
   async GetNearByVenue(data) {
     const { latitude, longitude, page } = data;
     const MAX_DISTANCE_METERS = 15 * 1000;
@@ -1484,6 +1703,21 @@ const ProviderServices = {
     return venue;
   },
 
+  /**
+   * @function getAvailableSlots
+   * @description Retrieves available, booked, and locked time slots for a specific venue, sport, date, and playable area.
+   * Filters out past slots for today and checks for existing bookings.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.sport - Sport type
+   * @param {string} params.date - Date in ISO format (YYYY-MM-DD)
+   * @param {string} params.playableArea - Playable area or court name
+   * @param {string} params.userId - User ID to identify user-locked slots
+   *
+   * @returns {Promise<Object>} Available slots, booked slots, locked slots, and pricing information
+   * @throws {Error} Throws error if venue not found or sport not supported
+   */
   async getAvailableSlots({ venueId, sport, date, playableArea, userId }) {
     try {
       const venue = await Venue.findById(venueId)
@@ -1609,6 +1843,21 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function checkSlotAvailabilityWithPlayableArea
+   * @description Checks if a specific time slot is available for booking at a venue.
+   * Verifies against confirmed, pending, completed bookings and temporary locks.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} sport - Sport type
+   * @param {string} date - Date string (YYYY-MM-DD)
+   * @param {Object} timeSlot - Time slot details
+   * @param {string} timeSlot.startTime - Start time (HH:mm format)
+   * @param {string} timeSlot.endTime - End time (HH:mm format)
+   * @param {string} timeSlot.playableArea - Playable area or court name
+   *
+   * @returns {Promise<boolean>} True if slot is available, false if already booked or locked
+   */
   async checkSlotAvailabilityWithPlayableArea(venueId, sport, date, timeSlot) {
     const { startTime, endTime, playableArea } = timeSlot
     const normalizedDate = new Date(new Date(date).toISOString().split("T")[0])
@@ -1641,8 +1890,20 @@ const ProviderServices = {
     return !booking
   },
 
-
-
+  /**
+   * @function checkMultipleSlots
+   * @description Checks slot availability for multiple dates at once.
+   * Returns both conflicting (booked) slots and available slots for each requested date.
+   *
+   * @param {Object} data - Slot availability check parameters
+   * @param {string} data.venueId - Venue ID
+   * @param {string} data.sport - Sport type
+   * @param {Array<string>} data.date - Array of date strings (YYYY-MM-DD format)
+   * @param {string} data.playableArea - Playable area or court name
+   *
+   * @returns {Promise<Object>} Booked slots and available slots grouped by date
+   * @throws {Error} Throws error if venue not found or sport not supported
+   */
   async checkMultipleSlots(data) {
     try {
       const { venueId, sport, date, playableArea } = data;
@@ -1789,8 +2050,26 @@ const ProviderServices = {
     // );
 
     return isAvailable;
-  }
-  ,
+  },
+
+  /**
+   * @function getGroundBookings
+   * @description Retrieves bookings for a venue with comprehensive filtering options.
+   * Supports filtering by date range, sport, status, and payment status with pagination.
+   *
+   * @param {Object} data - Query parameters
+   * @param {string} data.venueId - Venue ID
+   * @param {string} data.startDate - Start date filter (optional)
+   * @param {string} data.endDate - End date filter (optional)
+   * @param {string} data.sport - Sport filter (optional)
+   * @param {string} data.status - Booking status filter (optional)
+   * @param {string} data.paymentStatus - Payment status filter (optional)
+   * @param {number} data.page - Page number (default: 1)
+   * @param {number} data.limit - Items per page (default: 10)
+   *
+   * @returns {Promise<Object>} Bookings with pagination info
+   * @throws {Error} Throws error if query fails
+   */
   async getGroundBookings(data) {
     try {
       const { venueId, startDate, endDate, sport, status, paymentStatus, page = 1, limit = 10 } = data
@@ -1848,6 +2127,16 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getDashboardAnalytics
+   * @description Generates comprehensive dashboard analytics for a venue.
+   * Includes today's bookings, today's revenue, monthly revenue, status distributions, payment statistics, and sport-wise data.
+   *
+   * @param {string} venueId - Venue ID
+   *
+   * @returns {Promise<Object>} Dashboard analytics with key metrics
+   * @throws {Error} Throws error if query fails
+   */
   async getDashboardAnalytics(venueId) {
     try {
       const today = new Date()
@@ -1942,6 +2231,17 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getRevenueAnalytics
+   * @description Generates revenue analytics for a venue over a specified time period.
+   * Returns time-series data of revenue and bookings.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} period - Time period ("week", "month", "quarter", "year", default: "month")
+   *
+   * @returns {Promise<Object>} Revenue analytics with period data, total revenue, and total bookings
+   * @throws {Error} Throws error if venue ID format is invalid or query fails
+   */
   async getRevenueAnalytics(venueId, period = "month") {
     try {
       if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2003,6 +2303,16 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getSportsAnalytics
+   * @description Generates sports-wise analytics for a venue.
+   * Provides breakdown of bookings, revenue, and conversion rates by sport.
+   *
+   * @param {string} venueId - Venue ID
+   *
+   * @returns {Promise<Object>} Sports analytics with detailed metrics per sport
+   * @throws {Error} Throws error if venue ID format is invalid or query fails
+   */
   async getSportsAnalytics(venueId) {
     try {
       if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2038,8 +2348,16 @@ const ProviderServices = {
     }
   },
 
-
-
+  /**
+   * @function createIndividual
+   * @description Registers a new individual service provider on the platform.
+   * Uploads profile and service images, processes education/experience/certificates, and creates the individual profile.
+   *
+   * @param {Object} data - Individual registration data including profile info, images, education, experience, etc.
+   *
+   * @returns {Promise<Object>} Created individual service provider profile
+   * @throws {Error} Throws error if user/package not found, image upload fails, or registration fails
+   */
   async createIndividual(data) {
     try {
       const userInfo = global.user
@@ -2142,6 +2460,18 @@ const ProviderServices = {
       throw error
     }
   },
+
+  /**
+   * @function editIndividualService
+   * @description Updates an existing individual service provider's profile.
+   * Handles image uploads (base64 or URLs), education, experience, certificates, and location updates.
+   *
+   * @param {Object} data - Update data including serviceId and fields to update
+   * @param {string} data.serviceId - Individual service provider's ID
+   *
+   * @returns {Promise<Object>} Updated individual service provider profile
+   * @throws {Error} Throws error if user not found or update fails
+   */
   async editIndividualService(data) {
     try {
       const { serviceId, ...fieldsToUpdate } = data
@@ -2241,6 +2571,17 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getIndividualById
+   * @description Retrieves an individual service provider by their ID.
+   * Populates package reference details.
+   *
+   * @param {Object} data - Query parameters
+   * @param {string} data.id - Individual service provider's ID
+   *
+   * @returns {Promise<Object>} Individual service provider profile with package details
+   * @throws {Error} Throws error if ID format is invalid or individual not found
+   */
   async getIndividualById(data) {
     try {
       if (!data.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2260,6 +2601,13 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getUserIndividualRegisteredGround
+   * @description Retrieves all individual service provider profiles registered by the currently authenticated user.
+   *
+   * @returns {Promise<Array>} Array of individual service provider profiles with package details
+   * @throws {Error} Throws error if user not found or query fails
+   */
   async getUserIndividualRegisteredGround() {
     try {
       const userInfo = global.user
@@ -2277,7 +2625,17 @@ const ProviderServices = {
     }
   },
 
-
+  /**
+   * @function getUserBookings
+   * @description Retrieves all bookings made by the currently authenticated user.
+   * Only returns successful and confirmed bookings with pagination.
+   *
+   * @param {Object} data - Query parameters
+   * @param {number} data.page - Page number for pagination (default: 1)
+   *
+   * @returns {Promise<Array>} Array of user bookings with venue and package details
+   * @throws {Error} Throws error if query fails
+   */
   async getUserBookings(data) {
     try {
       const { page = 1 } = data;
@@ -2316,6 +2674,18 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function cancelBooking
+   * @description Cancels a user's booking by ID.
+   * Validates booking ownership and status before cancellation.
+   *
+   * @param {string} bookingId - Booking ID to cancel
+   * @param {string} cancellationReason - Reason for cancellation
+   * @param {string} userId - User ID requesting cancellation
+   *
+   * @returns {Promise<Object>} Updated booking with cancelled status
+   * @throws {Error} Throws error if booking not found, already cancelled, or completed
+   */
   async cancelBooking(bookingId, cancellationReason, userId) {
     try {
       if (!bookingId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2345,6 +2715,21 @@ const ProviderServices = {
       throw error
     }
   },
+
+  /**
+   * @function checkGroundSlotAvailability
+   * @description Checks if a ground slot is available for booking on a specific date.
+   * Verifies against confirmed bookings with time overlap.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} sport - Sport type
+   * @param {string} date - Date string
+   * @param {Object} timeSlot - Time slot details
+   * @param {string} timeSlot.startTime - Start time
+   * @param {string} timeSlot.endTime - End time
+   *
+   * @returns {Promise<boolean>} True if available, false if booked
+   */
   async checkGroundSlotAvailability(venueId, sport, date, timeSlot) {
     const { startTime, endTime } = timeSlot;
     const booking = await Booking.findOne({
@@ -2367,6 +2752,17 @@ const ProviderServices = {
 
     return !booking;
   },
+
+  /**
+   * @function checkFullDaySlotAvailability
+   * @description Checks if a venue is available for full-day booking on a specific date.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} sport - Sport type
+   * @param {string} date - Date string
+   *
+   * @returns {Promise<boolean>} True if available for full day, false if any slots are booked
+   */
   async checkFullDaySlotAvailability(venueId, sport, date) {
     const booking = await Booking.findOne({
       venueId,
@@ -2384,6 +2780,18 @@ const ProviderServices = {
     return !booking;
   },
 
+  /**
+   * @function checkIndividualSlotAvailability
+   * @description Checks if an individual service provider is available for a specific time slot.
+   *
+   * @param {string} individualId - Individual service provider's ID
+   * @param {string} date - Date string
+   * @param {Object} timeSlot - Time slot details
+   * @param {string} timeSlot.startTime - Start time
+   * @param {string} timeSlot.endTime - End time
+   *
+   * @returns {Promise<boolean>} True if available, false if booked
+   */
   async checkIndividualSlotAvailability(individualId, date, timeSlot) {
     const booking = await Booking.findOne({
       serviceId: individualId,
@@ -2396,6 +2804,17 @@ const ProviderServices = {
     return !booking
   },
 
+  /**
+   * @function generateTimeSlots
+   * @description Generates hourly time slots between opening and closing times.
+   * Supports overnight venues and can include partial slots at the end.
+   *
+   * @param {string} openTime - Opening time in HH:mm format
+   * @param {string} closeTime - Closing time in HH:mm format
+   * @param {number} durationInMinutes - Duration of each slot in minutes (default: 60)
+   *
+   * @returns {Array<Object>} Array of time slots with startTime, endTime, and isPartial flag
+   */
   // generateTimeSlots(openTime, closeTime) {
   //   const slots = []
   //   let start = DateTime.fromFormat(openTime, "HH:mm")
@@ -2490,6 +2909,17 @@ const ProviderServices = {
     return slots
   },
 
+  /**
+   * @function calculateDuration
+   * @description Calculates duration in hours between two time strings.
+   * Supports multiple time formats including 24-hour and 12-hour with AM/PM.
+   *
+   * @param {string} startTime - Start time (HH:mm or hh:mm a format)
+   * @param {string} endTime - End time (HH:mm or hh:mm a format)
+   *
+   * @returns {number} Duration in hours
+   * @throws {Error} Throws error if time format is invalid
+   */
   calculateDuration(startTime, endTime) {
     let start = DateTime.fromFormat(startTime, "HH:mm")
     let end = DateTime.fromFormat(endTime, "HH:mm")
@@ -2505,10 +2935,28 @@ const ProviderServices = {
     return end.diff(start, "hours").hours
   },
 
+  /**
+   * @function getSportPrice
+   * @description Retrieves the per-hour charge for a specific sport at a venue.
+   * Falls back to venue's default per-hour charge if sport-specific pricing not found.
+   *
+   * @param {Object} Venue - Venue object containing pricing information
+   * @param {string} sport - Sport name
+   *
+   * @returns {number} Per-hour charge for the sport
+   */
   getSportPrice(Venue, sport) {
     const sportPricing = Venue.sportPricing.find((sp) => sp.sport === sport)
     return sportPricing ? sportPricing.perHourCharge : Venue.perHourCharge
   },
+
+  /**
+   * @function GetServiceType
+   * @description Retrieves all available service types from the category collection.
+   * Used for individual service provider registration.
+   *
+   * @returns {Promise<Array>} Array of service type categories
+   */
   async GetServiceType() {
     try {
       const categories = await Category.find(
@@ -2532,6 +2980,21 @@ const ProviderServices = {
   },
 
   //#region  New Changes API
+  /**
+   * @function getDashboardAnalytics
+   * @description Generates comprehensive dashboard analytics with advanced filtering.
+   * Includes KPIs, trends, insights, and growth calculations with sport and period filters.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.sport - Sport filter (optional, default: includes all)
+   * @param {string} params.period - Time period ("week", "month", "quarter", "year", default: "month")
+   * @param {string} params.startDate - Custom start date (optional)
+   * @param {string} params.endDate - Custom end date (optional)
+   *
+   * @returns {Promise<Object>} Comprehensive analytics including overview, trends, and insights
+   * @throws {Error} Throws error if venue not found or query fails
+   */
   async getDashboardAnalytics({ venueId, sport, period = "month", startDate, endDate }) {
     try {
 
@@ -2673,6 +3136,20 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getRevenueAnalytics
+   * @description Generates detailed revenue analytics with optional comparison to previous period.
+   * Includes sport-wise breakdown and time-series data.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.period - Time period ("week", "month", "quarter", "year", default: "month")
+   * @param {string} params.sport - Sport filter (optional)
+   * @param {boolean} params.comparison - Include previous period comparison (default: false)
+   *
+   * @returns {Promise<Object>} Revenue analytics with breakdown, comparison, and summary
+   * @throws {Error} Throws error if venue ID format is invalid or query fails
+   */
   async getRevenueAnalytics({ venueId, period = "month", sport, comparison = false }) {
     try {
       if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2788,6 +3265,18 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getSportsAnalytics
+   * @description Generates comprehensive sports analytics for a venue.
+   * Includes performance metrics, trends, and sport-wise statistics with shares and conversion rates.
+   *
+   * @param {Object} params
+   * @param {string} params.venueId - Venue ID
+   * @param {string} params.period - Time period ("week", "month", "quarter", "year", default: "month")
+   *
+   * @returns {Promise<Object>} Sports analytics with enhanced metrics, trends, and summary
+   * @throws {Error} Throws error if venue ID format is invalid or query fails
+   */
   async getSportsAnalytics({ venueId, period = "month" }) {
     try {
       if (!venueId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -2871,7 +3360,17 @@ const ProviderServices = {
     }
   },
 
-  // Helper methods
+  /**
+   * @function getDateRange
+   * @description Calculates date range based on period or custom dates.
+   * Supports week, month, quarter, and year periods.
+   *
+   * @param {string} period - Time period ("week", "month", "quarter", "year")
+   * @param {string} startDate - Custom start date (optional)
+   * @param {string} endDate - Custom end date (optional)
+   *
+   * @returns {Object} Object with start and end dates
+   */
   getDateRange(period, startDate, endDate) {
     const now = new Date()
 
@@ -2912,6 +3411,15 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getPreviousDateRange
+   * @description Calculates the previous period's date range for comparison.
+   *
+   * @param {string} period - Time period
+   * @param {Object} currentRange - Current date range with start and end dates
+   *
+   * @returns {Object} Object with start and end dates for the previous period
+   */
   getPreviousDateRange(period, currentRange) {
     const duration = currentRange.end.getTime() - currentRange.start.getTime()
     return {
@@ -2920,6 +3428,17 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function getPopularTimeSlots
+   * @description Identifies the most popular time slots based on booking frequency and revenue.
+   * Returns top 10 time slots sorted by booking count.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} sport - Sport filter (optional)
+   * @param {Object} dateRange - Date range with start and end dates
+   *
+   * @returns {Promise<Array>} Top 10 popular time slots with booking counts and revenue
+   */
   async getPopularTimeSlots(venueId, sport, dateRange) {
     const matchQuery = {
       venueId: mongoose.Types.ObjectId(venueId),
@@ -2956,6 +3475,16 @@ const ProviderServices = {
     ])
   },
 
+  /**
+   * @function calculateUtilizationRate
+   * @description Calculates venue utilization rate as a percentage.
+   * Compares booked slots to total available slots in the current month.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} sport - Sport filter (optional)
+   *
+   * @returns {Promise<number>} Utilization rate percentage (0-100)
+   */
   async calculateUtilizationRate(venueId, sport) {
     // This is a simplified calculation
     // You might want to implement more sophisticated logic based on your business rules
@@ -2980,6 +3509,15 @@ const ProviderServices = {
     return Math.round((bookedSlotsCount / totalAvailableSlots) * 100)
   },
 
+  /**
+   * @function calculateMonthlyGrowth
+   * @description Calculates the month-over-month growth rate for bookings.
+   *
+   * @param {string} venueId - Venue ID
+   * @param {string} sport - Sport filter (optional)
+   *
+   * @returns {Promise<number>} Growth rate percentage
+   */
   async calculateMonthlyGrowth(venueId, sport) {
     const currentMonth = new Date()
     const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
@@ -3005,6 +3543,16 @@ const ProviderServices = {
     return Math.round(((currentBookings - previousBookings) / previousBookings) * 100)
   },
 
+  /**
+   * @function generateRecommendations
+   * @description Generates actionable recommendations based on performance metrics.
+   *
+   * @param {Object} performance - Performance metrics
+   * @param {number} utilizationRate - Venue utilization rate
+   * @param {number} monthlyGrowth - Monthly growth rate
+   *
+   * @returns {Array<Object>} Array of recommendation objects with type, priority, message, and action
+   */
   generateRecommendations(performance, utilizationRate, monthlyGrowth) {
     const recommendations = []
 
@@ -3049,6 +3597,25 @@ const ProviderServices = {
 
   //#region new filter changes
 
+  /**
+   * @function getNearbyVenues
+   * @description Retrieves nearby venues with advanced filtering including sport, venue type, surface types, facilities, and price range.
+   * Implements popularity scoring and handles expired subscriptions.
+   *
+   * @param {Object} filters - Comprehensive filter criteria
+   * @param {number} filters.latitude - User's latitude
+   * @param {number} filters.longitude - User's longitude
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.radius - Search radius in km (default: 25, max: 100)
+   * @param {string} filters.sport - Sport filter
+   * @param {string} filters.venueType - Venue type filter
+   * @param {Array<string>} filters.surfaceTypes - Surface types filter
+   * @param {Object} filters.facilities - Facilities filter object
+   * @param {Object} filters.priceRange - Price range with min and max
+   *
+   * @returns {Promise<Object>} Venues with pagination and applied filters
+   * @throws {Error} Throws error if query fails
+   */
   async getNearbyVenues(filters) {
     try {
       const {
@@ -3223,6 +3790,25 @@ const ProviderServices = {
       throw error;
     }
   },
+
+  /**
+   * @function getNearbyIndividuals
+   * @description Retrieves nearby individual service providers with advanced filtering.
+   * Supports filtering by sports, service type, age group, and experience range with popularity scoring.
+   *
+   * @param {Object} filters - Filter criteria
+   * @param {number} filters.latitude - User's latitude
+   * @param {number} filters.longitude - User's longitude
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.radius - Search radius in km (default: 25, max: 100)
+   * @param {Array<string>} filters.sports - Sports filter array
+   * @param {string} filters.serviceType - Service type filter
+   * @param {string} filters.ageGroup - Age group filter
+   * @param {Object} filters.experienceRange - Experience range with min and max
+   *
+   * @returns {Promise<Object>} Individuals with pagination and applied filters
+   * @throws {Error} Throws error if query fails
+   */
   async getNearbyIndividuals(filters) {
     try {
       const {
@@ -3377,6 +3963,27 @@ const ProviderServices = {
       throw error;
     }
   },
+
+  /**
+   * @function searchVenuesWithFilters
+   * @description Performs text search across venues with comprehensive filtering.
+   * Implements fuzzy search across name, description, address, and sports with advanced scoring.
+   *
+   * @param {Object} filters - Search and filter criteria
+   * @param {string} filters.query - Search query string
+   * @param {number} filters.latitude - User's latitude
+   * @param {number} filters.longitude - User's longitude
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.radius - Search radius in km (default: 25, max: 100)
+   * @param {string} filters.sport - Sport filter
+   * @param {string} filters.venueType - Venue type filter
+   * @param {Array<string>} filters.surfaceTypes - Surface types filter
+   * @param {Object} filters.facilities - Facilities filter object
+   * @param {Object} filters.priceRange - Price range with min and max
+   *
+   * @returns {Promise<Object>} Search results with venues, pagination, and filters
+   * @throws {Error} Throws error if search fails
+   */
   async searchVenuesWithFilters(filters) {
     try {
       const {
@@ -3588,6 +4195,26 @@ const ProviderServices = {
       throw error;
     }
   },
+
+  /**
+   * @function searchIndividualsWithFilters
+   * @description Performs text search across individual service providers with filtering.
+   * Searches across name, bio, sports, and age groups with relevance scoring.
+   *
+   * @param {Object} filters - Search and filter criteria
+   * @param {string} filters.query - Search query string
+   * @param {number} filters.latitude - User's latitude
+   * @param {number} filters.longitude - User's longitude
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.radius - Search radius in km (default: 25, max: 100)
+   * @param {Array<string>} filters.sports - Sports filter array
+   * @param {string} filters.serviceType - Service type filter
+   * @param {string} filters.ageGroup - Age group filter
+   * @param {Object} filters.experienceRange - Experience range with min and max
+   *
+   * @returns {Promise<Object>} Search results with individuals, pagination, and filters
+   * @throws {Error} Throws error if search fails
+   */
   async searchIndividualsWithFilters(filters) {
     try {
       const {
@@ -3793,6 +4420,15 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function buildFacilitiesFilter
+   * @description Builds MongoDB filter array from facilities object.
+   * Converts facility flags into database query conditions.
+   *
+   * @param {Object} facilities - Facilities filter object with boolean values
+   *
+   * @returns {Array} Array of MongoDB filter conditions
+   */
   buildFacilitiesFilter(facilities) {
     const filters = [];
     Object.entries(facilities).forEach(([key, value]) => {
@@ -3803,6 +4439,15 @@ const ProviderServices = {
     return filters;
   },
 
+  /**
+   * @function buildServiceTypeFilter
+   * @description Builds MongoDB filter for service type selection.
+   * Maps service type strings to database query conditions.
+   *
+   * @param {string} serviceType - Service type identifier ("one_on_one", "team_service", "online_service", or "all")
+   *
+   * @returns {Array} Array of MongoDB filter conditions (empty if "all")
+   */
   buildServiceTypeFilter(serviceType) {
     if (serviceType === 'all') return [];
 
@@ -3818,6 +4463,13 @@ const ProviderServices = {
     }
   },
 
+  /**
+   * @function countActiveFacilities
+   * @description Creates MongoDB aggregation expression to count active facilities.
+   * Used in popularity scoring calculations.
+   *
+   * @returns {Object} MongoDB aggregation expression for counting active facilities
+   */
   countActiveFacilities() {
     return {
       $add: [
@@ -3834,6 +4486,21 @@ const ProviderServices = {
     };
   },
 
+  /**
+   * @function combinedSearchWithFilters
+   * @description Performs combined search across venues and individuals with comprehensive filtering.
+   * Merges results from both categories and sorts by search relevance score.
+   *
+   * @param {Object} filters - Search and filter criteria
+   * @param {string} filters.query - Search query string
+   * @param {number} filters.latitude - User's latitude
+   * @param {number} filters.longitude - User's longitude
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.radius - Search radius in km (default: 25)
+   *
+   * @returns {Promise<Object>} Combined search results with pagination and summary
+   * @throws {Error} Throws error if search fails
+   */
   async combinedSearchWithFilters(filters) {
     try {
       const { query, latitude, longitude, page = 1, radius = 25 } = filters;
