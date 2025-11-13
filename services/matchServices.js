@@ -591,6 +591,7 @@ const matchServices = {
    *   - matchDetails: Array of complete match documents
    * @throws {CustomErrorHandler.notFound} If no matches found for the team in the tournament
    */
+
   async getOpponent(tournamentID, teamID) {
     const userInfo = global.user;
 
@@ -823,7 +824,6 @@ const matchServices = {
       if (!data.scoreBoard || typeof data.scoreBoard !== 'object') {
         throw CustomErrorHandler.badRequest("Invalid scoreBoard data");
       }
-
       // Update match with new scoreboard and set status to 'current' (match in progress)
       const matchData = await Match.findByIdAndUpdate(
         matchId,
@@ -934,11 +934,20 @@ const matchServices = {
         }
       });
 
-      match.status = "played";
-      match.winningTeamId = isDraw ? null : winningTeamId;
-      match.isMatchDraw = isDraw ? true : false;
-      match.isMatchEnded = true;
-      await match.save();
+      // match.status = "played";
+      // match.winningTeamId = isDraw ? null : winningTeamId;
+      // match.isMatchDraw = isDraw ? true : false;
+      // match.isMatchEnded = true;
+      // await match.save();
+
+      await Match.findByIdAndUpdate(match._id, {
+        $set: {
+          isMatchDraw: isDraw ? true : false,
+          winningTeamId: isDraw ? null : winningTeamId,
+          isMatchEnded: true,
+          status: "played",
+        },
+      });
 
       const tournamentTeams = await RegisteredTeam.find({
         tournament: tournament._id,
@@ -1255,11 +1264,16 @@ const matchServices = {
         Team.findByIdAndUpdate(match.team1._id, team1UpdateData),
         Team.findByIdAndUpdate(match.team2._id, team2UpdateData),
       ])
-      match.status = "played";
-      match.isMatchDraw = winningTeamId ? false : true;
-      match.winningTeamId = winningTeamId ?? null;
-      match.isMatchEnded = true;
-      await match.save();
+
+
+      await Match.findByIdAndUpdate(match._id, {
+        $set: {
+          isMatchDraw: !winningTeamId,
+          winningTeamId: winningTeamId ?? null,
+          isMatchEnded: true,
+          status: "played",
+        },
+      });
 
       // Send notifications to all tournament participants
       const tournament = await Tournament.findById(match.tournament);

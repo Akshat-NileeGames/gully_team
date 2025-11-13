@@ -1,10 +1,25 @@
+/**
+ * @file CustomErrorHandler.js
+ * @description
+ * Centralized error handling utility that creates standardized
+ * error objects with HTTP status codes and descriptive messages.
+ * 
+ * @usage
+ * - Used throughout the application to throw consistent API errors.
+ * - Each static method represents a specific HTTP error scenario.
+ *
+ * @example
+ * throw CustomErrorHandler.notFound("User not found");
+ * throw CustomErrorHandler.unAuthorized("Access denied");
+ */
+
 class CustomErrorHandler extends Error {
   constructor(status, msg) {
     super();
     this.status = status;
     this.message = msg;
   }
-  
+
 
   static alreadyExist(message) {
     return new CustomErrorHandler(409, message);

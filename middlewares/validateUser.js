@@ -1,6 +1,32 @@
 import CustomErrorHandler from "../helpers/CustomErrorHandler.js";
 import jwtService from "../helpers/jwtService.js";
 import { User } from "../models/index.js";
+/**
+ * @description
+ * Middleware that validates and authenticates user requests using JWT tokens.
+ * It ensures that only authorized users can access protected routes.
+ *
+ * @workflow
+ *  1. Checks for the presence of an Authorization header.
+ *  2. Extracts and verifies the JWT access token.
+ *  3. Retrieves the corresponding user from the database.
+ *  4. Prevents access if the user is banned or not found.
+ *  5. Attaches user details (ID, email, phoneNumber, fcmToken) to both:
+ *     - `req.user` for per-request use.
+ *     - `global.user` for global reference across services.
+ *  6. Proceeds to the next middleware if the user is authorized.
+ *
+ * @errorHandling
+ *  - Returns 401 Unauthorized if:
+ *      • Authorization header is missing
+ *      • Token is invalid or expired
+ *      • User does not exist
+ *      • User account is currently banned
+ *
+ * @note
+ *  This middleware must be applied to all routes that require
+ *  user authentication. Automatically updates expired bans.
+ */
 
 
 const validateUser = async (req, res, next) => {

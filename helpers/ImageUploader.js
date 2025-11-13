@@ -1,3 +1,21 @@
+/**
+ * @description
+ * Handles uploading and deleting image/video files to and from
+ * an Amazon S3 bucket using the AWS SDK v3.
+ *
+ * @usage
+ * - Upload base64-encoded media (image/video) directly to S3.
+ * - Delete files from S3 using their object key.
+ *
+ * @example
+ * // Upload Example:
+ * const key = await MediaUploader.Upload(base64String, "profile-images");
+ *
+ * @example
+ * // Delete Example:
+ * await MediaUploader.Delete("profile-images/1731234567890.png");
+ */
+
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   AWS_ACCESS_KEY_ID,
@@ -6,7 +24,11 @@ import {
 } from "../config/index.js";
 
 class MediaUploader {
-
+  /**
+    * @property {S3Client} s3Client
+    * @description Preconfigured AWS S3 client instance for all
+    * media upload and delete operations.
+    */
   static s3Client = new S3Client({
     region: "ap-south-1",
     credentials: {
@@ -15,7 +37,17 @@ class MediaUploader {
     },
   });
 
-  // Method to Upload image or video to S3 bucket
+  /**
+   * @function Upload
+   * @description Uploads an image or video file to the S3 bucket.
+   * @param {string} base64Media - Base64-encoded string of the file.
+   * @param {string} folderName - Target folder inside the S3 bucket.
+   * @param {string} [fileName="default"] - Optional custom filename.
+   * @returns {Promise<string>} S3 object key of the uploaded file.
+   *
+   * @throws {Error} If unsupported file type or upload fails.
+   */
+
   static async Upload(base64Media, folderName, fileName = "default") {
     if (!this.s3Client) {
       throw new Error("S3 client is not initialized correctly.");

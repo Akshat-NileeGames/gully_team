@@ -471,9 +471,6 @@ const tournamentController = {
   //     }
   // },
 
-  /**
-   * Edit an existing tournament
-   */
   //#region edittournament
   async editTournament(req, res, next) {
     const TournamentId = req.params.id;

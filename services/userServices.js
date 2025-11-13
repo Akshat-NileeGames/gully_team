@@ -15,6 +15,12 @@ import RazorpayHandler from "../helpers/RazorPayHandler.js";
 
 const userServices = {
 
+  /**
+    * @function createProfile
+    * @description Creates or updates a user's profile image, nickname, and phone number.
+    * @param {Object} data - User profile data.
+    * @returns {Promise<Object>} Updated user document.
+    */
   async createProfile(data) {
     const { base64Image, nickName, phoneNumber } = data;
     const userInfo = global.user;
@@ -37,103 +43,12 @@ const userServices = {
     return user;
   },
 
-  // async createProfile(data) {
-  //   const { base64Image, nickName, phoneNumber } = data;
-  //   // const userInfo = global.user;
-  //   // //Find the user by ID
-  //   // let user = await User.findById(userInfo.userId);
-
-  //   // if (!user) {
-  //   //   // Handle the case where the user is not found
-  //   //   throw CustomErrorHandler.notFound("User Not Found");
-  //   // }
-
-  //   const imagePath = await ImageUploader.Upload(base64Image, "profile_photos");
-  //   // Update the user's profilePhoto and nickname,phoneNumber fields with the S3 URL and nickname,phoneNumber
-  //   user.profilePhoto = imagePath;
-  //   user.nickName = nickName;
-  //   user.phoneNumber = phoneNumber;
-
-  //   // Save the updated user document
-  //   user = await user.save();
-  //   return user;
-  // },
-  // async createProfile(data) {
-  //   const { base64Image, nickName, phoneNumber } = data;
-  //   const userInfo = global.user;
-  //   //Find the user by ID
-  //   let user = await User.findById(userInfo.userId);
-
-  //   if (!user) {
-  //     // Handle the case where the user is not found
-  //     throw CustomErrorHandler.notFound("User Not Found");
-  //   }
-
-  //   const imagePath = await ImageUploader.Upload(base64Image, "profile_photos");
-  //   // Update the user's profilePhoto and nickname,phoneNumber fields with the S3 URL and nickname,phoneNumber
-  //   user.profilePhoto = imagePath;
-  //   user.nickName = nickName;
-  //   user.phoneNumber = phoneNumber;
-
-  //   // Save the updated user document
-  //   user = await user.save();
-  //   return user;
-  // },
-
-  //Sheetal
-  // async createProfile(data) {
-  //   const { base64Image, nickName, phoneNumber } = data;
-  //   const userInfo = global.user;
-  //   // Find the user by ID
-  //   let user = await User.findById(userInfo.userId);
-  //   if (!user) {
-  //     throw CustomErrorHandler.notFound("User Not Found");
-  //   }
-
-  //   // Check if a player exists with this phoneNumber in the Player collection
-  //   const player = await Player.findOne({ phoneNumber });
-
-  //   if (player) {
-  //     // Update the player document to reference the correct userId
-  //     player.userId = user._id;
-  //     await player.save();
-  //   }
-
-  //   // Update the user's profile in the User collection
-  //   const imagePath = await ImageUploader.Upload(base64Image, "profile_photos");
-
-  //   user.profilePhoto = imagePath;
-  //   user.nickName = nickName;
-  //   user.phoneNumber = phoneNumber;
-
-  //   // Save the updated user document
-  //   user = await user.save();
-
-  //   return user;
-  // },  
-  // 
-  //recent commented//
-  // async createProfile(data) {
-  //   const { base64Image, nickName, phoneNumber } = data;
-  //   // const userInfo = global.user;
-  //   // //Find the user by ID
-  //   // let user = await User.findById(userInfo.userId);
-  //   // if (!user) {
-
-  //   //   // Handle the case where the user is not found
-  //   //   throw CustomErrorHandler.notFound("User Not Found");
-  //   // }
-  //   const imagePath = await ImageUploader.Upload(base64Image, "profile_photos");
-  //   // Update the user's profilePhoto and nickname,phoneNumber fields with the S3 URL and nickname,phoneNumber
-  //   user.profilePhoto = imagePath;
-  //   user.nickName = nickName;
-  //   user.phoneNumber = phoneNumber;
-  //   // Save the updated user document
-  //   user = await user.save();
-
-  //   return user;
-  // },
-
+  /**
+    * @function editProfile
+    * @description Edits user's profile image, nickname, and FCM token.
+    * @param {Object} data - Profile fields to update.
+    * @returns {Promise<Object>} Updated user document.
+    */
   async editProfile(data) {
     const { base64Image, nickName, fcmToken } = data;
     const userInfo = global.user;
@@ -168,7 +83,11 @@ const userServices = {
     user = await user.save();
     return user;
   },
-
+  /**
+    * @function deleteProfile
+    * @description Soft deletes a user's account by marking it deleted and anonymizing credentials.
+    * @returns {Promise<Object>} Updated user document.
+    */
   async deleteProfile(userId) {
     //Find the user by ID
     const userInfo = global.user;
@@ -186,7 +105,14 @@ const userServices = {
     user = await user.save();
     return user;
   },
-
+  /**
+    * @function sendOTP
+    * @description Generates and sends OTP for phone number verification using Fast2SMS.
+    * @param {String} userId - User's MongoDB ID.
+    * @param {String} phoneNumber - User's phone number.
+    * @param {Number} otpExpiryMinutes - Expiry time for OTP in minutes.
+    * @returns {Promise<Boolean>} True if OTP sent successfully.
+    */
   async sendOTP(userId, phoneNumber, otpExpiryMinutes) {
     const mode = "prod";
     const apiUrl = "https://www.fast2sms.com/dev/bulkV2";
@@ -275,7 +201,12 @@ const userServices = {
       );
     }
   },
-
+  /**
+   * @function verifyOTP
+   * @description Verifies OTP for a user and updates their verification status.
+   * @param {Object} data - Contains OTP entered by user.
+   * @returns {Promise<Object>} Verified user document.
+   */
   async verifyOTP(data) {
     const otp = data.OTP;
     const userInfo = global.user;
@@ -312,6 +243,11 @@ const userServices = {
     }
   },
 
+  /**
+    * @function getProfile
+    * @description Retrieves the currently logged-in user's profile.
+    * @returns {Promise<Object>} User document.
+    */
   async getProfile() {
     const userInfo = global.user;
     //Find the User
@@ -323,6 +259,13 @@ const userServices = {
     }
     return userData;
   },
+
+  /**
+ * @function getUser
+ * @description Retrieves specific user data by ID.
+ * @param {Object} data - Contains userId.
+ * @returns {Promise<Object>} User document with limited fields.
+ */
   async getUser(data) {
     const userInfo = data.userId;
     //Find the User
@@ -342,6 +285,12 @@ const userServices = {
     return userData;
   },
 
+  /**
+   * @function updateLocation
+   * @description Updates the user's last known location.
+   * @param {Object} data - Contains latitude, longitude, and placeName.
+   * @returns {Promise<Object>} Updated user document.
+   */
   async updateLocation(data) {
     const { latitude, longitude, placeName } = data;
     const userInfo = global.user;
@@ -360,7 +309,14 @@ const userServices = {
   },
 
   // ***********************    admin releated services     ****************************
-
+  /**
+   * @function getAllUser
+   * @description Retrieves paginated list of users with optional search filter.
+   * @param {Number} pageSize - Number of users per page.
+   * @param {Number} skip - Number of documents to skip.
+   * @param {String} search - Optional search query.
+   * @returns {Promise<Object>} Object containing users and total count.
+   */
   async getAllUser(pageSize, skip, search) {
     // Query to count the total number of subadmins
     const totalusers = await User.countDocuments();
@@ -417,7 +373,10 @@ const userServices = {
       count: totalusers,
     };
   },
-
+  /**
+    * @function getAllSubAdmin
+    * @description Fetch all sub-admins with pagination.
+    */
   async getAllSubAdmin(pageSize, skip) {
     // Query to count the total number of subadmins
     const totalusers = await Admin.countDocuments();
@@ -435,6 +394,10 @@ const userServices = {
     return data;
   },
 
+  /**
+    * @function getSubAdminById
+    * @description Retrieve details of a specific sub-admin.
+    */
   async getSubAdminById(userId) {
     //Find the Banner
     let SubAdminData = await Admin.findOne({ _id: userId }).select(
@@ -442,7 +405,10 @@ const userServices = {
     );
     return SubAdminData;
   },
-
+  /**
+   * @function editUserStatus
+   * @description Updates a user's ban status or removes it.
+   */
   async editUserStatus(userId, data) {
     let { action, duration } = data;
 
@@ -478,7 +444,10 @@ const userServices = {
     user = await user.save();
     return user;
   },
-
+  /**
+   * @function addSubAdmin
+   * @description Creates a new sub-admin account.
+   */
   async addSubAdmin(data) {
     let { email, password, phoneNumber, firstname } = data;
 
@@ -513,7 +482,10 @@ const userServices = {
     const subAdmin = await newSubAdmin.save();
     return subAdmin;
   },
-
+  /**
+    * @function editSubAdmin
+    * @description Updates sub-admin details.
+    */
   async editSubAdmin(userId, data) {
     let { firstname, lastname, email, phoneNumber, role, rights } = data;
 
@@ -535,13 +507,19 @@ const userServices = {
     subAdmin = await subAdmin.save();
     return subAdmin;
   },
-
+  /**
+    * @function getUserCount
+    * @description Counts total number of users.
+    */
   async getUserCount() {
     //Find the Banner
     const totalusers = await User.countDocuments();
     return totalusers;
   },
-
+  /**
+   * @function getOrganizerCount
+   * @description Counts total number of organizer users.
+   */
   async getOrganizerCount() {
     //Find the Banner
     const totalusers = await User.countDocuments({ isOrganizer: true });

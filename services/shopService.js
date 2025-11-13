@@ -7,15 +7,53 @@ import mongoose from "mongoose"
 import { FAST_SMS_KEY, SENDER_ID, MESSAGE_ID } from "../config/index.js";
 import axios from "axios";
 import crypto from "crypto";
+// Utility function to check if input is a base64 encoded image
 function isBase64Image(str) {
     return /^data:image\/[a-zA-Z]+;base64,/.test(str);
 }
 const ShopService = {
-
+    /**
+  * @async
+  * @function addShop
+  * @description
+  * Adds a new shop to the database. This function uploads shop images and Aadhar card images,
+  * validates and formats input data, constructs a shop object, saves it to the database,
+  * and then sends a confirmation email to the owner.
+  *
+  * @param {Object} data - The input data for creating a shop.
+  * @param {Array} data.shopImage - Array of shop image files to upload.
+  * @param {string} data.shopName - The name of the shop.
+  * @param {string} data.shopDescription - Description of the shop.
+  * @param {string} data.shopAddress - Physical address of the shop.
+  * @param {number|string} data.latitude - Latitude coordinate for shop location.
+  * @param {number|string} data.longitude - Longitude coordinate for shop location.
+  * @param {string} data.selectLocation - Human-readable selected location name.
+  * @param {Object} data.shopTiming - Weekly shop timings with open/close hours.
+  * @param {string} data.LicenseNumber - Shop license number.
+  * @param {string} data.GstNumber - GST number for the shop.
+  * @param {string} data.ownerName - Name of the shop owner.
+  * @param {string} data.ownerPhoneNumber - Contact number of the shop owner.
+  * @param {string} data.ownerEmail - Email ID of the shop owner.
+  * @param {string} data.ownerAddress - Address of the shop owner.
+  * @param {string} data.ownerPanNumber - PAN number of the shop owner.
+  * @param {File|Buffer|string} data.aadharFrontSide - Front side image of Aadhar card.
+  * @param {File|Buffer|string} data.aadharBackSide - Back side image of Aadhar card.
+  * @param {string} data.joinedAt - ISO date string representing the joining date/time.
+  * @param {string} [data.shoplink] - Optional website or social media link for the shop.
+  * 
+  * @throws {CustomErrorHandler} If any required field or image is missing or invalid.
+  * @throws {CustomErrorHandler} If any image upload fails.
+  * @throws {Error} If database save operation fails.
+  * 
+  * @returns {Promise<Object>} The newly created shop document.
+  */
     async addShop(data) {
 
         const userInfo = global.user;
         let shopImg = [];
+
+        //Upload the image in s3 bucket and push the url into shopImg 
+        //check if the shopImage length is not empty
         if (Array.isArray(data.shopImage) && data.shopImage.length > 0) {
             for (const image of data.shopImage) {
                 try {
@@ -37,6 +75,7 @@ const ShopService = {
 
         let aadharFrontUrl = null;
         let aadharBackUrl = null;
+        //Upload Addhar Card image to S3 
         if (data.aadharFrontSide && data.aadharBackSide) {
             try {
                 aadharFrontUrl = await ImageUploader.Upload(data.aadharFrontSide, "AadharImages");
@@ -51,6 +90,7 @@ const ShopService = {
         } else {
             throw CustomErrorHandler.badRequest("Both Aadhar front and back images are required.");
         }
+        //Map The Shop Timing
         const shopTiming = {
             Monday: {
                 isOpen: data.shopTiming.Monday.isOpen,
@@ -134,10 +174,11 @@ const ShopService = {
         });
         try {
             const result = await newShop.save();
+            //After Shop data saved in database send the confirmation mail to the user after 2 second
             setTimeout(async () => {
                 console.log("Sending email after 10 seconds... with Shop id", result._id);
                 const user = await User.findById(userInfo.userId);
-                const mail = await ShopService.sendMail("Shop", user, data.ownerEmail, result);
+                await ShopService.sendMail("Shop", user, data.ownerEmail, result);
             }, 2000);
             return result;
         } catch (err) {
@@ -145,6 +186,7 @@ const ShopService = {
         }
     },
 
+    ///Mail template to send mail when shop register
     async sendMail(userFor = "", user, ownerEmail, shop) {
         const transporter = nodemailer.createTransport({
             host: "smtp.gmail.com",
@@ -642,6 +684,33 @@ const ShopService = {
     //         throw err;
     //     }
     // },
+
+    /**
+ * @async
+ * @function editShop
+ * @description
+ * Updates an existing shop's details in the database.
+ * Handles updates to shop images, Aadhar card images, and location coordinates.
+ * Automatically uploads any new base64 images and replaces corresponding fields.
+ *
+ * @param {Object} data - The input data for updating the shop.
+ * @param {string} data.shopId - The unique identifier of the shop to update.
+ * @param {string} [data.shopName] - Optional updated name of the shop.
+ * @param {string} [data.shopDescription] - Optional updated description.
+ * @param {string} [data.shopAddress] - Optional updated shop address.
+ * @param {number|string} [data.latitude] - Latitude coordinate for updated shop location.
+ * @param {number|string} [data.longitude] - Longitude coordinate for updated shop location.
+ * @param {string} [data.selectLocation] - Human-readable name of selected location.
+ * @param {Array<string>} [data.shopImage] - Array of image URLs or base64-encoded images.
+ * @param {string} [data.aadharFrontSide] - Optional new Aadhar front image (base64 or URL).
+ * @param {string} [data.aadharBackSide] - Optional new Aadhar back image (base64 or URL).
+ * @param {string} [data.shopContact] - Updated contact number for the shop.
+ * @param {string} [data.shopEmail] - Updated email for the shop.
+ * @param {string} [data.shoplink] - Optional updated link or website of the shop.
+ *
+ * @throws {Error} If database update fails or image upload encounters an error.
+ * @returns {Promise<Object>} The updated shop document with populated fields.
+ */
     async editShop(data) {
         const { shopId, ...fieldsToUpdate } = data;
         if (fieldsToUpdate.longitude && fieldsToUpdate.latitude) {
@@ -667,10 +736,12 @@ const ShopService = {
         if (fieldsToUpdate.shopImage && Array.isArray(fieldsToUpdate.shopImage)) {
             const processedImages = [];
             for (let img of fieldsToUpdate.shopImage) {
+                // If image is in base64 format, upload it
                 if (isBase64Image(img)) {
                     const uploadedUrl = await ImageUploader.Upload(img, "ShopImages");
                     processedImages.push(uploadedUrl);
                 } else {
+                    // Keep existing URL as-is
                     processedImages.push(img);
                 }
             }
@@ -682,6 +753,7 @@ const ShopService = {
                 { $set: fieldsToUpdate },
                 { new: true }
             );
+            // Fetch the updated shop with populated references
             const shop = await Shop.findById(shopId, {
                 updatedAt: 0,
                 createdAt: 0,
@@ -694,7 +766,18 @@ const ShopService = {
         }
     },
 
-
+    /**
+     * @async
+     * @function getMyShop
+     * @description
+     * Retrieves all shops owned by the currently authenticated user (`global.user`).
+     * Also validates each shop's subscription status based on its package end date
+     * and updates the `isSubscriptionPurchased` field accordingly.
+     *
+     * @throws {Error} If any database operation fails.
+     * @returns {Promise<Array<Object>>} A list of shop documents belonging to the user,
+     * with populated `packageId` and `AdditionalPackages` references.
+     */
     async getMyShop() {
         try {
             const userinfo = global.user;
@@ -713,14 +796,17 @@ const ShopService = {
 
             for (const shop of shops) {
                 let shouldUpdate = false;
+                // If no package end date, mark subscription as false
                 if (!shop.packageEndDate) {
                     if (shop.isSubscriptionPurchased !== false) {
                         shop.isSubscriptionPurchased = false;
                         shouldUpdate = true;
                     }
                 } else {
+                    // Compare package end date with current time
                     const isExpired = shop.packageEndDate < now;
                     const newStatus = !isExpired;
+                    // Update only if status has changed
                     if (shop.isSubscriptionPurchased !== newStatus) {
                         shop.isSubscriptionPurchased = newStatus;
                         shouldUpdate = true;
@@ -739,7 +825,23 @@ const ShopService = {
         }
     },
 
-
+    /**
+     * @async
+     * @function getNearbyShop
+     * @description
+     * Retrieves a list of nearby shops within a 15 km radius of the provided location.
+     * The function first checks for shops whose subscription has expired and updates
+     * their `isSubscriptionPurchased` status to `false`. It then fetches active shops
+     * (those with a valid subscription) located within the radius, including related package data.
+     *
+     * @param {Object} data - The input data containing location coordinates.
+     * @param {number} data.latitude - Latitude of the user's current location.
+     * @param {number} data.longitude - Longitude of the user's current location.
+     *
+     * @throws {Error} If any database or aggregation operation fails.
+     * @returns {Promise<Array<Object>>} A list of nearby shops with active subscriptions,
+     * each enriched with distance (in km) and populated package details.
+     */
     async getNearbyShop(data) {
         const { latitude, longitude } = data;
         const MAX_DISTANCE_METERS = 15 * 1000;
@@ -780,17 +882,20 @@ const ShopService = {
                 }
             },
             {
+                // Convert distance to kilometers for readability
                 $addFields: {
                     distanceInKm: { $divide: ["$distance", 1000] }
                 }
             },
             {
+                // Filter only active subscribed shops within 15 km
                 $match: {
                     distanceInKm: { $lte: 15 },
                     isSubscriptionPurchased: true
                 }
             },
             {
+                // Populate primary package details
                 $lookup: {
                     from: "packages",
                     localField: "packageId",
@@ -806,6 +911,7 @@ const ShopService = {
                 }
             },
             {
+                // Populate any additional package details
                 $lookup: {
                     from: "packages",
                     localField: "AdditionalPackages",
@@ -817,19 +923,49 @@ const ShopService = {
         return nearbyShops;
     },
 
+    /**
+ * @async
+ * @function AddProduct
+ * @description
+ * Adds a new product to a specific shop. Handles uploading product images,
+ * validating discount information, and saving the product to the database.
+ *
+ * @param {Object} data - The input data required to create a product.
+ * @param {Array<string|Buffer>} data.productsImage - Array of product images (base64 or file paths).
+ * @param {string} data.productName - Name of the product.
+ * @param {string} data.productsDescription - Description of the product.
+ * @param {number} data.productsPrice - Price of the product before discount.
+ * @param {string} data.productCategory - Product category ID or name.
+ * @param {string} data.productSubCategory - Product subcategory ID or name.
+ * @param {string} data.productBrand - Brand name or ID of the product.
+ * @param {string} data.shopId - The ID of the shop to which this product belongs.
+ * @param {number} data.discountedvalue - Discount value (either fixed amount or percentage).
+ * @param {string} data.discounttype - Type of discount ("fixed" or "percent").
+ *
+ * @throws {Error} If an image upload fails or product creation encounters a database error.
+ * @returns {Promise<Object>} The newly created product document.
+ */
     async AddProduct(data) {
         const { productsImage, productName, productsDescription, productsPrice,
             productCategory, productSubCategory, productBrand, shopId, discountedvalue, discounttype } = data;
+        // Array to store URLs of uploaded images
         let imagesUrl = [];
         if (productsImage && productsImage.length > 0) {
             for (const image of productsImage) {
+
+                // Upload each image to the "Product" folder in your storage service
                 const uploadedImage = await ImageUploader.Upload(image, "Product");
+
+                // Push the returned URL to the images array
                 imagesUrl.push(uploadedImage);
             }
         }
 
         const finalDiscount = {
+            // If the discount type is 'fixed', the discount value will be 0 (price reduced by fixed value)
+            // If it's 'percent', keep the provided percentage value
             discountedvalue: discounttype === 'fixed' ? 0 : discountedvalue,
+            // Always store discount type in lowercase and default to 'percent' if invalid
             discounttype: discounttype.toLowerCase() === 'fixed' ? 'fixed' : 'percent'
         };
         const product = new Product({
@@ -852,44 +988,52 @@ const ShopService = {
         }
 
     },
-    // async editProduct(data) {
-    //     const { productId, discounttype, discountedvalue, ...rest } = data;
 
-    //     if (discounttype && discountedvalue !== undefined) {
-    //         rest.productDiscount = {
-    //             discounttype: discounttype.toLowerCase(),
-    //             discountedvalue: discountedvalue,
-    //         };
-    //     }
-
-    //     try {
-    //         const updatedProduct = await Product.findByIdAndUpdate(productId, { $set: rest }, { new: true });
-    //         return updatedProduct;
-    //     } catch (err) {
-    //         console.error("Failed to edit product:", err);
-    //         throw err;
-    //     }
-    // },
-
-
+    /**
+     * @async
+     * @function editProduct
+     * @description
+     * Updates an existing product's details, including images, discounts, and metadata.
+     * Handles optional image replacement and tracks the number of edits made by the shop.
+     *
+     * @param {Object} data - The product update details.
+     * @param {string} data.productId - The unique ID of the product to update.
+     * @param {string} data.shopId - The shop ID (for validation and edit tracking).
+     * @param {string} [data.discounttype] - Type of discount ("fixed" or "percent").
+     * @param {number} [data.discountedvalue] - Value of discount (fixed amount or percentage).
+     * @param {boolean} [data.isImageEditDone=false] - Indicates whether images were edited.
+     * @param {Array<string|Buffer>} [data.productsImage] - Array of new images (Base64 or URLs).
+     * @param {...any} rest - Any additional fields to update.
+     *
+     * @throws {Error} If the product or shop is not found, or if database operations fail.
+     * @returns {Promise<Object>} The updated product document.
+     */
     async editProduct(data) {
         const { productId, shopId, discounttype, discountedvalue, isImageEditDone, productsImage, ...rest } = data;
 
+        // Handle discount updates if provided
         if (discounttype && discountedvalue !== undefined) {
             rest.productDiscount = {
                 discounttype: discounttype.toLowerCase(),
                 discountedvalue: discountedvalue,
             };
         }
+        // Find existing product
         const product = await Product.findById(productId);
+
+        // Find the shop associated with the product
         const shop = await Shop.findById(product.shopId);
+
+        // If images were edited, increment the shop's edit count
         if (isImageEditDone) {
             shop.TotalEditDone += 1;
         }
 
+        // Process new product images if any
         if (productsImage && Array.isArray(productsImage)) {
             const processedImages = [];
             for (let img of productsImage) {
+                // Upload base64 images, keep URLs as-is
                 if (isBase64Image(img)) {
                     const uploadedUrl = await ImageUploader.Upload(img, "Product");
                     processedImages.push(uploadedUrl);
@@ -913,8 +1057,27 @@ const ShopService = {
             throw err;
         }
     },
+    /**
+ * @async
+ * @function getFilterProduct
+ * @description Retrieves filtered products for a specific shop based on category, subcategory, or brand filters.
+ * Supports pagination and groups the results by product category.
+ *
+ * @param {Object} filters - Filter options for fetching products.
+ * @param {string} filters.shopId - The shop ID for which products are to be fetched.
+ * @param {Array<string>} [filters.productCategory] - List of category IDs or names to filter by.
+ * @param {Array<string>} [filters.productSubCategory] - List of subcategory IDs or names to filter by.
+ * @param {Array<string>} [filters.productBrand] - List of brand IDs or names to filter by.
+ * @param {number} [filters.page=1] - The current page number for pagination.
+ *
+ * @returns {Promise<Object>} Returns an object containing categorized and paginated products.
+ * @throws {Error} Throws an error if the query or database operation fails.
+ */
     async getFilterProduct(filters) {
+        // Base query to filter products by shop ID
         const baseQuery = { shopId: filters.shopId };
+
+        // Collect OR conditions for category, subcategory, and brand filters
         const orConditions = [];
 
         if (filters.productCategory?.length > 0) {
@@ -929,6 +1092,7 @@ const ShopService = {
             orConditions.push({ productBrand: { $in: filters.productBrand } });
         }
 
+        // Combine base query and filter conditions
         const finalQuery = {
             ...baseQuery,
             ...(orConditions.length > 0 ? { $or: orConditions } : {}),
@@ -939,10 +1103,12 @@ const ShopService = {
         const skip = (page - 1) * limit;
 
         try {
+            // Fetch all products matching the filters
             const allMatchingProducts = await Product.find(finalQuery)
                 .sort({ createdAt: -1 })
                 .lean();
 
+            // Group products by category
             const categorizedProducts = {};
             for (const product of allMatchingProducts) {
                 const category = product.productCategory || "Uncategorized";
@@ -952,6 +1118,7 @@ const ShopService = {
                 categorizedProducts[category].push(product);
             }
 
+            // Apply pagination within each category
             const filterProducts = {};
             for (const category in categorizedProducts) {
                 const items = categorizedProducts[category];
@@ -966,185 +1133,21 @@ const ShopService = {
             throw err;
         }
     },
-    // async getFilterProduct(filters) {
-    //     const query = { shopId: filters.shopId };
 
-    //     if (filters.productCategory && filters.productCategory.length > 0) {
-    //         query.productCategory = { $in: filters.productCategory };
-    //     }
-
-    //     if (filters.productSubCategory && filters.productSubCategory.length > 0) {
-    //         query.productSubCategory = { $in: filters.productSubCategory };
-    //     }
-
-    //     if (filters.productBrand && filters.productBrand.length > 0) {
-    //         query.productBrand = { $in: filters.productBrand };
-    //     }
-
-    //     const page = parseInt(filters.page) || 1;
-    //     const limit = 10;
-    //     const skip = (page - 1) * limit;
-
-    //     try {
-    //         const allMatchingProducts = await Product.find(query)
-    //             .sort({ createdAt: -1 })
-    //             .lean();
-
-    //         const categorizedProducts = {};
-    //         for (const product of allMatchingProducts) {
-    //             const category = product.productCategory || "Uncategorized";
-    //             if (!categorizedProducts[category]) {
-    //                 categorizedProducts[category] = [];
-    //             }
-    //             categorizedProducts[category].push(product);
-    //         }
-
-    //         const filterProducts = {};
-    //         for (const category in categorizedProducts) {
-    //             const items = categorizedProducts[category];
-    //             const total = items.length;
-    //             const paginatedItems = items.slice(skip, skip + limit);
-    //             filterProducts[category] = paginatedItems;
-    //         }
-
-    //         return filterProducts;
-
-    //     } catch (err) {
-    //         console.log("Error fetching categorized filtered products:", err);
-    //         throw err;
-    //     }
-    // },
-    // async getFilterProduct(data) {
-    //     const { latitude, longitude, shopId, page = 1 } = data;
-    //     const limit = 10;
-    //     const skip = (page - 1) * limit;
-
-    //     try {
-    //         // If shopId is provided, fetch its products
-    //         if (shopId) {
-    //             const shop = await Shop.findById(shopId);
-    //             if (!shop) {
-    //                 return CustomErrorHandler.notFound("The specified shop is not available.");
-    //             }
-
-    //             const products = await Product.find({ shopId: shop._id })
-    //                 .sort({ createdAt: -1 })
-    //                 .skip(skip)
-    //                 .limit(limit)
-    //                 .lean();
-
-    //             const totalProducts = await Product.countDocuments({ shopId: shop._id });
-
-    //             const categorizedProducts = {};
-    //             products.forEach((product) => {
-    //                 const category = product.productCategory || "Uncategorized";
-    //                 if (!categorizedProducts[category]) {
-    //                     categorizedProducts[category] = [];
-    //                 }
-    //                 categorizedProducts[category].push(product);
-    //             });
-
-    //             return {
-    //                 source: "shop",
-    //                 shop: shop,
-    //                 totalProducts,
-    //                 products: categorizedProducts
-    //             };
-    //         }
-
-    //         // If shopId is not provided, proceed with finding nearby shops
-    //         const MAX_DISTANCE_METERS = 15 * 1000;
-    //         const userLocation = {
-    //             type: "Point",
-    //             coordinates: [longitude, latitude]
-    //         };
-
-    //         // Expire subscriptions of outdated shops
-    //         const expiredShops = await Shop.find({
-    //             "locationHistory.point": {
-    //                 $near: {
-    //                     $geometry: userLocation,
-    //                     $maxDistance: MAX_DISTANCE_METERS
-    //                 }
-    //             },
-    //             packageEndDate: { $lt: new Date() },
-    //             isSubscriptionPurchased: true
-    //         }).select('_id');
-
-    //         if (expiredShops.length > 0) {
-    //             const expiredShopIds = expiredShops.map(shop => shop._id);
-    //             await Shop.updateMany(
-    //                 { _id: { $in: expiredShopIds } },
-    //                 { $set: { isSubscriptionPurchased: false } }
-    //             );
-    //         }
-
-    //         // Find nearby active shops
-    //         const nearbyShops = await Shop.aggregate([
-    //             {
-    //                 $geoNear: {
-    //                     near: userLocation,
-    //                     distanceField: "distance",
-    //                     spherical: true,
-    //                     maxDistance: MAX_DISTANCE_METERS
-    //                 }
-    //             },
-    //             {
-    //                 $addFields: {
-    //                     distanceInKm: { $divide: ["$distance", 1000] }
-    //                 }
-    //             },
-    //             {
-    //                 $match: {
-    //                     distanceInKm: { $lte: 15 },
-    //                     isSubscriptionPurchased: true
-    //                 }
-    //             },
-    //             {
-    //                 $lookup: {
-    //                     from: "packages",
-    //                     localField: "packageId",
-    //                     foreignField: "_id",
-    //                     as: "packageId"
-    //                 }
-    //             },
-    //             {
-    //                 $unwind: {
-    //                     path: "$packageId",
-    //                     preserveNullAndEmptyArrays: true
-    //                 }
-    //             },
-    //             {
-    //                 $lookup: {
-    //                     from: "packages",
-    //                     localField: "AdditionalPackages",
-    //                     foreignField: "_id",
-    //                     as: "AdditionalPackages"
-    //                 }
-    //             }
-    //         ]);
-
-    //         // Fetch products from all nearby shops
-    //         const shopIds = nearbyShops.map(shop => shop._id);
-    //         const nearbyProducts = await Product.find({ shopId: { $in: shopIds } })
-    //             .sort({ createdAt: -1 })
-    //             .skip(skip)
-    //             .limit(limit)
-    //             .lean();
-
-    //         return {
-    //             source: "nearby",
-    //             shops: nearbyShops,
-    //             products: nearbyProducts
-    //         };
-
-    //     } catch (error) {
-    //         console.log("Failed to get products based on location or shopId", error);
-    //         throw error;
-    //     }
-    // },
+    /**
+     * @async
+     * @function getProduct
+     * @description Fetches a single product by its unique product ID.
+     *
+     * @param {Object} data - Request data containing product details.
+     * @param {string} data.productId - The unique identifier of the product to fetch.
+     *
+     * @returns {Promise<Object>} Returns the product document if found.
+     * @throws {Error} Throws an error if the product is not found or query fails.
+     */
     async getProduct(data) {
         try {
+            // Fetch product by ID
             const product = await Product.findById(data.productId);
             if (!product) {
                 throw CustomErrorHandler.notFound("Product Not Found");
@@ -1155,9 +1158,21 @@ const ShopService = {
         }
     },
 
-
+    /**
+     * @async
+     * @function getShopProduct
+     * @description Fetches products belonging to a specific shop, applies pagination, and groups them by category.
+     *
+     * @param {Object} data - Request payload containing shop and pagination details.
+     * @param {string} data.shopId - The unique identifier of the shop whose products are to be fetched.
+     * @param {number} [data.page=1] - The current page number for paginated results.
+     *
+     * @returns {Promise<Object>} Returns categorized and paginated products grouped by category.
+     * @throws {Error} Throws an error if the shop is not found or query fails.
+     */
     async getShopProduct(data) {
         try {
+            // Verify if the shop exists
             const shop = await Shop.findById(data.shopId);
             if (!shop) {
                 return CustomErrorHandler.notFound("The specified shop is not available.");
@@ -1167,6 +1182,7 @@ const ShopService = {
             const limit = 10;
             const skip = (page - 1) * limit;
 
+            // Fetch shop products with pagination and sorting (latest first)
             const products = await Product.find({ shopId: shop._id })
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -1174,6 +1190,8 @@ const ShopService = {
                 .lean();
 
             const totalProducts = await Product.countDocuments({ shopId: shop._id });
+
+            // Group products by category
             const categorizedProducts = {};
             products.forEach((product) => {
                 const category = product.productCategory || "Uncategorized";
@@ -1189,8 +1207,24 @@ const ShopService = {
             throw error;
         }
     },
+
+    /**
+ * @async
+ * @function getShopProductForUser
+ * @description Fetches all active products for a specific shop (visible to users), applies pagination, 
+ * and groups them by product category.
+ *
+ * @param {Object} data - Request payload containing shop and pagination details.
+ * @param {string} data.shopId - The unique identifier of the shop whose products are to be fetched.
+ * @param {number} [data.page=1] - The page number for pagination.
+ *
+ * @returns {Promise<Object>} Returns categorized and paginated active products grouped by category.
+ * @throws {Error} Throws an error if the shop is not found or query fails.
+ */
     async getShopProductForUser(data) {
         try {
+
+            // Verify that the shop exists
             const shop = await Shop.findById(data.shopId);
             if (!shop) {
                 return CustomErrorHandler.notFound("The specified shop is not available.");
@@ -1200,6 +1234,7 @@ const ShopService = {
             const limit = 10;
             const skip = (page - 1) * limit;
 
+            // Fetch only active products belonging to this shop
             const products = await Product.find({ shopId: shop._id, isActive: true })
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -1207,6 +1242,8 @@ const ShopService = {
                 .lean();
 
             const totalProducts = await Product.countDocuments({ shopId: shop._id });
+
+            // Group products by category
             const categorizedProducts = {};
             products.forEach((product) => {
                 const category = product.productCategory || "Uncategorized";
@@ -1222,8 +1259,25 @@ const ShopService = {
             throw error;
         }
     },
+    /**
+ * @async
+ * @function getTotalImageCount
+ * @description Calculates the total number of images used by a shop, compares it with the total media limit
+ * based on its subscribed packages, and returns related statistics such as edit limits.
+ *
+ * @param {string} shopId - The unique identifier of the shop.
+ * @returns {Promise<Object>} Returns an object containing image and edit count details:
+ *  {
+ *    totalImageCount,        // Total number of product images in the shop
+ *    totalMediaLimit,        // Total media limit from all active packages
+ *    TotalEditDone,          // Total number of edits done by the shop
+ *    totalMaxEditsAllowed    // Combined edit limit from all packages
+ *  }
+ * @throws {Error} Throws an error if the shop is not found or if any operation fails.
+ */
     async getTotalImageCount(shopId) {
         try {
+            // Fetch shop details along with subscribed packages
             const shop = await Shop.findById(shopId)
                 .populate('packageId')
                 .populate('AdditionalPackages');
@@ -1232,11 +1286,16 @@ const ShopService = {
                 throw CustomErrorHandler.notFound("The specified shop is not available.");
             }
 
+            // Fetch all products for the shop and select only image fields
             const products = await Product.find({ shopId: shop._id }).select('productsImage').lean();
+
+            // Calculate total number of product images
             let totalImageCount = 0;
             products.forEach(product => {
                 totalImageCount += product.productsImage?.length || 0;
             });
+
+            // Calculate total allowed media (from base package + additional packages)
             let totalMediaLimit = 0;
             if (shop.packageId) {
                 totalMediaLimit += shop.packageId.maxMedia || 0;
@@ -1246,7 +1305,11 @@ const ShopService = {
                     totalMediaLimit += pkg.maxMedia || 0;
                 });
             }
+
+            // Retrieve total edits done by the shop
             let TotalEditDone = shop.TotalEditDone;
+
+            // Calculate total maximum allowed edits
             let totalMaxEditsAllowed = 0;
             if (shop.packageId) {
                 totalMaxEditsAllowed += shop.packageId.MaxEditAllowed || 0;
@@ -1268,15 +1331,29 @@ const ShopService = {
             throw error;
         }
     },
+    /**
+ * @async
+ * @function setProductActiveStatus
+ * @description Toggles the active/inactive status of a product.
+ *
+ * @param {Object} data - The input data.
+ * @param {string} data.productId - The unique identifier of the product.
+ * @param {boolean} data.isActive - The current active status of the product.
+ * @returns {Promise<Object>} Returns the updated product document.
+ * @throws {Error} Throws an error if the product is not found or the update fails.
+ */
     async setProductActiveStatus(data) {
         try {
-
+            // Find the product by ID
             const product = await Product.findById(data.productId);
             if (!product) {
                 return CustomErrorHandler.notFound("The specified product is not available.");
             }
+
+            // Toggle the product's active status
             product.isActive = !data.isActive;
 
+            // Save the updated product to the database
             await product.save();
             return product;
         } catch (error) {
@@ -1285,23 +1362,39 @@ const ShopService = {
     },
 
 
-    //here we are using levenshteinDistance alogrithm to correct the incorrect query provided by user
+    /**
+ * @async
+ * @function correctIncorrectQuery
+ * @description Uses the Levenshtein Distance algorithm to calculate how different
+ *              two strings are — useful for correcting or matching user queries.
+ *
+ * @param {string} source - The original user-provided string (possibly incorrect).
+ * @param {string} target - The correct or reference string.
+ * @returns {number} The Levenshtein distance (number of edits required to convert source → target).
+ */
     async correctIncorrectQuery(source, target) {
         const matrix = [];
 
-        // Initialize matrix
+        // Initialize the first column of the matrix
         for (let i = 0; i <= target.length; i++) {
             matrix[i] = [i];
         }
+
+        // Initialize the first row of the matrix
         for (let j = 0; j <= source.length; j++) {
             matrix[0][j] = j;
         }
+
         // Populate matrix using Levenshtein distance
         for (let i = 1; i <= target.length; i++) {
             for (let j = 1; j <= source.length; j++) {
                 if (target.charAt(i - 1) === source.charAt(j - 1)) {
+
+                    // No operation needed if characters match
                     matrix[i][j] = matrix[i - 1][j - 1];
                 } else {
+
+                    // Minimum of replace, insert, or delete
                     matrix[i][j] = Math.min(
                         matrix[i - 1][j - 1] + 1,
                         matrix[i][j - 1] + 1,
@@ -1310,9 +1403,21 @@ const ShopService = {
                 }
             }
         }
+        // Return the edit distance between source and target
         return matrix[target.length][source.length];
     },
-
+    /**
+     * @async
+     * @function searchShopsAndProducts
+     * @description
+     * Performs a flexible search across shops and products.
+     * 1. Tries to find matches using the user's original query.
+     * 2. If no match is found, applies Levenshtein-based spell correction
+     *    to suggest and search with the corrected query.
+     *
+     * @param {string} query - The user’s input text for searching.
+     * @returns {Promise<Object>} - Returns matched shops, products, and spell suggestions.
+     */
     async searchShopsAndProducts(query) {
         try {
             //first we well try to find the orginal query result or partially match result 
@@ -1327,6 +1432,7 @@ const ShopService = {
                 ]
             }).populate('packageId');
 
+            // Search in product-related fields
             const initialProducts = await Product.find({
                 $or: [
                     { productName: originalQueryRegex },
@@ -1337,9 +1443,8 @@ const ShopService = {
                 ]
             });
 
-            /* If we find the result based on the user orginal query there is no 
-            need for us to do spell correction such that we return the original result */
-
+            //If we find the result based on the user orginal query there is 
+            // no need for us to do spell correction such that we return the original result 
             if (initialShops.length > 0 || initialProducts.length > 0) {
                 const shops = await Shop.find({
                     $or: [
@@ -1362,9 +1467,11 @@ const ShopService = {
                 return { shops, products, didYouMean: null, originalQuery: query, correctedQuery: null };
             }
 
-            /* if we dont find the result based on user orginal text wheater the query text is incorret
-            we will do an spell correction to find the result using correct query
-            Lets get the relevant field from database that might contain the search term */
+            /**
+             *if we dont find the result based on user orginal text wheater the query text is incorret
+             we will do an spell correction to find the result using correct query
+             Lets get the relevant field from database that might contain the search term
+              */
 
             const [
                 categories,
@@ -1483,28 +1590,45 @@ const ShopService = {
 
 
 
-    async getSpecificProduct(data) {
+    // async getSpecificProduct(data) {
 
-        try {
-            const product = await Product.findById(data.productId).populate('shopId');
-            if (!product) {
-                return CustomErrorHandler.notFound("Product not found.");
-            }
-            return product;
-        } catch (error) {
-            console.log("Unable to fetch specific product:", error);
-        }
-    },
+    //     try {
+    //         const product = await Product.findById(data.productId).populate('shopId');
+    //         if (!product) {
+    //             return CustomErrorHandler.notFound("Product not found.");
+    //         }
+    //         return product;
+    //     } catch (error) {
+    //         console.log("Unable to fetch specific product:", error);
+    //     }
+    // },
 
+    /**
+     * @async
+     * @function addCategory
+     * @description
+     * Adds a new category or updates an existing one by appending unique items.
+     *
+     * @param {Object} data - Input data for category creation or update.
+     * @param {string} data.categoryfor - The name or type of the category.
+     * @param {string[]} data.items - An array of category items to add.
+     * @returns {Promise<Object>} Returns the saved or updated category document with a success message.
+     */
     async addCategory(data) {
 
         const { categoryfor, items } = data;
+
+        // Check if a category with the given 'categoryFor' already exists
         const isCategoryExist = await Category.findOne({ categoryFor: categoryfor });
         if (isCategoryExist) {
+
+            // Add new unique items to the existing category using $addToSet
             const updatedCategoryitem = await Category.updateOne(
                 { categoryFor: categoryfor },
                 { $addToSet: { categoryItem: { $each: items } } }
             );
+
+            // If the update operation modified the document, return the updated category
             if (updatedCategoryitem.modifiedCount > 0) {
                 const category = await Category.findOne({ categoryFor: categoryfor });
                 return {
@@ -1522,8 +1646,19 @@ const ShopService = {
             return result;
         }
     },
+
+    /**
+     * @async
+    * @function getCategory
+    * @description
+    * Retrieves all category items for the "Sports" category from the database.
+    *
+    * @returns {Promise<string[]>} Returns an array of category items if found, or an empty    array if not.
+    */
     async getCategory() {
         try {
+            // Fetch categories where categoryFor is "Sports"
+
             const categories = await Category.find(
                 { categoryFor: "Sports" },
                 {
@@ -1543,8 +1678,19 @@ const ShopService = {
         }
     },
 
+    /**
+     * @async
+     * @function getSubCategory
+     * @description
+     * Retrieves all sub-category items for a given category type (e.g., "Sports sub", "Electronics sub").
+    *
+    * @param {Object} data - The input data object.
+     * @param {string} data.category - The main category name to fetch sub-categories for.
+     * @returns {Promise<string[]>} Returns an array of sub-category items if found, or an empty array otherwise.
+    */
     async getSubCategory(data) {
         const category = data.category;
+        // Fetch the sub-category document based on "categoryFor"
         const subCategory = await Category.find({
             categoryFor: `${category} sub`
         }, {
@@ -1558,8 +1704,18 @@ const ShopService = {
             return [];
         }
     },
+
+    /**
+ * @async
+ * @function getBrand
+ * @description
+ * Retrieves all brand items under the "Sports_Brand" category from the database.
+ *
+ * @returns {Promise<string[]>} Returns an array of brand items if found, or an empty array otherwise.
+ */
     async getBrand() {
         try {
+            // Fetch all brand categories where categoryFor is "Sports_Brand"
             const categories = await Category.find(
                 { categoryFor: "Sports_Brand" },
                 {
@@ -1578,15 +1734,31 @@ const ShopService = {
             return [];
         }
     },
+
+    /**
+ * @async
+ * @function setProductDiscount
+ * @description
+ * Updates the discount details (value and type) for a specific product.
+ *
+ * @param {Object} data - The input data.
+ * @param {String} data.productId - The ID of the product to update.
+ * @param {Object} data.discount - The discount details to set.
+ * @param {Number} data.discount.value - The discount value.
+ * @param {String} data.discount.type - The discount type (e.g., "percentage" or "flat").
+ * @returns {Promise<Object>} Returns the updated product document.
+ */
     async setProductDiscount(data) {
         const { productId, discount } = data;
 
         try {
+            // Find the product by its ID
             const product = await Product.findById(productId);
             if (!product) {
                 return CustomErrorHandler.notFound("Product not found.");
             }
 
+            // Update discount details
             product.productDiscount = {
                 value: discount.value,
                 type: discount.type,
@@ -1599,20 +1771,38 @@ const ShopService = {
             throw err;
         }
     },
+
+    /**
+ * @async
+ * @function updateSubscriptionStatus
+ * @description
+ * Updates a shop’s subscription details when a new package is purchased.
+ *
+ * @param {Object} data - Input data for updating subscription.
+ * @param {String} data.shopId - The ID of the shop whose subscription is being updated.
+ * @param {String} data.packageId - The ID of the purchased package.
+ * @param {Date} data.packageStartDate - Subscription start date.
+ * @param {Date} data.packageEndDate - Subscription end date.
+ * @returns {Promise<Object>} Returns the updated shop document.
+ */
     async updateSubscriptionStatus(data) {
         try {
+            // Find the shop by ID
             const shop = await Shop.findById(data.shopId);
             if (!shop) {
                 return CustomErrorHandler.notFound("Shop Not Found");
             }
+            // Find the associated user of the shop
             const user = await User.findById(shop.userId);
             if (!user) {
                 return CustomErrorHandler.notFound("User Not Found");
             }
+            // Find the purchased package by ID
             const purchasedPackage = await Package.findById(data.packageId);
             if (!purchasedPackage) {
                 return CustomErrorHandler.notFound("Package Not Found");
             }
+            // Update subscription-related fields in the shop document
             shop.packageId = data.packageId;
             shop.packageStartDate = data.packageStartDate;
             shop.packageEndDate = data.packageEndDate;
@@ -1624,21 +1814,39 @@ const ShopService = {
         }
     },
 
+    /**
+ * @async
+ * @function addExtensionPackage
+ * @description
+ * Adds an additional (extension) package to a shop that already has an active subscription.
+ *
+ * @param {Object} data - The data required to add an extension package.
+ * @param {String} data.shopId - The ID of the shop to which the package is being added.
+ * @param {String} data.packageId - The ID of the package being added as an extension.
+ * @returns {Promise<Object>} Returns the updated shop document after adding the extension package.
+ */
     async addExtensionPackage(data) {
         try {
+            // Find the shop by ID
             const shop = await Shop.findById(data.shopId);
             if (!shop) {
                 return CustomErrorHandler.notFound("Shop Not Found");
             }
+            // Ensure the shop has an active base subscription before adding extensions
             if (shop.isSubscriptionPurchased == false) throw CustomErrorHandler.notFound("You Need an Active Subscription To add Extension Package");
+
+            // Find the user associated with this shop
             const user = await User.findById(shop.userId);
             if (!user) {
                 return CustomErrorHandler.notFound("User Not Found");
             }
+
+            // Find the package being added as an extension
             const purchasedPackage = await Package.findById(data.packageId);
             if (!purchasedPackage) {
                 return CustomErrorHandler.notFound("Package Not Found");
             }
+            // Add the new package to the shop's AdditionalPackages array
             shop.AdditionalPackages.push(data.packageId);
             shop.save();
             return shop;
@@ -1809,6 +2017,7 @@ const ShopService = {
     //     }
     // },
 
+    //TODO: Not used async method
     async getMoreFromBrand(brand, productId, page = 1, limit = 10) {
         try {
             const skip = (page - 1) * limit;
@@ -1826,32 +2035,56 @@ const ShopService = {
             throw error;
         }
     },
+
+    /**
+ * @async
+ * @function getShopAnalytics
+ * @description
+ * Retrieves analytics for a specific shop, including product views, visits, active products,
+ * top viewed products, and visitor trends for the last 7 days.
+ *
+ * @param {String} shopId - The ID of the shop to analyze.
+ * @returns {Promise<Object>} Returns an object containing shop analytics.
+ */
     async getShopAnalytics(shopId) {
         try {
+            // Fetch the shop document
+
             const shop = await Shop.findById(shopId);
             if (!shop) {
                 throw CustomErrorHandler.notFound("Shop not found");
             }
+            // Count total number of product views for this shop
 
             const totalProductViews = await ProductView.countDocuments({ shopId });
+            // Count total number of visits to this shop
 
             const totalShopVisits = await ShopVisit.countDocuments({ shopId });
+
+            // Count total and active products for this shop
+
             const totalProducts = await Product.countDocuments({ shopId });
             const activeProducts = await Product.countDocuments({ shopId, isActive: true });
+
+            // Fetch the most viewed products using aggregation
+
             const topProducts = await ProductView.aggregate([
                 {
                     $match:
                     {
+                        // Match only the views belonging to the given shop
                         shopId: mongoose.Types.ObjectId(shopId)
                     }
                 },
                 {
                     $group: {
+                        // Group by productId and count views
                         _id: "$productId",
                         viewCount: { $sum: 1 }
                     }
                 },
                 {
+                    // Sort products by total view count (descending)
                     $sort: {
                         viewCount: -1
                     }
@@ -1860,6 +2093,7 @@ const ShopService = {
                 //     $limit: 5
                 // },
                 {
+                    // Join product details from the "products" collection
                     $lookup: {
                         from: "products",
                         localField: "_id",
@@ -1880,14 +2114,17 @@ const ShopService = {
                 }
             ]);
 
-
+            // Prepare date range for the last 7 days
             const today = new Date();
             const sevenDaysAgo = new Date(today);
             sevenDaysAgo.setDate(today.getDate() - 7);
 
+            // Aggregate visitor trend (daily visit count for last 7 days)
+
             const visitorTrend = await ShopVisit.aggregate([
                 {
                     $match: {
+                        // Match visits within the last 7 days
                         shopId: mongoose.Types.ObjectId(shopId),
                         visitedAt: { $gte: sevenDaysAgo }
                     }
@@ -1895,6 +2132,7 @@ const ShopService = {
                 {
                     $group: {
                         _id: {
+                            // Group visits by date (year, month, day)
                             year: { $year: "$visitedAt" },
                             month: { $month: "$visitedAt" },
                             day: { $dayOfMonth: "$visitedAt" }
@@ -1903,12 +2141,14 @@ const ShopService = {
                     }
                 },
                 {
+                    // Sort by chronological order
                     $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
                 },
                 {
                     $project: {
                         _id: 0,
                         date: {
+                            // Reformat grouped data into readable date objects
                             $dateFromParts: {
                                 year: "$_id.year",
                                 month: "$_id.month",
@@ -1934,9 +2174,20 @@ const ShopService = {
         }
     },
 
-    // Get product view analytics for a specific time range
+    /**
+ * @async
+ * @function getProductViewAnalytics
+ * @description
+ * Retrieves product view analytics for a shop within a given time range.
+ * Includes most viewed products, daily view trends, and category-wise view distribution.
+ *
+ * @param {String} shopId - The ID of the shop.
+ * @param {String} timeRange - The time range for analytics ('7days', '15days', '30days', or 'all').
+ * @returns {Promise<Object>} Returns an object containing analytics data.
+ */
     async getProductViewAnalytics(shopId, timeRange) {
         try {
+            // Verify if the shop exists
             const shop = await Shop.findById(shopId);
             if (!shop) {
                 throw CustomErrorHandler.notFound("Shop not found");
@@ -1944,7 +2195,7 @@ const ShopService = {
 
             const today = new Date();
             let startDate;
-
+            // Determine the starting date based on the selected time range
             switch (timeRange) {
                 case '7days':
                     startDate = new Date(today);
@@ -2081,9 +2332,20 @@ const ShopService = {
         }
     },
 
-    // Get visitor analytics
+    /**
+ * @async
+ * @function getVisitorAnalytics
+ * @description
+ * Retrieves visitor analytics for a specific shop and time range.
+ * Includes total visitors, unique visitors, and daily visitor trends.
+ *
+ * @param {String} shopId - The ID of the shop.
+ * @param {String} timeRange - The time range for analytics ('7days', '15days', '30days', or 'all').
+ * @returns {Promise<Object>} Returns analytics data for the shop's visitors.
+ */
     async getVisitorAnalytics(shopId, timeRange) {
         try {
+            // Check if the shop exists
             const shop = await Shop.findById(shopId);
             if (!shop) {
                 throw CustomErrorHandler.notFound("Shop not found");
@@ -2091,7 +2353,7 @@ const ShopService = {
 
             const today = new Date();
             let startDate;
-
+            // Determine start date based on time range
             switch (timeRange) {
                 case '7days':
                     startDate = new Date(today);
@@ -2110,7 +2372,8 @@ const ShopService = {
                     startDate = new Date(0); // Beginning of time
             }
 
-            // Get total visitors
+            // Count total visitors within the selected range
+
             const totalVisitors = await ShopVisit.countDocuments({
                 shopId,
                 visitedAt: { $gte: startDate }
@@ -2184,7 +2447,17 @@ const ShopService = {
         }
     },
 
-
+    /**
+     * @async
+     * @function getDailyVisitors
+     * @description
+     * Retrieves the number of visitors per day for a given shop over a specified number of days.
+     * Ensures that all days are represented in the output, even if no visits occurred on a given day.
+     *
+     * @param {String} shopId - The ID of the shop to retrieve analytics for.
+     * @param {Number} days - The number of past days to include in the report.
+     * @returns {Promise<Object>} Returns daily visitor data for the specified time period.
+     */
     async getDailyVisitors(shopId, days) {
         try {
             const shop = await Shop.findById(shopId);
@@ -2263,7 +2536,18 @@ const ShopService = {
             throw error;
         }
     },
-
+    /**
+     * @async
+     * @function recordProductView
+     * @description
+     * Records a new product view if it hasn’t already been viewed by the same user.
+     * Prevents duplicate views from the same user for the same product.
+     *
+     * @param {Object} data - The input data for the view.
+     * @param {String} data.productId - The ID of the product being viewed.
+     * @param {String} data.shopId - The ID of the shop the product belongs to.
+     * @returns {Promise<Boolean>} Returns true if the view was recorded, false if it already existed.
+     */
     async recordProductView(data) {
         const { productId, shopId } = data;
 
@@ -2298,6 +2582,17 @@ const ShopService = {
         }
     },
 
+    /**
+ * @async
+ * @function recordShopVisit
+ * @description
+ * Records a shop visit for a logged-in user if it hasn't already been recorded.
+ * Prevents duplicate visits from the same user to the same shop.
+ *
+ * @param {Object} data - The visit data.
+ * @param {String} data.shopId - The ID of the shop being visited.
+ * @returns {Promise<Boolean>} Returns true if the visit was recorded successfully, false if already exists.
+ */
     async recordShopVisit(data) {
         const { shopId } = data;
         try {

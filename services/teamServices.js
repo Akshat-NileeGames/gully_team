@@ -10,6 +10,14 @@ import teamController from "../controllers/teamController.js";
 import Types from "mongoose";
 
 const teamServices = {
+
+  /**
+  * @function getTeamById
+  * @description Fetch a team by its ID.
+  * @param {string} TeamId - The unique team ID.
+  * @returns {Promise<Object>} Team data if found.
+  * @throws {Error} Throws if the team does not exist.
+  */
   async getTeamById(TeamId) {
     //Find the Banner
     let teamData = await Team.findOne({ _id: TeamId });
@@ -21,20 +29,15 @@ const teamServices = {
 
     let userData = await User.findOne({ _id: teamData.userId }); // Select the fields you need for the user
 
-    // let captainData = {
-    //   _id: userData._id,
-    //   name: userData.fullName,
-    //   email: userData.email,
-    //   phoneNumber: userData.phoneNumber,
-    //   role: "Captain",
-    // };
-
-    // push the captain data into the team data at index 0
-    // teamData.players.unshift(captainData);
 
     return { teamData };
   },
-
+  /**
+    * @function getAllTeams
+    * @description Fetch all teams in the system.
+    * @returns {Promise<Array>} Array of team objects.
+    * @throws {Error} Throws if no teams are found.
+    */
   async getAllTeams() {
     //Find the Banner
     let teamData = await Team.find();
@@ -46,6 +49,12 @@ const teamServices = {
     return teamData;
   },
 
+  /**
+    * @function getUserTeams
+    * @description Fetch all teams created by the currently logged-in user.
+    * @returns {Promise<Array>} Array of user teams with player counts.
+    * @throws {Error} Throws if no teams are found.
+    */
   async getUserTeams() {
     //Find the Team
     const userInfo = global.user;
@@ -67,28 +76,23 @@ const teamServices = {
 
     return modifiedTeamData;
   },
+
+  /**
+   * @function getTeamsByPhoneNumber
+   * @description Get all teams a player belongs to using their phone number.
+   * @param {string} phoneNumber - The player's phone number.
+   * @returns {Promise<Array>} Array of teams with player counts.
+   */
   async getTeamsByPhoneNumber(phoneNumber) {
     try {
-      // Step 1: Find all players associated with the given phone number
       const players = await Player.find({ phoneNumber });
-
-      // if (!players || players.length === 0) {
-      //   return next(CustomErrorHandler.notFound("No players found with this phone number."));
-      //   // console.log("No players found with this phone number.");
-      // }
-
-      // Step 2: Extract team IDs from the players
       const teamIds = players.map(player => player.team);
-
-      // Step 3: Fetch all teams by team IDs
       const teams = await Team.find({ _id: { $in: teamIds } });
 
       if (!teams || teams.length === 0) {
         // throw CustomErrorHandler.notFound("No teams found for these players.");
         console.log("No teams found for these players.");
       }
-
-      // Step 4: For each team, get the count of players in that team
       const teamsWithPlayerCount = await Promise.all(teams.map(async (team) => {
         const playerCount = await Player.countDocuments({ team: team._id });
         return {
@@ -101,72 +105,6 @@ const teamServices = {
       throw err;
     }
   },
-
-  // async getTeamsByPhoneNumber(phoneNumber) {
-  //   try {
-  //     // Step 1: Find all players associated with the given phone number
-  //     const players = await Player.find({ phoneNumber });
-
-  //     if (!players || players.length === 0) {
-  //       throw new Error("No players found with this phone number.");
-  //     }
-
-  //     // Step 2: Extract unique team IDs from the players
-  //     const teamIds = [...new Set(players.map(player => player.team.toString()))];
-
-  //     // Step 3: Fetch all teams by team IDs
-  //     const teams = await Team.find({ _id: { $in: teamIds } });
-
-  //     if (!teams || teams.length === 0) {
-  //       throw new Error("No teams found for these players.");
-  //     }
-
-  //     // Step 4: Construct the response with team details and player count
-  //     const teamsWithDetails = await Promise.all(
-  //       teams.map(async (team) => {
-  //         const playerCount = await Player.countDocuments({ team: team._id }); // Count players in the team
-  //         return {
-  //           teamId: team._id,
-  //           teamName: team.name,
-  //           teamLogo: team.logo,
-  //           playerCount: `${playerCount}/15`, // Player count formatted as 'X/15'
-  //           createdAt: team.createdAt,
-  //           updatedAt: team.updatedAt,
-  //         };
-  //       })
-  //     );
-
-  //     // Step 5: Return only teams associated with the given player's phone number
-  //     return teamsWithDetails;
-  //   } catch (err) {
-  //     console.error("Error in getTeamsByPhoneNumber:", err);
-  //     throw err;
-  //   }
-  // },
-
-
-  //old code
-  // async getUserTeams() {
-  //   //Find the Team
-  //   const userInfo = global.user; 
-
-  //   let teamData = await Team.find({ userId: userInfo.userId });
-
-  //   if (!teamData) {
-  //     // Handle the case where the Team is not found
-  //     throw CustomErrorHandler.notFound("Team Not Found");
-  //   }
-
-  //   const modifiedTeamData = teamData.map((team) => {
-  //     const playersCount = team.players.length;
-  //     return {
-  //       ...team.toObject(), // Convert Mongoose document to plain object
-  //       playersCount,
-  //     };
-  //   });
-
-  //   return modifiedTeamData;
-  // },
 
   /**
    * @function createTeam
@@ -225,96 +163,15 @@ const teamServices = {
     } //for notification
   },
 
-  //previois
-  // async createTeam(data) {
-  //   // Added fcmtoken for notifications
-  //   const { teamLogo, teamName } = data;
-  //   const userInfo = global.user;
-
-  //   let imagePath = "";
-
-  //   if (teamLogo) {
-  //     imagePath = await ImageUploader.Upload(data.teamLogo, "create-team");
-  //   }
-
-  //   const team = new Team({
-  //     teamLogo: imagePath,
-  //     teamName: teamName,
-  //     userId: userInfo.userId,
-  //     // tournamentId: tournamentId,
-  //   });
-
-  //   let teamdata = await team.save();
-
-  //   if (teamdata) {
-  //     let user = await User.findById(userInfo.userId);
-
-  //     const player = new Player({
-  //       name: user.fullName,
-  //       phoneNumber: user.phoneNumber,
-  //       role: "Captain",
-  //       team: teamdata._id,
-  //       userId: userInfo.userId,
-  //     });
-
-  //     let playerData = await player.save();
-
-  //     team.players.push(playerData._id);
-
-  //     teamdata = await team.save();
-
-  //     // for notification
-  //     const fcmToken = user.fcmToken;
-
-  //     return { teamdata, fcmToken };
-  //   } 
-  // },
-  // async createTeam(data) {
-  //   const { teamLogo, teamName } = data;
-  //   const userInfo = global.user;
-
-  //   let imagePath = "";
-
-  //   if (teamLogo) {
-  //     imagePath = await ImageUploader.Upload(data.teamLogo, "create-team");
-  //   }
-
-  //   const team = new Team({
-  //     teamLogo: imagePath,
-  //     teamName: teamName,
-  //     userId: userInfo.userId,
-  //   });
-
-  //   let teamdata = await team.save();
-
-  //   if (teamdata) {
-  //     let user = await User.findById(userInfo.userId);
-
-  //     const player = new Player({
-  //       name: user.fullName,
-  //       phoneNumber: user.phoneNumber,
-  //       role: "Captain",
-  //       team: teamdata._id,
-  //       userId: userInfo.userId,
-  //     });
-
-  //     let playerData = await player.save();
-
-  //     team.players.push(playerData._id);
-
-  //     teamdata = await team.save();
-
-  //     // for notification
-  //     const fcmToken = user.fcmToken;
-
-  //     // Debug: log the team data and fcmToken
-  //     console.log("Team Data Saved:", teamdata);
-  //     console.log("FCM Token:", fcmToken);
-
-  //     return { teamdata, fcmToken };
-  //   }
-  // },
-
+  /**
+   * @function editTeam
+   * @description Updates a team's name and/or logo.
+   * @param {Object} data - Team update data.
+   * @param {string} data.teamLogo - New logo (optional).
+   * @param {string} data.teamName - New team name.
+   * @param {string} TeamId - Team ID.
+   * @returns {Promise<Object>} Updated team data.
+   */
   async editTeam(data, TeamId) {
     const { teamLogo, teamName } = data;
 
@@ -345,211 +202,15 @@ const teamServices = {
     return teamData;
   },
 
-  // async addPlayer(data, TeamId) {
-  //   const { name, phoneNumber,role } = data;
-
-  //   const team = await Team.findById(TeamId);
-
-  //   if (!team) {
-  //     throw CustomErrorHandler.notFound("Team Not Found");
-  //   }
-
-  //   if (team.players.length >= 15) {
-  //     throw CustomErrorHandler.badRequest(
-  //       "Team is already at maximum capacity (15 players)"
-  //     );
-  //   }
-
-  //   // Check if the player already exists in the team
-  //   const existingPlayer = await Player.findOne({
-  //     team: TeamId,
-  //     phoneNumber: phoneNumber,
-  //   });
-
-  //   if (existingPlayer) {
-  //     throw CustomErrorHandler.badRequest(
-  //       "Player with the same phone number already exists in the team."
-  //     );
-  //   }
-
-  //   // Check if the user exists or create a new one
-  //   const existingUser = await User.findOne({ phoneNumber: phoneNumber });
-  //   let userId;
-  //   let fcmToken;
-  //   if (existingUser) {
-  //     userId = existingUser._id;
-  //     fcmToken = existingUser.fcmToken;
-  //   } else {
-  //     const newUser = new User({
-  //       fullName: name,
-  //       phoneNumber: phoneNumber,
-  //       registrationDate: new Date(),
-  //     });
-
-  //     const newUserData = await newUser.save();
-  //     userId = newUserData._id;
-  //     fcmToken = newUserData.fcmToken;
-  //   }
-
-  //   // Create a new player
-  //   const player = new Player({
-  //     name: name,
-  //     phoneNumber: phoneNumber,
-  //     team: TeamId,
-  //     userId: userId,
-  //     role: role,
-  //   });
-
-  //   let playerData = await player.save();
-
-  //   // Add player to the team
-  //   team.players.push(playerData._id);
-
-  //   // Set the first player added as the captain
-  //   if (team.players.length === 1) {
-  //     team.captain = playerData._id; // Set the first player as the default captain
-  //   }
-
-  //   let teamdata = await team.save();
-
-  //   return { teamdata, fcmToken };
-  // },
-  // async addPlayer(data, TeamId, currentUser) {
-  //   const { name, phoneNumber, role } = data;
-
-  //   const team = await Team.findById(TeamId);
-
-  //   if (!team) {
-  //     throw CustomErrorHandler.notFound("Team Not Found");
-  //   }
-
-  //   if (team.players.length >= 15) {
-  //     throw CustomErrorHandler.badRequest("Team is already at maximum capacity (15 players)");
-  //   }
-
-  //   // Check if the player already exists in the team
-  //   const existingPlayer = await Player.findOne({
-  //     team: TeamId,
-  //     phoneNumber: phoneNumber,
-  //   });
-
-  //   if (existingPlayer) {
-  //     throw CustomErrorHandler.badRequest(
-  //       "Player with the same phone number already exists in the team."
-  //     );
-  //   }
-
-  //   // Check if the user exists in the application
-  //   const existingUser = await User.findOne({ phoneNumber: phoneNumber });
-  //   let userId = null; // Default value for userId
-  //   let fcmToken = null;
-
-  //   if (existingUser) {
-  //     userId = existingUser._id; // Set the userId if the user exists
-  //     fcmToken = existingUser.fcmToken;
-  //   }
-
-  //   // Create a new player
-  //   const player = new Player({
-  //     name: name,
-  //     phoneNumber: phoneNumber,
-  //     team: TeamId,
-  //     userId: userId, // userId will be null if the user does not exist
-  //     role: role,
-  //   });
-
-  //   let playerData = await player.save();
-
-  //   // Assign the first player as captain
-  //   if (team.players.length === 0) {
-  //     team.captain = playerData._id;
-
-  //     // Save captain role in the database
-  //     const captain = new Player({
-  //       name: currentUser.name,
-  //       phoneNumber: currentUser.phoneNumber,
-  //       team: TeamId,
-  //       userId: currentUser._id, // Set the userId for the captain
-  //       role: "Captain",
-  //     });
-  //     await captain.save();
-  //   }
-
-  //   // Add player to the team
-  //   team.players.push(playerData._id);
-
-  //   let teamdata = await team.save();
-
-  //   return { teamdata, fcmToken };
-  // },
-  //   async addPlayer(data, TeamId, currentUser) {
-  //     const { name, phoneNumber, role } = data;
-
-  //     const team = await Team.findById(TeamId);
-
-  //     if (!team) {
-  //       throw CustomErrorHandler.notFound("Team Not Found");
-  //     }
-
-  //     if (team.players.length >= 15) {
-  //       throw CustomErrorHandler.badRequest("Team is already at maximum capacity (15 players)");
-  //     }
-
-  //     // Check if the player already exists in the team
-  //     const existingPlayer = await Player.findOne({
-  //       team: TeamId,
-  //       phoneNumber: phoneNumber,
-  //     });
-
-  //     if (existingPlayer) {
-  //       throw CustomErrorHandler.badRequest(
-  //         "Player with the same phone number already exists in the team."
-  //       );
-  //     }
-
-  //     // Check if the user exists
-  //     const existingUser = await User.findOne({ phoneNumber: phoneNumber });
-  //     let userId = null; // Default to null for player if user doesn't exist
-  //     let fcmToken;
-
-  //     if (existingUser) {
-  //       userId = existingUser._id; // Use the userId from existing user
-  //       fcmToken = existingUser.fcmToken; // Get the FCM token of the existing user
-  //     }
-
-  //     // Create a new player (userId is null if user does not exist)
-  //     const player = new Player({
-  //       name: name,
-  //       phoneNumber: phoneNumber,
-  //       team: TeamId,
-  //       userId: userId, // userId is either null or the actual userId
-  //       role: role,
-  //     });
-
-  //     let playerData = await player.save();
-
-  //     // Assign the first player as captain
-  //     if (team.players.length === 0) {
-  //       team.captain = playerData._id;
-
-  //       // Save captain role in the database
-  //       const captain = new Player({
-  //         name: currentUser.name,
-  //         phoneNumber: currentUser.phoneNumber,
-  //         team: TeamId,
-  //         userId: currentUser._id,
-  //         role: "Captain",
-  //       });
-  //       await captain.save();
-  //     }
-
-  //     // Add player to the team
-  //     team.players.push(playerData._id);
-
-  //     let teamdata = await team.save();
-
-  //     return { teamdata, fcmToken };
-  // },
+  /**
+   * @function addPlayer
+   * @description Adds a new player to a team.
+   * Automatically updates userId if the user later registers.
+   * @param {Object} data - Player details.
+   * @param {string} TeamId - Team ID.
+   * @param {Object} currentUser - Current user info.
+   * @returns {Promise<Object>} Updated team and optional FCM token.
+   */
   async addPlayer(data, TeamId, currentUser) {
     const { name, phoneNumber, role } = data;
 
@@ -596,36 +257,7 @@ const teamServices = {
 
     let playerData = await player.save();
 
-    //   // Update player record if a new user is created with the phone number
-    //   if (existingUser) {
-    //     await Player.updateOne(
-    //       { phoneNumber: phoneNumber, team: TeamId }, // Match player by phone number and team
-    //       { $set: { userId: userId } } // Set the userId to the new user's _id
-    //     );
-    //   }
 
-    //   // Assign the first player as captain
-    //   if (team.players.length === 0) {
-    //     team.captain = playerData._id;
-
-    //     // Save captain role in the database
-    //     const captain = new Player({
-    //       name: currentUser.name,
-    //       phoneNumber: currentUser.phoneNumber,
-    //       team: TeamId,
-    //       userId: currentUser._id,
-    //       role: "Captain",
-    //     });
-    //     await captain.save();
-    //   }
-
-    //   // Add player to the team
-    //   team.players.push(playerData._id);
-
-    //   let teamdata = await team.save();
-
-    //   return { teamdata, fcmToken };
-    // },
 
     // If the user did not exist before and a new user registers later
     if (!userId) {
@@ -663,155 +295,14 @@ const teamServices = {
 
     return { teamdata, fcmToken };
   },
-  //   async addPlayer(data, TeamId, currentUser) {
-  //     const { name, phoneNumber, role } = data;
 
-  //     const team = await Team.findById(TeamId);
-
-  //     if (!team) {
-  //       throw CustomErrorHandler.notFound("Team Not Found");
-  //     }
-
-  //     if (team.players.length >= 15) {
-  //       throw CustomErrorHandler.badRequest("Team is already at maximum capacity (15 players)");
-  //     }
-
-  //     // Check if the player already exists in the team
-  //     const existingPlayer = await Player.findOne({
-  //       team: TeamId,
-  //       phoneNumber: phoneNumber,
-  //     });
-
-  //     if (existingPlayer) {
-  //       throw CustomErrorHandler.badRequest(
-  //         "Player with the same phone number already exists in the team."
-  //       );
-  //     }
-
-  //     // Check if the user exists
-  //     const existingUser = await User.findOne({ phoneNumber: phoneNumber });
-  //     let userId = null; // Default to null for player if user doesn't exist
-  //     let fcmToken;
-
-  //     if (existingUser) {
-  //       userId = existingUser._id; // Use the userId from existing user
-  //       fcmToken = existingUser.fcmToken; // Get the FCM token of the existing user
-  //     }
-
-  //     // Create a new player (userId is null if user does not exist)
-  //     const player = new Player({
-  //       name: name,
-  //       phoneNumber: phoneNumber,
-  //       team: TeamId,
-  //       userId: userId, // userId is either null or the actual userId
-  //       role: role,
-  //     });
-
-  //     let playerData = await player.save();
-
-  //     // Assign the first player as captain
-  //     if (team.players.length === 0) {
-  //       team.captain = playerData._id;
-
-  //       // Save captain role in the database
-  //       const captain = new Player({
-  //         name: currentUser.name,
-  //         phoneNumber: currentUser.phoneNumber,
-  //         team: TeamId,
-  //         userId: currentUser._id,
-  //         role: "Captain",
-  //       });
-  //       await captain.save();
-  //     }
-
-  //     // Add player to the team
-  //     team.players.push(playerData._id);
-
-  //     let teamdata = await team.save();
-
-  //     return { teamdata, fcmToken };
-  // },
-
-
-  // async addPlayer(data, TeamId, currentUser) {
-  //   const { name, phoneNumber, role } = data;
-
-  //   const team = await Team.findById(TeamId);
-
-  //   if (!team) {
-  //     throw CustomErrorHandler.notFound("Team Not Found");
-  //   }
-
-  //   if (team.players.length >= 15) {
-  //     throw CustomErrorHandler.badRequest("Team is already at maximum capacity (15 players)");
-  //   }
-
-  //   // Check if the player already exists in the team
-  //   const existingPlayer = await Player.findOne({
-  //     team: TeamId,
-  //     phoneNumber: phoneNumber,
-  //   });
-
-  //   if (existingPlayer) {
-  //     throw CustomErrorHandler.badRequest(
-  //       "Player with the same phone number already exists in the team."
-  //     );
-  //   }
-
-  //   // Check if the user exists or create a new one
-  //   const existingUser = await User.findOne({ phoneNumber: phoneNumber });
-  //   let userId;
-  //   let fcmToken;
-
-  //   if (existingUser) {
-  //     userId = existingUser._id;
-  //     fcmToken = existingUser.fcmToken;
-  //   } else {
-  //     const newUser = new User({
-  //       fullName: name,
-  //       phoneNumber: phoneNumber,
-  //       registrationDate: new Date(),
-  //     });
-
-  //     const newUserData = await newUser.save();
-  //     userId = newUserData._id;
-  //     fcmToken = newUserData.fcmToken;
-  //   }
-
-  //   // Create a new player
-  //   const player = new Player({
-  //     name: name,
-  //     phoneNumber: phoneNumber,
-  //     team: TeamId,
-  //     userId: userId,
-  //     role: role,
-  //   });
-
-  //   let playerData = await player.save();
-
-  //   // Assign the first player as captain
-  //   if (team.players.length === 0) {
-  //     team.captain = playerData._id;
-
-  //     // Save captain role in the database
-  //     const captain = new Player({
-  //       name: currentUser.name,
-  //       phoneNumber: currentUser.phoneNumber,
-  //       team: TeamId,
-  //       userId: currentUser._id,
-  //       role: "Captain",
-  //     });
-  //     await captain.save();
-  //   }
-
-  //   // Add player to the team
-  //   team.players.push(playerData._id);
-
-  //   let teamdata = await team.save();
-
-  //   return { teamdata, fcmToken };
-  // },
-
+  /**
+  * @function deletePlayer
+  * @description Removes a player from a team and deletes them from DB.
+  * @param {string} teamId - The team ID.
+  * @param {string} playerId - The player ID.
+  * @returns {Promise<Object>} Updated team.
+  */
   async deletePlayer(teamId, playerId) {
     const team = await Team.findById(teamId);
 
@@ -847,17 +338,32 @@ const teamServices = {
     return team;
   },
 
+  /**
+   * @function changeCaptain
+   * @description Changes the captain of a team and updates roles accordingly.
+   * @param {string} userId - Requesting user's ID.
+   * @param {string} teamId - Team ID.
+   * @param {string} newCaptainId - New captain's player ID.
+   * @param {string} newRole - Role of the new captain.
+   * @param {string} previousCaptainId - Current captain's player ID.
+   * @param {string} previousCaptainRole - Role to assign to previous captain.
+   * @returns {Promise<Object>} Updated team and captain details.
+   */
   async changeCaptain(userId, teamId, newCaptainId, newRole, previousCaptainId, previousCaptainRole,) {
+
+    // Find the team and populate the players for direct access
     const team = await Team.findById(teamId).populate('players');
     if (!team) throw CustomErrorHandler.notFound("Team Not Found");
 
     if (!team.players || team.players.length === 0) throw CustomErrorHandler.notFound("No players found in the team");
 
+    // Locate the current captain and the player who will become the new captain
     const currentCaptain = team.players.find(player => player._id.toString() === previousCaptainId);
     if (!currentCaptain) throw CustomErrorHandler.notFound("Current captain not found in the team");
 
     if (currentCaptain._id.toString() === newCaptainId) throw CustomErrorHandler.badRequest("This player is already the captain");
 
+    // Ensure both the current and new captains exist within the team
     const newCaptain = team.players.find(player => player._id.toString() === newCaptainId);
     if (!newCaptain) throw CustomErrorHandler.notFound("New captain not found in this team");
 
@@ -902,182 +408,15 @@ const teamServices = {
     };
   },
 
-  //   async changeCaptain(userId, teamId, newCaptainId, newRole) {
-  //     // Fetch team data and populate players
-  //     const team = await Team.findById(teamId).populate("players");
-
-  //     if (!team) {
-  //         throw CustomErrorHandler.notFound("Team Not Found");
-  //     }
-
-  //     // Debugging Logs
-  //     console.log("Team Data:", team);
-  //     console.log("Requester UserId:", userId);
-
-  //     // Ensure `players` array exists and is populated
-  //     if (!team.players || team.players.length === 0) {
-  //         throw CustomErrorHandler.notFound("No players found in the team");
-  //     }
-
-  //     // Check if the requester is part of the team
-  //     const requester = team.players.find(
-  //         (player) => player?.userId?.toString() === userId.toString()
-  //     );
-  //     if (!requester) {
-  //         throw CustomErrorHandler.unAuthorized("You are not a member of this team");
-  //     }
-
-  //     // Validate that the new captain is part of the team
-  //     const newCaptain = team.players.find(
-  //         (player) => player?._id?.toString() === newCaptainId.toString()
-  //     );
-  //     if (!newCaptain) {
-  //         throw CustomErrorHandler.notFound("New Captain not found in the team");
-  //     }
-
-  //     // Ensure the current captain or any player can change the captain
-  //     if (team.captain && requester._id.toString() !== team.captain.toString()) {
-  //         if (!team.players.some((player) => player?._id?.toString() === userId.toString())) {
-  //             throw CustomErrorHandler.unAuthorized("Only team members can change the captain");
-  //         }
-  //     }
-
-  //     // Update the previous captain's role if a captain already exists
-  //     if (team.captain) {
-  //         const previousCaptain = await Player.findById(team.captain);
-  //         if (previousCaptain) {
-  //             previousCaptain.role = "Batsman"; // Default to a role, e.g., Batsman
-  //             await previousCaptain.save();
-  //         }
-  //     }
-
-  //     // Update the captain field and assign the new role to the new captain
-  //     team.captain = newCaptain._id;
-  //     newCaptain.role = newRole || "Captain";
-  //     await newCaptain.save();
-
-  //     // Save the updated team data
-  //     const updatedTeam = await team.save();
-  //     return updatedTeam;
-  // },
-
-
-
-  // async editTeam(data, TeamId) {
-  //   const { teamLogo, teamName } = data;
-  //   const userInfo = global.user;
-
-  //   // Find the tournament by ID
-  //   const team = await Team.findById(TeamId);
-
-  //   if (!team) {
-  //     // Handle the case where the tournament is not found
-  //     throw CustomErrorHandler.notFound("team Not Found");
-  //   }
-
-  //   if (teamLogo) {
-  //     const imagePath = await ImageUploader.Upload(
-  //       teamLogo,
-  //       "create-team",
-  //       team.teamLogo
-  //     );
-  //     team.teamLogo = imagePath;
-  //   }
-  //   team.teamName = teamName;
-
-  //   // Update the tournament's isDeleted is true;
-  //   // if (teamLogo) {
-  //   // }
-
-  //   // Save the updated user document
-  //   let teamData = await team.save();
-  //   return teamData;
-  // },
-
-  // async addPlayer(data, TeamId) {
-  //   const { name, phoneNumber, role } = data;
-  //   const userInfo = global.user;
-
-  //   const team = await Team.findById(TeamId);
-
-  //   if (!team) {
-  //     // Handle the case where the tournament is not found
-  //     throw CustomErrorHandler.notFound("team Not Found");
-  //   }
-
-  //   if (team.players.length >= 15) {
-  //     throw CustomErrorHandler.badRequest(
-  //       "Team is already at maximum capacity (15 players)"
-  //     );
-  //   }
-
-  //   const existingPlayer = await Player.findOne({
-  //     team: TeamId,
-  //     phoneNumber: phoneNumber,
-  //   });
-
-  //   if (existingPlayer) {
-  //     throw CustomErrorHandler.badRequest(
-  //       "Player with the same phone number already exists in the team."
-  //     );
-  //   }
-  //   // did change in user User.exist
-  //   const existingUser = await User.findOne({ phoneNumber: phoneNumber });
-  //   let userId;
-  //   let fcmToken;
-  //   if (existingUser) {
-  //     userId = existingUser._id;
-  //     fcmToken = existingUser.fcmToken; // Added notification
-  //   } else {
-  //     const newUser = new User({
-  //       fullName: name,
-  //       phoneNumber: phoneNumber,
-  //       registrationDate: new Date(),
-  //     });
-
-  //     const newUserData = await newUser.save();
-  //     userId = newUserData._id;
-  //     fcmToken = newUserData.fcmToken;
-  //   }
-
-  //   const player = new Player({
-  //     name: name,
-  //     phoneNumber: phoneNumber,
-  //     role: role,
-  //     team: TeamId,
-  //     userId: userId,
-  //   });
-
-  //   let playerData = await player.save();
-
-  //   team.players.push(playerData._id);
-
-  //   let teamdata = await team.save();
-  //   return { teamdata, fcmToken };
-  // },
-
-  // async deletePlayer(teamId, playerId) {
-  //   // const userInfo = global.user;
-
-  //   // Find the tournament by ID
-  //   const team = await Team.findById(teamId);
-
-  //   if (!team) {
-  //     // Handle the case where the tournament is not found
-  //     throw CustomErrorHandler.notFound("team Not Found");
-  //   }
-  //   // Delete the player from the team players collection
-  //   await Player.deleteOne({ _id: playerId });
-
-  //   // Remove the player from the team's 'players' array
-  //   team.players = team.players.filter((p) => !p._id.equals(playerId));
-
-  //   // Save the updated team after removing the player
-  //   await team.save();
-
-  //   return team;
-  // },
-
+  /**
+  * @function getAllNearByTeam
+  * @description Retrieves teams near the user's location filtered by sport.
+  * @param {Object} data - Location and sport filters.
+  * @param {number} data.latitude - Latitude of user.
+  * @param {number} data.longitude - Longitude of user.
+  * @param {string} data.sport - Sport name.
+  * @returns {Promise<Array>} List of nearby teams.
+  */
   async getAllTeamNearByMe() {
     //Find the Banner
     let teamData = await Team.find();
@@ -1089,10 +428,26 @@ const teamServices = {
     return teamData;
   },
 
+  /**
+  * @function addLookingFor
+  * @description Creates a new "looking for" entry where a user specifies their role and location preference.
+  * Used when a player is looking for a team or match opportunity.
+  * 
+  * @param {Object} data - Contains the player's selected location and desired role.
+  * @param {string} data.placeName - Human-readable name of the selected place.
+  * @param {number|string} data.longitude - Longitude coordinate of the location.
+  * @param {number|string} data.latitude - Latitude coordinate of the location.
+  * @param {string} data.role - The role the user is looking to play (e.g., batsman, bowler).
+  * 
+  * @returns {Promise<Object>} The saved "looking for" record from the database.
+  */
   async addLookingFor(data) {
     const { placeName, longitude, latitude, role } = data;
+
+    // Retrieve logged-in user details from global context
     const userInfo = global.user;
 
+    // Create a new "Lookingfor" document with user role and location details
     const looking = new Lookingfor({
       userId: userInfo.userId,
       role: role,
@@ -1108,11 +463,28 @@ const teamServices = {
     return lookingData;
   },
 
+  /**
+ * @function deleteLookingFor
+ * @description Deletes a specific "looking for" entry by its ID.
+ * Typically used when a player no longer wants to appear as "looking for" a team or match.
+ * 
+ * @param {string} lookingId - The ID of the "looking for" record to delete.
+ * @returns {Promise<void>} No content is returned; operation completes silently.
+ */
   async deleteLookingFor(lookingId) {
     // Delete the player from the team players collection
     await Lookingfor.deleteOne({ _id: lookingId });
   },
 
+
+  /**
+ * @function getAllLooking
+ * @description Retrieves nearby "looking for" players based on user's current location (within 6 km radius by default).
+ * It uses MongoDB's geospatial query to find players around the given coordinates.
+ * 
+ * @param {Object} data - Contains latitude and longitude of the current user.
+ * @returns {Promise<Object>} List of nearby players along with user details and distance.
+ */
   async getAllLooking(data) {
     try {
       const { latitude, longitude } = data;
@@ -1120,6 +492,7 @@ const teamServices = {
 
       const looking = await Lookingfor.aggregate([
         {
+          // Find nearby players using GeoJSON location field
           $geoNear: {
             near: {
               type: "Point",
@@ -1188,6 +561,13 @@ const teamServices = {
     }
   },
 
+  /**
+ * @function getLookingByID
+ * @description Retrieves all "looking for" entries created by the currently logged-in user.
+ * It joins with the users collection to include user profile details.
+ *
+ * @returns {Promise<Array>} Array of "looking for" entries with user details.
+ */
   async getLookingByID() {
     const userInfo = global.user;
 
@@ -1225,70 +605,16 @@ const teamServices = {
     return looking;
   },
 
-  // async getAllNearByTeam(data) {
-  //   const { latitude, longitude } = data;
-  //   const userInfo = global.user;
 
-  //   const NearByTeams = await User.aggregate([
-  //     {
-  //       $geoNear: {
-  //         near: {
-  //           type: "Point",
-  //           coordinates: [parseFloat(longitude), parseFloat(latitude)],
-  //         },
-
-  //         distanceField: "distance",
-  //         spherical: true,
-  //         // distanceCalc: "dist.calculated",
-
-  //         query: {
-  //           isDeleted: false,
-  //           isNewUser: false,
-  //         },
-  //         key: "location", // Specify the index key
-  //       },
-  //     },
-  //     {
-  //       $addFields: {
-  //         distanceInKm: {
-  //           $divide: ["$distance", 1000],
-  //         },
-  //       },
-  //     },
-  //     {
-  //       $match: {
-  //         distanceInKm: { $lt: 30 }, // Adjust as needed 3000 meaks 3km
-  //       },
-  //     },
-  //     {
-  //       $match: {
-  //         _id: { $ne: ObjectId(userInfo.userId) }, // Filter out the user with the specified userId
-  //       },
-  //     },
-  //     {
-  //       $lookup: {
-  //         from: "teams", // Replace with the actual name of your teams collection
-  //         localField: "_id",
-  //         foreignField: "userId",
-  //         as: "teams",
-  //       },
-  //     },
-  //     {
-  //       $project: {
-  //         fullName: 1,
-  //         email: 1,
-  //         distanceInKm: 1,
-  //         "teams.teamName": 1,
-  //         "teams.teamLogo": 1,
-  //         "teams._id": 1,
-  //         // Add other fields you want to include in the result
-  //       },
-  //     },
-  //   ]);
-
-  //   return NearByTeams;
-  // },
-
+  /**
+     * @function getAllNearByTeam
+     * @description Retrieves teams near the user's location filtered by sport.
+     * @param {Object} data - Location and sport filters.
+     * @param {number} data.latitude - Latitude of user.
+     * @param {number} data.longitude - Longitude of user.
+     * @param {string} data.sport - Sport name.
+     * @returns {Promise<Array>} List of nearby teams.
+     */
   async getAllNearByTeam(data) {
     const { latitude, longitude, sport } = data;
     const userInfo = global.user;
@@ -1386,174 +712,13 @@ const teamServices = {
   },
 
 
-
-  // async editPlayer(data, TeamId,playerId) {
-  //   const { name, phoneNumber, role } = data;
-  //   const userInfo = global.user;
-
-  //   const team = await Team.findById(TeamId);
-
-  //   if (!team) {
-  //     // Handle the case where the tournament is not found
-  //     throw CustomErrorHandler.notFound("team Not Found");
-  //   }
-
-  //   const player = await Player.findById(playerId);
-
-  //   if (!player) {
-  //     // Handle the case where the tournament is not found
-  //     throw CustomErrorHandler.notFound("player Not Found");
-  //   }
-
-  //    // Update the tournament's isDeleted is true;
-  //    player.isDeleted = true;
-  //    player.isDeleted = true;
-  //    player.isDeleted = true;
-  //    // Save the updated user document
-  //    let tournamentdata = await player.save();
-
-  // // Find the player to be edited within the 'players' array
-  // const playerIndex = team.Player.findIndex(
-  //   (p) => p._id.toString() === playerId
-  // );
-
-  // if (playerIndex === -1) {
-  //   throw CustomErrorHandler.badRequest(
-  //     "Player not found in the specified team."
-  //   );
-  // }
-
-  // // Update the player's information within the 'players' array
-  // team.players[playerIndex].name = updatedPlayerInfo.name;
-  // team.players[playerIndex].phoneNumber = updatedPlayerInfo.phoneNumber;
-  // team.players[playerIndex].role = updatedPlayerInfo.role;
-
-  // // Save the updated team
-  // await team.save();
-
-  //   const existingUser = await User.exists({ phoneNumber: phoneNumber });
-  //   let userId;
-  //   if (existingUser) {
-  //     userId=existingUser._id
-  //   }
-
-  //   const player = new Player({
-  //     name: name,
-  //     phoneNumber: phoneNumber,
-  //     role: role,
-  //     team: TeamId,
-  //     userId: userId
-  //   });
-
-  //  let playerData = await player.save();
-
-  //   team.players.push(playerData._id);
-
-  //   let teamdata = await team.save();
-  //   return teamdata;
-  // },
-
-
-  // async getPointsTable(tournamentId) {
-  //   try {
-  //     const registeredTeams = await RegisteredTeam.find({
-  //       tournament: tournamentId,
-  //       status: 'Accepted',
-  //     }).populate('team');
-
-  //     const pointsTable = [];
-
-  //     for (const registeredTeam of registeredTeams) {
-  //       const team = registeredTeam.team;
-  //       const matches = await Match.find({
-  //         tournament: tournamentId,
-  //         status: 'played',
-  //         $or: [{ team1: team._id }, { team2: team._id }],
-  //       }).populate('scoreBoard.team1 scoreBoard.team2');
-
-  //       let matchesPlayed = 0;
-  //       let wins = 0;
-  //       let losses = 0;
-  //       let ties = 0;
-  //       let totalRunsScored = 0;
-  //       let totalRunsConceded = 0;
-  //       let totalBallsFaced = 0;
-  //       let totalBallsBowled = 0;
-
-  //       for (const match of matches) {
-  //         matchesPlayed++;
-
-  //         const isTeam1 = match.scoreBoard.team1._id.toString() === team._id.toString();
-
-  //         const teamData = isTeam1 ? match.scoreBoard.firstInnings : match.scoreBoard.secondInnings;
-  //         const opponentData = isTeam1 ? match.scoreBoard.secondInnings : match.scoreBoard.firstInnings;
-
-  //         if (!teamData || !opponentData) {
-  //           console.error(`Invalid scoreBoard data for Match ID: ${match._id}`);
-  //           continue;
-  //         }
-
-  //         const teamRuns = teamData.totalScore || 0;
-  //         const opponentRuns = opponentData.totalScore || 0;
-  //         totalRunsScored += teamRuns;
-  //         totalRunsConceded += opponentRuns;
-
-  //         const teamBallsFaced = (parseInt(teamData.overs || 0) * 6) + (parseInt(teamData.balls || 0));
-  //         const opponentBallsFaced = (parseInt(opponentData.overs || 0) * 6) + (parseInt(opponentData.balls || 0));
-
-  //         totalBallsFaced += teamBallsFaced;
-  //         totalBallsBowled += opponentBallsFaced;
-
-  //         if (match.isTie) {
-  //           ties++;
-  //         } else if (match.winningTeamId && match.winningTeamId.toString() === team._id.toString()) {
-  //           wins++;
-  //         } else {
-  //           losses++;
-  //         }
-  //       }
-  //       const oversPlayed = (totalBallsFaced / 6).toFixed(2);
-  //       const oversBowled = (totalBallsBowled / 6).toFixed(2);
-  //       const runRateScored = totalBallsFaced > 0 ? (totalRunsScored / parseFloat(oversPlayed)).toFixed(2) : 0;
-  //       const runRateConceded = totalBallsBowled > 0 ? (totalRunsConceded / parseFloat(oversBowled)).toFixed(2) : 0;
-
-  //       const netRunRate = (parseFloat(runRateScored) - parseFloat(runRateConceded)).toFixed(2);
-
-  //       pointsTable.push({
-  //         rank: 0, 
-  //         teamId: team._id,
-  //         teamName: team.teamName,
-  //         teamLogo: team.teamLogo,
-  //         matchesPlayed,
-  //         wins,
-  //         losses,
-  //         ties,
-  //         points: wins * 2 + ties,
-  //         netRunRate,
-  //         // runsScored: totalRunsScored,
-  //         // runsConceded: totalRunsConceded,
-  //         // oversPlayed,
-  //         // oversBowled
-  //       });
-  //     }
-  //     pointsTable.sort((a, b) => {
-  //       if (b.points !== a.points) {
-  //         return b.points - a.points;
-  //       }
-  //       return parseFloat(b.netRunRate) - parseFloat(a.netRunRate);
-  //     });
-
-  //     pointsTable.forEach((team, index) => {
-  //       team.rank = index + 1;
-  //     });
-
-  //     return pointsTable;
-  //   } catch (error) { 
-  //     console.error('Error in getPointsTable:', error.message);
-  //     throw new Error(error.message);
-  //   }
-  // },
-
+  /**
+    * @function getPointsTable
+    * @description Generates the points table for a cricket tournament.
+    * @param {Object} data - Tournament data.
+    * @param {string} data.tournamentId - Tournament ID.
+    * @returns {Promise<Array>} Ordered list of teams with stats.
+    */
   async getPointsTable(data) {
     try {
       const { tournamentId } = data;
@@ -1666,6 +831,14 @@ const teamServices = {
       throw new Error(error.message);
     }
   },
+
+  /**
+   * @function getFootballPointsTable
+   * @description Generates the points table for a football tournament.
+   * @param {Object} data - Tournament data.
+   * @param {string} data.tournamentId - Tournament ID.
+   * @returns {Promise<Array>} Football teams with rank and stats.
+   */
   async getFootballPointsTable(data) {
     try {
       const { tournamentId } = data;

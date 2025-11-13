@@ -16,6 +16,9 @@ import ImageUploader from "../helpers/ImageUploader.js";
 import firebaseNotification from "../helpers/firebaseNotification.js";
 
 import moment from "moment";
+function isBase64Media(str) {
+  return /^data:(image|video)\/[a-zA-Z0-9.+-]+;base64,/.test(str);
+}
 const tournamentServices = {
 
   async createTournament(data, userStartDate, userEndDate) {
@@ -392,283 +395,143 @@ const tournamentServices = {
 
 
   async editTournament(data, userStartDate, userEndDate, tournamentId) {
-    const userInfo = global.user;
-
-    // Find the existing tournament by ID
-    // const tournament = await Tournament.findById(tournamentId);
-    let tournamentImage = await Tournament.findById(tournamentId);
-    if (!tournamentImage) {
-      throw CustomErrorHandler.notFound("Tournament not found.");
-    }
-
-    // let imagePath;
-    // if (data.coverPhoto) {
-    //   // Handle image upload
-    //   imagePath = await ImageUploader.Upload(data.coverPhoto, "tournament", tournament.coverPhoto);
-    // } else {
-    //   imagePath = tournament.coverPhoto; // Retain the existing cover photo if none provided
-    // }
-
-    let imagePath;
-    if (data.coverPhoto) {
-      imagePath = await ImageUploader.Upload(
-        data.coverPhoto,
-        "tournament",
-        tournamentImage.coverPhoto,
-      );
-    } else {
-      imagePath = tournamentImage.coverPhoto;
-    }
-    // let coHostId1 = tournament.coHostId1;
-    // let coHostId2 = tournament.coHostId2;
-
-    let coHostId1 = tournamentId.coHostId1;
-    let coHostId2 = tournamentId.coHostId2;
-
-
-    // Handle coHost1 update or creation
-    if (data.coHost1Phone != null) {
-      const existingUser = await User.findOne({ phoneNumber: data.coHost1Phone });
-      if (existingUser) {
-        coHostId1 = existingUser._id;
-      } else {
-        const newUser = new User({
-          fullName: data.coHost1Name || "",
-          phoneNumber: data.coHost1Phone,
-          registrationDate: new Date(),
-        });
-        const newUserData = await newUser.save();
-        coHostId1 = newUserData._id;
-      }
-    } else {
-      coHostId1 = null;
-    }
-
-    // Handle coHost2 update or creation
-    if (data.coHost2Phone != null) {
-      const existingUser = await User.findOne({ phoneNumber: data.coHost2Phone });
-      if (existingUser) {
-        coHostId2 = existingUser._id;
-      } else {
-        const newUser = new User({
-          fullName: data.coHost2Name || "",
-          phoneNumber: data.coHost2Phone,
-          registrationDate: new Date(),
-        });
-        const newUserData = await newUser.save();
-        coHostId2 = newUserData._id;
-      }
-    } else {
-      coHostId2 = null;
-    }
-
-    // Prepare updated data
-    const updatedData = {
-      tournamentStartDateTime: userStartDate,
-      tournamentEndDateTime: userEndDate,
-      tournamentName: data.tournamentName,
-      tournamentCategory: { name: data.tournamentCategory },
-      ballType: { name: data.ballType },
-      pitchType: { name: data.pitchType },
-      email: userInfo.email,
-      matchType: { name: data.matchType },
-      tournamentPrize: { name: data.tournamentPrize },
-      rules: data.rules,
-      disclaimer: data.disclaimer,
-      fees: data.fees,
-      ballCharges: data.ballCharges,
-      breakfastCharges: data.breakfastCharges,
-      stadiumAddress: data.stadiumAddress,
-      tournamentLimit: data.tournamentLimit,
-      gameType: { name: data.gameType },
-      coverPhoto: imagePath,
-      locationHistory: {
-        point: {
-          type: "Point",
-          coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
-        },
-        selectLocation: data.selectLocation,
-      },
-      // eliminatedTeamIds: data.eliminatedTeamIds || [], // Added eliminatedTeamIds field
-      user: userInfo.userId,
-      coHostId1: coHostId1,
-      coHostId2: coHostId2,
-      isSponsorshippurchase: tournamentImage.isSponsorshippurchase,
-      SponsorshipPackageId: tournamentImage.SponsorshipPackageId,
-      TotalEditDone: tournamentImage.TotalEditDone,
-    };
-    // Update tournament data in the database
-    const updatedTournament = await Tournament.findByIdAndUpdate(tournamentId, updatedData);
-
-    if (!updatedTournament) {
-      throw CustomErrorHandler.notFound("Tournament not found.");
-    }
-
-    // Send notifications to registered teams about the update
-    const notificationData = {
-      title: "Gully Team",
-      body: `${updatedTournament.tournamentName} Tournament has been updated! Check the changes in the app.`,
-      image: "",
-    };
-
-    const registeredTeams = await RegisteredTeam.find({
-      tournament: tournamentId,
-      status: "Accepted",
-    });
-
-    const notificationPromises = registeredTeams.map((team) => {
-      if (team.user?.fcmToken) {
-        return firebaseNotification.sendNotification(team.user.fcmToken, notificationData);
-      }
-    });
-
     try {
-      await Promise.all(notificationPromises);
-      console.log("Notifications sent successfully.");
+      const userInfo = global.user;
+
+      // Find the existing tournament by ID
+      // const tournament = await Tournament.findById(tournamentId);
+      let tournamentImage = await Tournament.findById(tournamentId);
+      if (!tournamentImage) {
+        throw CustomErrorHandler.notFound("Tournament not found.");
+      }
+
+
+      let imagePath;
+      if (data.coverPhoto) {
+        if (isBase64Media(data.coverPhoto)) {
+          imagePath = await ImageUploader.Upload(
+            data.coverPhoto,
+            "tournament"
+          );
+        }
+      } else {
+        imagePath = tournamentImage.coverPhoto;
+      }
+      // let coHostId1 = tournament.coHostId1;
+      // let coHostId2 = tournament.coHostId2;
+
+      let coHostId1 = tournamentId.coHostId1;
+      let coHostId2 = tournamentId.coHostId2;
+
+
+      // Handle coHost1 update or creation
+      if (data.coHost1Phone != null) {
+        const existingUser = await User.findOne({ phoneNumber: data.coHost1Phone });
+        if (existingUser) {
+          coHostId1 = existingUser._id;
+        } else {
+          const newUser = new User({
+            fullName: data.coHost1Name || "",
+            phoneNumber: data.coHost1Phone,
+            registrationDate: new Date(),
+          });
+          const newUserData = await newUser.save();
+          coHostId1 = newUserData._id;
+        }
+      } else {
+        coHostId1 = null;
+      }
+
+      // Handle coHost2 update or creation
+      if (data.coHost2Phone != null) {
+        const existingUser = await User.findOne({ phoneNumber: data.coHost2Phone });
+        if (existingUser) {
+          coHostId2 = existingUser._id;
+        } else {
+          const newUser = new User({
+            fullName: data.coHost2Name || "",
+            phoneNumber: data.coHost2Phone,
+            registrationDate: new Date(),
+          });
+          const newUserData = await newUser.save();
+          coHostId2 = newUserData._id;
+        }
+      } else {
+        coHostId2 = null;
+      }
+
+      // Prepare updated data
+      const updatedData = {
+        tournamentStartDateTime: userStartDate,
+        tournamentEndDateTime: userEndDate,
+        tournamentName: data.tournamentName,
+        tournamentCategory: { name: data.tournamentCategory },
+        ballType: { name: data.ballType },
+        pitchType: { name: data.pitchType },
+        email: userInfo.email,
+        matchType: { name: data.matchType },
+        tournamentPrize: { name: data.tournamentPrize },
+        rules: data.rules,
+        disclaimer: data.disclaimer,
+        fees: data.fees,
+        ballCharges: data.ballCharges,
+        breakfastCharges: data.breakfastCharges,
+        stadiumAddress: data.stadiumAddress,
+        tournamentLimit: data.tournamentLimit,
+        gameType: { name: data.gameType },
+        coverPhoto: imagePath,
+        locationHistory: {
+          point: {
+            type: "Point",
+            coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
+          },
+          selectLocation: data.selectLocation,
+        },
+        // eliminatedTeamIds: data.eliminatedTeamIds || [], // Added eliminatedTeamIds field
+        user: userInfo.userId,
+        coHostId1: coHostId1,
+        coHostId2: coHostId2,
+        isSponsorshippurchase: tournamentImage.isSponsorshippurchase,
+        SponsorshipPackageId: tournamentImage.SponsorshipPackageId,
+        TotalEditDone: tournamentImage.TotalEditDone,
+      };
+      // Update tournament data in the database
+      const updatedTournament = await Tournament.findByIdAndUpdate(tournamentId, updatedData);
+
+      if (!updatedTournament) {
+        throw CustomErrorHandler.notFound("Tournament not found.");
+      }
+
+      // Send notifications to registered teams about the update
+      const notificationData = {
+        title: "Gully Team",
+        body: `${updatedTournament.tournamentName} Tournament has been updated! Check the changes in the app.`,
+        image: "",
+      };
+
+      const registeredTeams = await RegisteredTeam.find({
+        tournament: tournamentId,
+        status: "Accepted",
+      });
+
+      const notificationPromises = registeredTeams.map((team) => {
+        if (team.user?.fcmToken) {
+          return firebaseNotification.sendNotification(team.user.fcmToken, notificationData);
+        }
+      });
+
+      try {
+        await Promise.all(notificationPromises);
+        console.log("Notifications sent successfully.");
+      } catch (error) {
+        console.error("Error sending notifications:", error);
+      }
+
+      return updatedTournament;
     } catch (error) {
-      console.error("Error sending notifications:", error);
+      console.log(`The error is:${error}`);
     }
-
-    return updatedTournament;
   },
-
-  // async editTournament(data, userStartDate, userEndDate, TournamentId) {
-  //   const userInfo = global.user;
-
-  // let tournamentImage = await Tournament.findOne({ TournamentId });
-
-  // let imagePath;
-  // if (data.coverPhoto) {
-  //   imagePath = await ImageUploader.Upload(
-  //     data.coverPhoto,
-  //     "tournament",
-  //     tournamentImage.coverPhoto,
-  //   );
-  // } else {
-  //   imagePath = tournamentImage.coverPhoto;
-  // }
-
-  //   let coHostId1;
-  //   let coHostId2;
-
-  //   if (data.coHost1Phone) {
-  //     const existingUser = await User.exists({
-  //       phoneNumber: data.coHost1Phone,
-  //     });
-
-  //     if (existingUser) {
-  //       coHostId1 = existingUser._id;
-  //     } else {
-  //       const newUser = new User({
-  //         fullName: data.coHost1Name,
-  //         phoneNumber: data.coHost1Phone,
-  //         registrationDate: new Date(),
-  //       });
-
-  //       const newUserData = await newUser.save();
-  //       coHostId1 = newUserData._id;
-  //     }
-  //   }
-
-  //   if (data.coHost2Phone) {
-  //     const existingUser = await User.exists({
-  //       phoneNumber: data.coHost2Phone,
-  //     });
-
-  //     if (existingUser) {
-  //       coHostId2 = existingUser._id;
-  //     } else {
-  //       const newUser = new User({
-  //         fullName: data.coHost2Name,
-  //         phoneNumber: data.coHost2Phone,
-  //         registrationDate: new Date(),
-  //       });
-
-  //       const newUserData = await newUser.save();
-  //       coHostId2 = newUserData._id;
-  //     }
-  //   }
-
-  //   // Update data
-  //   const updatedData = {
-  //     tournamentStartDateTime: userStartDate,
-  //     tournamentEndDateTime: userEndDate,
-  //     tournamentName: data.tournamentName,
-  //     tournamentCategory: { name: data.tournamentCategory },
-  //     ballType: { name: data.ballType },
-  //     pitchType: { name: data.pitchType },
-  //     email: userInfo.email,
-  //     matchType: { name: data.matchType },
-  //     tournamentPrize: { name: data.tournamentPrize },
-  //     rules: data.rules,
-  //     disclaimer: data.disclaimer,
-  //     fees: data.fees,
-  //     ballCharges: data.ballCharges,
-  //     breakfastCharges: data.breakfastCharges,
-  //     stadiumAddress: data.stadiumAddress,
-  //     tournamentLimit: data.tournamentLimit,
-  //     gameType: { name: data.gameType },
-  //     coverPhoto: imagePath,
-  //     locationHistory: {
-  //       point: {
-  //         type: "Point",
-  //         coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)],
-  //       },
-  //       selectLocation: data.selectLocation,
-  //     },
-  //     user: userInfo.userId,
-  //     coHostId1: coHostId1,
-  //     coHostId2: coHostId2,
-  //   };
-
-  //   // Use findByIdAndUpdate to update the tournament
-  //   const updatedTournament = await Tournament.findByIdAndUpdate(
-  //     TournamentId,
-  //     updatedData,
-  //     { new: true },
-  //   );
-
-  //   // Check if the tournament was found and updated
-  //   if (!updatedTournament) {
-  //     // Handle the case where the tournament is not found
-  //     throw CustomErrorHandler.notFound("Tournament Not Found");
-  //   }
-
-  //   //notification
-  //   const notificationData = {
-  //     title: "Gully Team",
-  //     body: `${tournamentImage.tournamentName} Tournament has been Change.! please check your email for more details.`,
-  //     image: "",
-  //   };
-
-  //   const notificationPromises = [];
-
-  //   //find all the registere Team in that tournament to notify about change in tournament.
-  //   const registeredTeam = await RegisteredTeam.find({
-  //     tournament: TournamentId,
-  //     status: "Accepted",
-  //   });
-
-  //   registeredTeam.forEach(async function (team) {
-  //     if (team && team.user && team.user.fcmToken) {
-  //       notificationPromises.push(
-  //         firebaseNotification.sendNotification(
-  //           team?.user?.fcmToken,
-  //           notificationData,
-  //         ),
-  //       );
-  //     }
-  //   });
-
-  //   try {
-  //     await Promise.all(notificationPromises);
-  //     console.log("Notifications sent successfully");
-  //   } catch (error) {
-  //     console.error("Error sending notifications:", error);
-  //   }
-
-  //   return updatedTournament;
-  // },
 
   async getTournament(data) {
     const { latitude, longitude, startDate, filter, sport } = data;
@@ -906,6 +769,7 @@ const tournamentServices = {
             {
               $project: {
                 tournament: 0,
+                
               },
             },
           ],
@@ -1421,58 +1285,6 @@ const tournamentServices = {
     return entryForm;
   },
 
-
-  // async createEntryForm(teamID, tournamentID) {
-  //   const userInfo = global.user;
-
-  //   const team = await Team.findById(teamID);
-
-  //   console.log(team.players.length);
-
-  //   if (team.players.length < 11) {
-  //     throw CustomErrorHandler.badRequest("Team Member is Insufficient");
-  //   }
-
-  //   const entryForm = new EntryForm({
-  //     captainId: userInfo.userId,
-  //     team: teamID,
-  //   });
-
-  //   // Save the new HelpdeskTicket and wait for the operation to complete
-
-  //   // const tournament = await Tournament.findById(tournamentID);
-
-  //   const teamExist = a wait RegisteredTeam.exists({
-  //     team: teamID,
-  //     tournament: tournamentID,
-  //   });
-
-  //   if (teamExist) {
-  //     const registeredTeam = await RegisteredTeam.findOne({
-  //       tournament: tournamentID,
-  //       team: teamID,
-  //       status: "Denied",
-  //     });
-
-  //     if (registeredTeam) {
-  //       registeredTeam.status = "Pending";
-  //       registeredTeam.save();
-  //     } else {
-  //       throw CustomErrorHandler.badRequest("Team Already Exist");
-  //     }
-  //   } else {
-  //     const registeredTeam = new RegisteredTeam({
-  //       team: teamID,
-  //       user: userInfo.userId,
-  //       tournament: tournamentID,
-  //     });
-
-  //     await registeredTeam.save();
-  //     await entryForm.save();
-  //   }
-  //   return entryForm;
-  // },
-
   async teamRequest(tournamentID, status) {
     const userInfo = global.user;
 
@@ -1693,42 +1505,6 @@ const tournamentServices = {
 
     const tournament = await Tournament.aggregate(aggregationPipeline);
 
-    // const tournament = await Tournament.aggregate([
-    //   {
-    //     $skip: skip,
-    //   },
-    //   {
-    //     $limit: pageSize,
-    //   },
-    //   {
-    //     $lookup: {
-    //       from: "users", // assuming the user model is named 'users'
-    //       localField: "user",
-    //       foreignField: "_id",
-    //       as: "user",
-    //     },
-    //   },
-    //   {
-    //     $unwind: "$user",
-    //   },
-    //   {
-    //     $project: {
-    //       _id: 1,
-    //       tournamentName: 1,
-    //       tournamentStartDateTime: 1, // include specific tournament fields
-    //       tournamentEndDateTime: 1, // include specific tournament fields
-    //       stadiumAddress: 1,
-    //       email: 1,
-    //       isDeleted: 1,
-    //       isCompleted: 1,
-    //       fees: 1,
-    //       gameType: "$gameType.name",
-    //       phoneNumber: "$user.phoneNumber",
-    //       fullName: "$user.fullName",
-    //       locations: { $arrayElemAt: ["$user.locations.placeName", 0] },
-    //     },
-    //   },
-    // ]);
 
     return {
       data: tournament,
@@ -1744,41 +1520,10 @@ const tournamentServices = {
     endDateTime = new Date(currentDate);
     endDateTime.setHours(23, 59, 59, 999);
 
-    // let startDate = "2024-02-13";
-    // let endDate = "2024-02-17";
-
-    // console.log("startDateTime",startDateTime);
-    // console.log("endDateTime",endDateTime);
-
-    // startDateTime = new Date(`${startDate}T00:00:00.000Z`);
-    // endDateTime = new Date(`${endDate}T23:59:59.999Z`);
 
     // Query to count the total number of subadmins
     const totalTournament = await Tournament.countDocuments();
 
-    // const tournament = await Tournament.find({
-    //   isDeleted: false,
-    //   $or: [
-    //     {
-    //       tournamentStartDateTime: {
-    //         $gte: startDateTime,
-    //         $lt: endDateTime,
-    //       },
-    //     },
-    //     {
-    //       tournamentEndDateTime: {
-    //         $gte: startDateTime,
-    //         $lt: endDateTime,
-    //       },
-    //     },
-    //   ],
-    // })
-    //   .skip(skip)
-    //   .limit(pageSize)
-    //   .populate({
-    //     path: 'user',
-    //     select: 'email phoneNumber fullName locations.placeName',
-    //   });
 
     const tournament = await Tournament.aggregate([
       {
@@ -1849,28 +1594,6 @@ const tournamentServices = {
       select: "email phoneNumber fullName locations.placeName", // Replace with the actual fields you want to include
     }); // Limit the number of documents per page
 
-    // let tournamentData = tournament.map((entry) => ({
-    //   tournamentName: entry.tournamentName,
-    //   ballCharges: entry.ballCharges,
-    //   ballType: entry.ballType.name,
-    //   fees: entry.fees,
-    //   gameType: entry.gameType.name,
-    //   pitchType: entry.pitchType.name,
-    //   matchType: entry.matchType.name,
-    //   breakfastCharges: entry.breakfastCharges,
-    //   // latestLocation: entry.locationHistory.currentLocation.selectLocation,
-    //   stadiumAddress: entry.stadiumAddress,
-    //   tournamentCategory: entry.tournamentCategory.name,
-    //   tournamentStartDateTime: moment(entry.tournamentStartDateTime).format(
-    //     "DD-MM-YYYY",
-    //   ),
-    //   tournamentEndDateTime: moment(entry.tournamentEndDateTime).format(
-    //     "DD-MM-YYYY",
-    //   ),
-    //   tournamentLimit: entry.tournamentLimit,
-    //   tournamentPrize: entry.tournamentPrize.name,
-    // }));
-
     return tournament;
   },
 
@@ -1891,71 +1614,8 @@ const tournamentServices = {
 
     const Matches = await Match.find({
       tournament: TournamentId,
-      // $or: [
-      //   {
-      //     dateTime: {
-      //       $gte: startDateTime,
-      //       $lt: endDateTime,
-      //     },
-      //   },
-      // ],
     }).select("_id tournament status team1 team2");
 
-    // const tournament = await Tournament.aggregate([
-    //   {
-    //     $match: {
-    //       isDeleted: false,
-    //       $or: [
-    //         {
-    //           tournamentStartDateTime: {
-    //             $gte: startDateTime,
-    //             $lt: endDateTime,
-    //           },
-    //         },
-    //         {
-    //           tournamentEndDateTime: {
-    //             $gte: startDateTime,
-    //             $lt: endDateTime,
-    //           },
-    //         },
-    //       ],
-    //     },
-    //   },
-    //   {
-    //     $skip: skip,
-    //   },
-    //   {
-    //     $limit: pageSize,
-    //   },
-    //   {
-    //     $lookup: {
-    //       from: "users",
-    //       localField: "user",
-    //       foreignField: "_id",
-    //       as: "user",
-    //     },
-    //   },
-    //   {
-    //     $unwind: "$user",
-    //   },
-    //   {
-    //     $project: {
-    //       _id: 1,
-    //       tournamentName: 1,
-    //       tournamentStartDateTime: 1,
-    //       tournamentEndDateTime: 1,
-    //       stadiumAddress: 1,
-    //       email: 1,
-    //       isDeleted: 1,
-    //       isCompleted: 1,
-    //       fees: 1,
-    //       gameType: "$gameType.name",
-    //       phoneNumber: "$user.phoneNumber",
-    //       fullName: "$user.fullName",
-    //       locations: { $arrayElemAt: ["$user.locations.placeName", 0] },
-    //     },
-    //   },
-    // ]);
 
     return Matches;
   },
@@ -2014,54 +1674,6 @@ const tournamentServices = {
 
     return Match;
   },
-
-
-  //DG-original
-  // async eliminateTeams(tournamentId, eliminatedTeamIds) {
-  //   // Fetch the tournament to ensure it exists
-  //   const tournament = await Tournament.findById(tournamentId);
-  //   if (!tournament) {
-  //     throw new Error("Tournament not found.");
-  //   }
-
-  //   for (const teamId of eliminatedTeamIds) {
-  //     const registeredTeam = await RegisteredTeam.findOne({
-  //       tournament: tournamentId,
-  //       team: teamId,
-  //     });
-
-  //     if (!registeredTeam) {
-  //       throw new Error(`Team with ID ${teamId} not found in this tournament.`);
-  //     }
-
-  //     const match = await Match.findOne({
-  //       tournament: tournamentId,
-  //       $or: [{ team1: teamId }, { team2: teamId }],
-  //     }).select("Round");
-
-  //     if (!match) {
-  //       throw new Error(`Match not found for team with ID ${teamId}.`);
-  //     }
-  //     // registeredTeam.isEliminated = true;
-  //     registeredTeam.isEliminated==true? registeredTeam.isEliminated = false : registeredTeam.isEliminated = true;
-  //     registeredTeam.eliminatedInRound = match.Round; 
-  //     await registeredTeam.save();
-  //   }
-
-
-  //   const remainingTeams = await RegisteredTeam.find({
-  //     tournament: tournamentId,
-  //     isEliminated: false,
-  //   }).populate({ path: "team", select: "teamName teamLogo" });
-
-  //   return {
-  //     remainingTeams: remainingTeams.map((team) => ({
-  //       teamId: team.team._id,
-  //       teamName: team.team.teamName,
-  //       teamLogo: team.team.teamLogo,
-  //     })),
-  //   };
-  // },
 
   //Team which haven't played any match still can be eliminated (updated:17 Jan 25)
   async eliminateTeams(tournamentId, eliminatedTeamIds) {
